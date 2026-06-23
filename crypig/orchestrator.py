@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 
 from .config import Config, get_config
-from .agents import SmartMoneyAgent, WhaleAgent, DivergenceAgent
+from .agents import SmartMoneyAgent, WhaleAgent, DivergenceAgent, LTHAgent
 from .aggregate import aggregate
 from .kg import SelfLearningRAG
 from .storage.models import Observation
@@ -24,6 +24,8 @@ class Orchestrator:
             self.agents.append(WhaleAgent(self.config))
         if a.divergence.enabled:
             self.agents.append(DivergenceAgent(self.config))
+        if a.lth.enabled:
+            self.agents.append(LTHAgent(self.config))
 
     def run_cycle(self) -> dict:
         observations: list[Observation] = []

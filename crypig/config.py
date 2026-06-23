@@ -31,10 +31,17 @@ class OHLCVConfig(BaseModel):
     timeframe: str = "1h"
 
 
+class LTHConfig(BaseModel):
+    enabled: bool = True
+    interval_minutes: int = 720      # 鏈上指標變化慢，半天一次即可
+    threshold_days: int = 151        # 至少持有天數
+
+
 class AgentsConfig(BaseModel):
     smart_money: SmartMoneyConfig = SmartMoneyConfig()
     whales: WhalesConfig = WhalesConfig()
     divergence: OHLCVConfig = OHLCVConfig()
+    lth: LTHConfig = LTHConfig()
 
 
 class LLMConfig(BaseModel):
@@ -57,9 +64,10 @@ class AnalyzersConfig(BaseModel):
     interval_minutes: int = 5
     weights: dict[str, float] = Field(
         default_factory=lambda: {
-            "smart_money": 0.35,
-            "whale_flow": 0.30,
-            "divergence": 0.35,
+            "smart_money": 0.30,
+            "whale_flow": 0.25,
+            "divergence": 0.25,
+            "lth_supply": 0.20,
         }
     )
 
@@ -67,6 +75,7 @@ class AnalyzersConfig(BaseModel):
 class Config(BaseModel):
     use_mock: bool = True
     symbols: list[str] = Field(default_factory=lambda: ["BTC", "ETH", "SOL"])
+    snapshot_db: str = "snapshots.db"
     agents: AgentsConfig = AgentsConfig()
     kg: KGConfig = KGConfig()
     llm: LLMConfig = LLMConfig()

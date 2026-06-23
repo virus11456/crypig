@@ -89,6 +89,25 @@ class HyperliquidClient:
         self._state_cache[address] = (now, data)
         return data
 
+    # ---- 全市場脈絡（持倉量 / 資金費率）----
+    def market_contexts(self) -> dict[str, dict]:
+        """回傳每個幣的 {funding, open_interest, mark_px, premium}（全市場）。"""
+        resp = self._client.post(INFO_URL, json={"type": "metaAndAssetCtxs"})
+        resp.raise_for_status()
+        meta, ctxs = resp.json()
+        out: dict[str, dict] = {}
+        for u, ctx in zip(meta.get("universe", []), ctxs):
+            name = u.get("name")
+            if not name:
+                continue
+            out[name] = {
+                "funding": float(ctx.get("funding", 0.0) or 0.0),
+                "open_interest": float(ctx.get("openInterest", 0.0) or 0.0),
+                "mark_px": float(ctx.get("markPx", 0.0) or 0.0),
+                "premium": float(ctx.get("premium", 0.0) or 0.0),
+            }
+        return out
+
     @staticmethod
     def iter_positions(state: dict) -> list[dict]:
         out = []

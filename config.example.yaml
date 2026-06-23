@@ -22,6 +22,10 @@ agents:
     interval_minutes: 5
     exchange: "okx"                  # binance.com 美國地緣封鎖；okx 可達
     timeframe: "1h"
+  lth:                               # 長期持有者(≥門檻天數)供給變化
+    enabled: true
+    interval_minutes: 720            # 鏈上指標變化慢，半天一次
+    threshold_days: 151
 
 # 知識圖譜記憶層（自我學習 RAG）
 kg:
@@ -38,6 +42,7 @@ llm:
 analyzers:
   interval_minutes: 5
   weights:                          # 綜合評分各訊號權重（內部自動正規化）
-    smart_money: 0.35
-    whale_flow: 0.30
-    divergence: 0.35
+    smart_money: 0.30
+    whale_flow: 0.25
+    divergence: 0.25
+    lth_supply: 0.20

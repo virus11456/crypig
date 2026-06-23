@@ -3,5 +3,6 @@ from .base import Agent
 from .smart_money import SmartMoneyAgent
 from .whale import WhaleAgent
 from .divergence import DivergenceAgent
+from .lth import LTHAgent
 
-__all__ = ["Agent", "SmartMoneyAgent", "WhaleAgent", "DivergenceAgent"]
+__all__ = ["Agent", "SmartMoneyAgent", "WhaleAgent", "DivergenceAgent", "LTHAgent"]

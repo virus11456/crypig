@@ -1,0 +1,78 @@
+"""長期持有者（LTH）Agent：持有 ≥ 門檻天數（預設 151 天）的供給變化。
+
+概念（鏈上經典指標）：
+  - LTH 供給上升 → 長期持有者在「累積」（鎖倉）→ 偏多
+  - LTH 供給下降 → 長期持有者在「分配/賣出」（常見於行情頂部）→ 偏空
+把每輪 LTH 供給落地，據此算變化率。
+
+⚠️ 資料現實：LTH 供給是「幣齡」指標
+  - 比特幣可由 UTXO 幣齡分布計算（門檻常用 155 天，可調為 151）
+  - 現成資料源：Glassnode / CryptoQuant（多為付費）
+  - 自建：需索引全節點 UTXO，工程量大；ETH/SOL 為帳戶模型，定義不同
+目前為 mock，real 路徑待你決定資料源後接上（fetch 內已標 TODO）。
+"""
+from __future__ import annotations
+
+import random
+from datetime import datetime, timezone
+
+from .base import Agent
+from ..storage.models import Observation
+from ..storage.snapshots import SnapshotStore
+
+
+class LTHAgent(Agent):
+    name = "lth_supply"
+
+    def __init__(self, config):
+        super().__init__(config)
+        self._store = SnapshotStore(config.snapshot_db)
+
+    def fetch(self, symbol: str) -> dict:
+        cfg = self.config.agents.lth
+        if not self.config.use_mock:
+            # TODO: 接真實 LTH 供給
+            #   選項A：Glassnode  /v1/metrics/supply/lth_sum（付費 key）
+            #   選項B：CryptoQuant LTH supply（付費 key）
+            #   選項C：BTC 自建——由 UTXO 幣齡 >= threshold_days 加總
+            raise NotImplementedError("LTH 真實資料源待接（需付費 API 或自建 UTXO 幣齡）")
+
+        rng = random.Random(f"{symbol}-lth-{int(datetime.now().timestamp()/3600)}")
+        return {
+            "threshold_days": cfg.threshold_days,
+            "lth_supply": rng.uniform(1e6, 2e7),   # 合成：LTH 持有量
+        }
+
+    def analyze(self, symbol: str, raw: dict) -> Observation:
+        supply = raw["lth_supply"]
+        threshold = raw["threshold_days"]
+        ts = datetime.now(timezone.utc).isoformat()
+        prev = self._store.latest(self.name, symbol, "lth_supply")
+        self._store.record(self.name, symbol, "lth_supply", supply, ts)
+
+        direction, magnitude, note = "neutral", 0.1, "（無前一輪快照，LTH 變化待累積）"
+        if prev:
+            chg = (supply - prev[1]) / prev[1] if prev[1] else 0.0
+            if chg > 0.002:
+                direction = "bull"
+                note = f"長期持有者供給增 {chg:+.2%}，累積/鎖倉"
+            elif chg < -0.002:
+                direction = "bear"
+                note = f"長期持有者供給減 {chg:+.2%}，分配/賣出"
+            else:
+                note = f"長期持有者供給變化 {chg:+.2%}（平穩）"
+            magnitude = min(abs(chg) * 50 + 0.1, 1.0)
+
+        summary = f"{symbol} 長期持有者(≥{threshold}天)：{note}。"
+        return Observation(
+            source=self.name,
+            symbol=symbol,
+            signal_type="lth_supply",
+            direction=direction,
+            magnitude=magnitude,
+            summary=summary,
+            entities=[("cohort", "long_term_holders"), ("asset", symbol)],
+            relations=[("long_term_holders", f"is_{direction}_on", symbol)]
+            if direction != "neutral" else [],
+            raw=raw,
+        )
