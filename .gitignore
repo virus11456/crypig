@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+config.yaml
+kg_store.json
+*.db
+.env

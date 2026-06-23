@@ -1,0 +1,41 @@
+# 複製成 config.yaml 後填入實際值
+# use_mock=true 時不打外部 API，可離線端到端跑通整套
+use_mock: true
+
+symbols:
+  - "BTC"
+  - "ETH"
+  - "SOL"
+
+agents:
+  smart_money:
+    enabled: true
+    interval_minutes: 15
+    pnl_threshold_usd: 1000000      # 近一年實現獲利門檻（美金）
+  whales:
+    enabled: true
+    interval_minutes: 30
+  divergence:
+    enabled: true
+    interval_minutes: 5
+    exchange: "binance"
+    timeframe: "1h"
+
+# 知識圖譜記憶層（自我學習 RAG）
+kg:
+  backend: "networkx"               # networkx(本地) | neo4j | rdflib
+  path: "kg_store.json"
+  max_hops: 3                       # 多跳推理最大跳數
+
+# 可插拔 LLM；mock 不需金鑰。換成 claude 用 Anthropic
+llm:
+  provider: "mock"                  # mock | claude | openai
+  model: "claude-opus-4-8"
+  api_key_env: "ANTHROPIC_API_KEY"  # 從此環境變數讀金鑰
+
+analyzers:
+  interval_minutes: 5
+  weights:                          # 綜合評分各訊號權重（內部自動正規化）
+    smart_money: 0.35
+    whale_flow: 0.30
+    divergence: 0.35
