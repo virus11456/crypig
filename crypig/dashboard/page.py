@@ -45,6 +45,14 @@ INDEX_HTML = r"""<!doctype html>
   .alerts{margin-top:8px;font-size:12px;color:var(--bear)}
   .spark{margin-top:10px}
   .empty{color:var(--mut);padding:40px;text-align:center}
+  .bt{max-width:1200px;margin:16px auto 0;padding:0 24px}
+  .bt .box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+  .bt h2{font-size:15px;margin:0 0 10px}
+  .bt h2 small{color:var(--mut);font-weight:400}
+  .kpis{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-end}
+  .kpi .v{font-size:24px;font-weight:700}
+  .kpi .k{color:var(--mut);font-size:12px}
+  .conf{display:flex;gap:16px;margin-top:10px;color:var(--mut);font-size:12px}
 </style>
 </head>
 <body>
@@ -54,6 +62,7 @@ INDEX_HTML = r"""<!doctype html>
   <span style="flex:1"></span>
   <button id="run" onclick="runCycle()">立即跑一輪</button>
 </header>
+<section id="bt" class="bt"><div class="empty">回測載入中…</div></section>
 <main id="cards"><div class="empty">載入中…</div></main>
 <script>
 const C={bull:'#3fb950',bear:'#f85149',neutral:'#8b949e'};
@@ -99,7 +108,39 @@ async function loadCard(d){
     ${spark(hist)}
   </div>`;
 }
+function pct(x){return x==null?'—':(x*100).toFixed(1)+'%';}
+function eqspark(eq){
+  if(!eq||eq.length<2) return '<span class="meta">交易筆數不足，無法畫曲線</span>';
+  const W=600,H=60,n=eq.length,vs=eq.map(e=>e.equity),mn=Math.min(1,...vs),mx=Math.max(1,...vs),pad=(mx-mn)*0.1||0.01;
+  const xs=i=>i/(n-1)*W, ys=v=>H-(v-(mn-pad))/((mx+pad)-(mn-pad))*H;
+  const pts=vs.map((v,i)=>`${xs(i).toFixed(1)},${ys(v).toFixed(1)}`).join(' ');
+  const base=ys(1), last=vs[vs.length-1], col=last>=1?'#3fb950':'#f85149';
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="margin-top:8px">
+    <line x1="0" y1="${base}" x2="${W}" y2="${base}" stroke="#30363d" stroke-dasharray="3"/>
+    <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.5"/></svg>`;
+}
+async function loadBacktest(){
+  try{
+    const b=await (await fetch('/backtest')).json();
+    const o=b.overall, hr=o.hit_rate, col=hr==null?'#8b949e':hr>=0.5?'#3fb950':'#f85149';
+    const cb=o.by_confidence||{};
+    const cbtxt=['low','mid','high'].map(k=>`${({low:'低',mid:'中',high:'高'})[k]}信心 ${pct(cb[k]?.hit_rate)}(${cb[k]?.trades||0})`).join(' ｜ ');
+    document.getElementById('bt').innerHTML=`<div class="box">
+      <h2>📈 回測 <small>持有期 ${b.horizon_hours}h｜跟隨訊號方向進出</small></h2>
+      <div class="kpis">
+        <div class="kpi"><div class="v" style="color:${col}">${pct(hr)}</div><div class="k">方向命中率</div></div>
+        <div class="kpi"><div class="v" style="color:${o.total_return>=0?'#3fb950':'#f85149'}">${o.total_return==null?'—':(o.total_return*100).toFixed(1)+'%'}</div><div class="k">累積損益</div></div>
+        <div class="kpi"><div class="v">${o.avg_return==null?'—':(o.avg_return*100).toFixed(2)+'%'}</div><div class="k">平均單筆</div></div>
+        <div class="kpi"><div class="v">${o.trades}</div><div class="k">交易筆數</div></div>
+        <div class="kpi"><div class="v" style="color:#8b949e">${o.pending}</div><div class="k">未到期</div></div>
+      </div>
+      <div class="conf">依信心度分層命中率： ${cbtxt}</div>
+      ${eqspark(o.equity)}
+    </div>`;
+  }catch(e){document.getElementById('bt').innerHTML='<div class="box empty">回測載入失敗：'+e+'</div>';}
+}
 async function refresh(){
+  loadBacktest();
   try{
     const {decisions}=await (await fetch('/decisions')).json();
     document.getElementById('ts').textContent=decisions[0]?('更新：'+new Date(decisions[0].ts).toLocaleString()):'';

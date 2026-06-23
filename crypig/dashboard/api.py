@@ -5,6 +5,7 @@
   GET  /signal          回最近一輪綜合評分
   GET  /decisions       各幣最新決策（讀持久化表）
   GET  /decisions/history?symbol=BTC&limit=50   某幣決策歷史（畫走勢用）
+  GET  /backtest?horizon_hours=24   回測：方向命中率 + 損益曲線
   POST /ask             關聯性問答（知識圖譜遞迴檢索+多跳）
   GET  /kg/stats        知識圖譜現況
 """
@@ -15,6 +16,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from ..orchestrator import Orchestrator
+from ..backtest import backtest
 from .page import INDEX_HTML
 
 app = FastAPI(title="Crypig", version="0.1.0")
@@ -68,6 +70,14 @@ def decisions() -> dict:
 def decisions_history(symbol: str = "BTC", limit: int = 50) -> dict:
     return {"symbol": symbol,
             "history": orchestrator().decisions.history(symbol, limit)}
+
+
+@app.get("/backtest")
+def backtest_report(horizon_hours: float | None = None) -> dict:
+    """回測：方向命中率 + 損益曲線（依決策歷史）。"""
+    orc = orchestrator()
+    h = orc.config.backtest_horizon_hours if horizon_hours is None else horizon_hours
+    return backtest(orc.decisions, horizon_hours=h)
 
 
 @app.post("/ask")

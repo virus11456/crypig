@@ -7,6 +7,8 @@ symbols:
   - "ETH"
   - "SOL"
 
+backtest_horizon_hours: 24            # 回測持有期（小時）
+
 agents:
   smart_money:
     enabled: true

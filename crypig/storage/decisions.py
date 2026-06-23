@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS decisions (
     reason      TEXT NOT NULL,
     consensus   TEXT NOT NULL,
     signals     TEXT NOT NULL,
-    alerts      TEXT NOT NULL
+    alerts      TEXT NOT NULL,
+    price       REAL
 );
 CREATE INDEX IF NOT EXISTS idx_dec ON decisions(symbol, ts);
 """
@@ -35,10 +36,19 @@ class DecisionStore:
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_DDL)
+        self._migrate()
         self._conn.commit()
 
-    def record_cycle(self, signals: dict[str, dict], ts: str) -> int:
-        """落地一輪所有 symbol 的決策，回寫入筆數。"""
+    def _migrate(self) -> None:
+        """舊版表（無 price 欄）就地補欄，向後相容。"""
+        cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(decisions)")}
+        if "price" not in cols:
+            self._conn.execute("ALTER TABLE decisions ADD COLUMN price REAL")
+
+    def record_cycle(self, signals: dict[str, dict], ts: str,
+                     prices: dict[str, float] | None = None) -> int:
+        """落地一輪所有 symbol 的決策，回寫入筆數。prices：各幣決策當下價。"""
+        prices = prices or {}
         rows = []
         for sym, d in signals.items():
             rows.append((
@@ -49,10 +59,11 @@ class DecisionStore:
                 json.dumps(d.get("consensus", {}), ensure_ascii=False),
                 json.dumps(d.get("signals", []), ensure_ascii=False),
                 json.dumps(d.get("alerts", []), ensure_ascii=False),
+                prices.get(sym),
             ))
         self._conn.executemany(
             "INSERT INTO decisions(ts,symbol,score,label,confidence,action,"
-            "reason,consensus,signals,alerts) VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
+            "reason,consensus,signals,alerts,price) VALUES (?,?,?,?,?,?,?,?,?,?,?)", rows)
         self._conn.commit()
         return len(rows)
 
@@ -73,6 +84,17 @@ class DecisionStore:
             (symbol, limit)).fetchall()
         return [self._row(r) for r in reversed(rows)]
 
+    def series(self, symbol: str) -> list[dict]:
+        """某 symbol 全部決策（時間升冪），回測配對用。"""
+        rows = self._conn.execute(
+            "SELECT * FROM decisions WHERE symbol=? ORDER BY ts ASC", (symbol,)).fetchall()
+        return [self._row(r) for r in rows]
+
+    def symbols(self) -> list[str]:
+        rows = self._conn.execute(
+            "SELECT DISTINCT symbol FROM decisions ORDER BY symbol").fetchall()
+        return [r["symbol"] for r in rows]
+
     @staticmethod
     def _row(r: sqlite3.Row) -> dict:
         return {
@@ -82,6 +104,7 @@ class DecisionStore:
             "consensus": json.loads(r["consensus"]),
             "signals": json.loads(r["signals"]),
             "alerts": json.loads(r["alerts"]),
+            "price": r["price"],
         }
 
     def close(self) -> None:

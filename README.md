@@ -71,12 +71,18 @@ uvicorn crypig.dashboard.api:app --reload
 #   GET  /signal           最近一輪綜合評分
 #   GET  /decisions        各幣最新決策（讀持久化表）
 #   GET  /decisions/history?symbol=BTC  決策歷史（畫走勢）
+#   GET  /backtest?horizon_hours=24     回測：命中率 + 損益曲線
 #   POST /ask              關聯性問答      GET /kg/stats 圖譜現況
 ```
 
 看板每張卡片顯示：方向標籤、分數量表、信心度、操作建議、理由、各訊號
-貢獻明細與分數走勢 sparkline。每輪決策都會寫入 `decisions.db`（sqlite），
-可供回測；路徑由 `config.decisions_db` 設定。
+貢獻明細與分數走勢 sparkline；上方一塊回測面板顯示方向命中率、累積損益、
+損益曲線與依信心度分層的命中率。每輪決策（含決策當下價）都會寫入
+`decisions.db`（sqlite），路徑由 `config.decisions_db` 設定。
+
+**回測**（`crypig/backtest.py`）對每筆非中性決策於當下價跟隨訊號方向進場，
+持有 `backtest_horizon_hours`（預設 24h）後以最接近到期的下一筆決策價出場，
+算 signed return，彙總命中率、平均/累積損益、損益曲線與信心度分層表現。
 
 ## 接真實資料 / 真實 LLM
 

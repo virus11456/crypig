@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 import random
+import time
 
 from .base import Agent
 from ..clients.market_data import MarketDataClient
@@ -50,7 +51,8 @@ class DivergenceAgent(Agent):
                 self._client = MarketDataClient(exchange=cfg.exchange)
             return self._client.fetch_ohlcv(symbol, cfg.timeframe, limit=200)
 
-        rng = random.Random(f"{symbol}-div")
+        # 種子帶時間桶，讓 mock 價格隨輪次緩慢漂移（否則每輪同價、回測報酬恆為 0）
+        rng = random.Random(f"{symbol}-div-{int(time.time() / 3)}")
         closes, vols = [], []
         price = 100.0
         for i in range(120):
@@ -100,5 +102,5 @@ class DivergenceAgent(Agent):
             entities=[("asset", symbol), ("indicator", "RSI")],
             relations=[("RSI", f"shows_{direction}_divergence_on", symbol)]
             if direction != "neutral" else [],
-            raw={"note": note},
+            raw={"note": note, "price": closes[-1]},   # 決策當下價（供回測）
         )

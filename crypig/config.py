@@ -88,6 +88,7 @@ class Config(BaseModel):
     symbols: list[str] = Field(default_factory=lambda: ["BTC", "ETH", "SOL"])
     snapshot_db: str = "snapshots.db"
     decisions_db: str = "decisions.db"   # 決策層每輪輸出持久化
+    backtest_horizon_hours: float = 24.0  # 回測持有期（小時）
     agents: AgentsConfig = AgentsConfig()
     kg: KGConfig = KGConfig()
     llm: LLMConfig = LLMConfig()

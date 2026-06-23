@@ -39,12 +39,27 @@ class Orchestrator:
 
         added = self.rag.ingest_many(observations)
         signals = aggregate(observations, self.config)
+        prices = self._prices(observations)
         ts = datetime.now(timezone.utc).isoformat()
-        saved = self.decisions.record_cycle(signals, ts)
+        saved = self.decisions.record_cycle(signals, ts, prices)
         logger.info("知識圖譜新增 %d 條關係；決策落地 %d 筆；圖譜現況 %s",
                     added, saved, self.rag.stats())
         return {"signals": signals, "kg": self.rag.stats(),
                 "ingested": added, "decisions_saved": saved, "ts": ts}
+
+    @staticmethod
+    def _prices(observations: list[Observation]) -> dict[str, float]:
+        """取各幣決策當下價（divergence 觀察帶 price=OHLCV 收盤；real=OKX、mock=合成）。"""
+        prices: dict[str, float] = {}
+        for o in observations:
+            if not isinstance(o.raw, dict):
+                continue
+            p = o.raw.get("price")
+            if p is None and o.raw.get("closes"):
+                p = o.raw["closes"][-1]
+            if p is not None:
+                prices[o.symbol] = float(p)
+        return prices
 
     def ask(self, question: str) -> dict:
         return self.rag.ask(question)
