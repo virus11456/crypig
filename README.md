@@ -32,7 +32,7 @@
 | Agent | 訊號 | 來源 | 狀態 |
 |---|---|---|---|
 | `smart_money` | 聰明錢多空 | Hyperliquid leaderboard + 持倉 | ✅ 真實資料 |
-| `whale_flow` | 全市場持倉量 + 資金費率 | Hyperliquid OI / funding（含快照算變化）| ✅ 真實資料 |
+| `whale_flow` | 全市場持倉量 + 資金費率 | CoinGecko 聚合各交易所衍生品 OI（含快照算變化）| ✅ 真實資料 |
 | `divergence` | 量價頂/底背離 | OKX OHLCV（httpx REST）| ✅ 真實資料（RSI + 量能）|
 | `lth_supply` | 長期持有者(≥151天)供給變化 | 鏈上幣齡（Glassnode/自建）| 骨架 mock，待接資料源 |
 | `twitter`(二期) | KOL/機構/美聯儲情緒 | X API + LLM 打分 | 規劃中 |

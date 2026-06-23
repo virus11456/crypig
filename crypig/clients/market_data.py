@@ -8,6 +8,10 @@
 """
 from __future__ import annotations
 
+import statistics
+import time
+from collections import defaultdict
+
 import httpx
 
 # 通用 timeframe -> 各交易所 bar 代碼
@@ -21,7 +25,43 @@ _OKX_BAR = {
 class MarketDataClient:
     def __init__(self, exchange: str = "okx", timeout: float = 15.0):
         self.exchange = exchange
-        self._client = httpx.Client(timeout=timeout)
+        self._client = httpx.Client(
+            timeout=timeout, headers={"User-Agent": "crypig/0.1"})
+        self._deriv_cache: dict | None = None
+        self._deriv_ts: float = 0.0
+
+    def aggregate_derivatives(self, ttl: float = 60.0) -> dict[str, dict]:
+        """全市場合約持倉量：聚合 CoinGecko 各交易所衍生品（免金鑰）。
+
+        回傳 {base: {open_interest_usd, funding_rate_med, contracts}}。
+        funding_rate_med 取各所中位數（避免小交易所離群值拉歪），
+        單位百分比/8h（CoinGecko 原始單位）。
+        """
+        if self._deriv_cache is not None and time.time() - self._deriv_ts < ttl:
+            return self._deriv_cache
+        resp = self._client.get("https://api.coingecko.com/api/v3/derivatives")
+        resp.raise_for_status()
+        agg: dict[str, dict] = defaultdict(
+            lambda: {"open_interest_usd": 0.0, "_fr": [], "contracts": 0})
+        for x in resp.json():
+            base = (x.get("index_id") or "").upper()
+            oi = x.get("open_interest")
+            if not base or not oi:
+                continue
+            a = agg[base]
+            a["open_interest_usd"] += float(oi)
+            a["contracts"] += 1
+            fr = x.get("funding_rate")
+            if fr is not None:
+                a["_fr"].append(float(fr))
+        out: dict[str, dict] = {}
+        for base, a in agg.items():
+            frs = a.pop("_fr")
+            a["funding_rate_med"] = statistics.median(frs) if frs else 0.0
+            out[base] = a
+        self._deriv_cache = out
+        self._deriv_ts = time.time()
+        return out
 
     def close(self) -> None:
         self._client.close()
