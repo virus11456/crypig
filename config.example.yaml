@@ -20,7 +20,7 @@ agents:
   divergence:
     enabled: true
     interval_minutes: 5
-    exchange: "binance"
+    exchange: "okx"                  # binance.com 美國地緣封鎖；okx 可達
     timeframe: "1h"
 
 # 知識圖譜記憶層（自我學習 RAG）

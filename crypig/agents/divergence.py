@@ -12,6 +12,7 @@ import math
 import random
 
 from .base import Agent
+from ..clients.market_data import MarketDataClient
 from ..storage.models import Observation
 
 
@@ -38,12 +39,16 @@ def rsi(closes: list[float], period: int = 14) -> list[float]:
 class DivergenceAgent(Agent):
     name = "divergence"
 
+    def __init__(self, config):
+        super().__init__(config)
+        self._client: MarketDataClient | None = None
+
     def fetch(self, symbol: str) -> dict:
+        cfg = self.config.agents.divergence
         if not self.config.use_mock:
-            # TODO: 用 ccxt 抓真實 OHLCV
-            #   exchange = getattr(ccxt, cfg.exchange)()
-            #   ohlcv = exchange.fetch_ohlcv(f"{symbol}/USDT", cfg.timeframe, limit=200)
-            raise NotImplementedError("ccxt OHLCV 整合待實作")
+            if self._client is None:
+                self._client = MarketDataClient(exchange=cfg.exchange)
+            return self._client.fetch_ohlcv(symbol, cfg.timeframe, limit=200)
 
         rng = random.Random(f"{symbol}-div")
         closes, vols = [], []

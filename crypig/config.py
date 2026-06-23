@@ -27,7 +27,7 @@ class WhalesConfig(BaseModel):
 class OHLCVConfig(BaseModel):
     enabled: bool = True
     interval_minutes: int = 5
-    exchange: str = "binance"
+    exchange: str = "okx"
     timeframe: str = "1h"
 
 
