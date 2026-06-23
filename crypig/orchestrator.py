@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from .config import Config, get_config
 from .agents import SmartMoneyAgent, WhaleAgent, DivergenceAgent, LTHAgent
 from .aggregate import aggregate
 from .kg import SelfLearningRAG
 from .storage.models import Observation
+from .storage.decisions import DecisionStore
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +18,7 @@ class Orchestrator:
     def __init__(self, config: Config | None = None):
         self.config = config or get_config()
         self.rag = SelfLearningRAG(self.config)
+        self.decisions = DecisionStore(self.config.decisions_db)
         self.agents = []
         a = self.config.agents
         if a.smart_money.enabled:
@@ -36,8 +39,12 @@ class Orchestrator:
 
         added = self.rag.ingest_many(observations)
         signals = aggregate(observations, self.config)
-        logger.info("知識圖譜新增 %d 條關係；圖譜現況 %s", added, self.rag.stats())
-        return {"signals": signals, "kg": self.rag.stats(), "ingested": added}
+        ts = datetime.now(timezone.utc).isoformat()
+        saved = self.decisions.record_cycle(signals, ts)
+        logger.info("知識圖譜新增 %d 條關係；決策落地 %d 筆；圖譜現況 %s",
+                    added, saved, self.rag.stats())
+        return {"signals": signals, "kg": self.rag.stats(),
+                "ingested": added, "decisions_saved": saved, "ts": ts}
 
     def ask(self, question: str) -> dict:
         return self.rag.ask(question)

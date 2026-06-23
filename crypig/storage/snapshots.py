@@ -23,7 +23,8 @@ CREATE INDEX IF NOT EXISTS idx_snap ON snapshots(source, symbol, metric, ts);
 class SnapshotStore:
     def __init__(self, path: str = "snapshots.db"):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(path)
+        # check_same_thread=False：FastAPI 端點在 worker thread 執行，連線需跨執行緒
+        self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.executescript(_DDL)
         self._conn.commit()
 

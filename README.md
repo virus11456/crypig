@@ -64,11 +64,19 @@ python scheduler.py --once
 # 常駐排程
 python scheduler.py
 
-# 另開終端啟動 API
+# 另開終端啟動 API + 看板
 uvicorn crypig.dashboard.api:app --reload
-#   POST /cycle  跑一輪      GET /signal  綜合評分
-#   POST /ask    關聯性問答   GET /kg/stats 圖譜現況
+#   GET  /                 視覺化決策看板（瀏覽器開 http://127.0.0.1:8000/）
+#   POST /cycle            跑一輪（並把決策落地 decisions 表）
+#   GET  /signal           最近一輪綜合評分
+#   GET  /decisions        各幣最新決策（讀持久化表）
+#   GET  /decisions/history?symbol=BTC  決策歷史（畫走勢）
+#   POST /ask              關聯性問答      GET /kg/stats 圖譜現況
 ```
+
+看板每張卡片顯示：方向標籤、分數量表、信心度、操作建議、理由、各訊號
+貢獻明細與分數走勢 sparkline。每輪決策都會寫入 `decisions.db`（sqlite），
+可供回測；路徑由 `config.decisions_db` 設定。
 
 ## 接真實資料 / 真實 LLM
 
