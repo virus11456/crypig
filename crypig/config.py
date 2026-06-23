@@ -14,6 +14,9 @@ class SmartMoneyConfig(BaseModel):
     enabled: bool = True
     interval_minutes: int = 15
     pnl_threshold_usd: float = 1_000_000
+    # Hyperliquid 無「一年」時間窗；allTime / month 為最接近代理
+    window: str = "allTime"          # day | week | month | allTime
+    max_traders: int = 100           # 取前 N 名合格交易者統計持倉
 
 
 class WhalesConfig(BaseModel):

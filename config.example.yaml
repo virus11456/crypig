@@ -11,7 +11,9 @@ agents:
   smart_money:
     enabled: true
     interval_minutes: 15
-    pnl_threshold_usd: 1000000      # 近一年實現獲利門檻（美金）
+    pnl_threshold_usd: 1000000      # 實現獲利門檻（美金）
+    window: "allTime"               # Hyperliquid 無一年窗；day|week|month|allTime
+    max_traders: 100                # 取前 N 名合格交易者統計持倉
   whales:
     enabled: true
     interval_minutes: 30
