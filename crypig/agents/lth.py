@@ -5,11 +5,10 @@
   - LTH 供給下降 → 長期持有者在「分配/賣出」（常見於行情頂部）→ 偏空
 把每輪 LTH 供給落地，據此算變化率。
 
-⚠️ 資料現實：LTH 供給是「幣齡」指標
-  - 比特幣可由 UTXO 幣齡分布計算（門檻常用 155 天，可調為 151）
-  - 現成資料源：Glassnode / CryptoQuant（多為付費）
-  - 自建：需索引全節點 UTXO，工程量大；ETH/SOL 為帳戶模型，定義不同
-目前為 mock，real 路徑待你決定資料源後接上（fetch 內已標 TODO）。
+真實資料源：bitcoin-data.com（免費 BTC 鏈上，每小時限 10 次）。
+  - 預設指標 illiquid-supply（長期不動供給≈長期持有者）；可改 hodlers / coin-age
+  - 為 UTXO 幣齡指標，僅比特幣有；ETH/SOL 為帳戶模型，回中性註記
+  - 業界 LTH 門檻約 155 天，與要求的 151 天相近
 """
 from __future__ import annotations
 
@@ -17,6 +16,7 @@ import random
 from datetime import datetime, timezone
 
 from .base import Agent
+from ..clients.bitcoin_data import BitcoinDataClient, RateLimited
 from ..storage.models import Observation
 from ..storage.snapshots import SnapshotStore
 
@@ -27,15 +27,23 @@ class LTHAgent(Agent):
     def __init__(self, config):
         super().__init__(config)
         self._store = SnapshotStore(config.snapshot_db)
+        self._client: BitcoinDataClient | None = None
 
     def fetch(self, symbol: str) -> dict:
         cfg = self.config.agents.lth
         if not self.config.use_mock:
-            # TODO: 接真實 LTH 供給
-            #   選項A：Glassnode  /v1/metrics/supply/lth_sum（付費 key）
-            #   選項B：CryptoQuant LTH supply（付費 key）
-            #   選項C：BTC 自建——由 UTXO 幣齡 >= threshold_days 加總
-            raise NotImplementedError("LTH 真實資料源待接（需付費 API 或自建 UTXO 幣齡）")
+            if symbol != cfg.onchain_symbol:
+                return {"threshold_days": cfg.threshold_days, "lth_supply": None,
+                        "note": f"鏈上 LTH 為 {cfg.onchain_symbol} 指標，{symbol} 不適用"}
+            if self._client is None:
+                self._client = BitcoinDataClient()
+            try:
+                m = self._client.fetch_metric(cfg.metric_slug)
+                return {"threshold_days": cfg.threshold_days,
+                        "lth_supply": m["value"], "as_of": m.get("date")}
+            except RateLimited:
+                return {"threshold_days": cfg.threshold_days, "lth_supply": None,
+                        "note": "bitcoin-data.com 每小時額度用完，沿用前次快照"}
 
         rng = random.Random(f"{symbol}-lth-{int(datetime.now().timestamp()/3600)}")
         return {
@@ -46,6 +54,17 @@ class LTHAgent(Agent):
     def analyze(self, symbol: str, raw: dict) -> Observation:
         supply = raw["lth_supply"]
         threshold = raw["threshold_days"]
+
+        # 無數值（非 BTC 或限流）→ 中性註記
+        if supply is None:
+            return Observation(
+                source=self.name, symbol=symbol, signal_type="lth_supply",
+                direction="neutral", magnitude=0.0,
+                summary=f"{symbol} 長期持有者(≥{threshold}天)：{raw.get('note', '無資料')}。",
+                entities=[("cohort", "long_term_holders"), ("asset", symbol)],
+                relations=[], raw=raw,
+            )
+
         ts = datetime.now(timezone.utc).isoformat()
         prev = self._store.latest(self.name, symbol, "lth_supply")
         self._store.record(self.name, symbol, "lth_supply", supply, ts)

@@ -33,8 +33,11 @@ class OHLCVConfig(BaseModel):
 
 class LTHConfig(BaseModel):
     enabled: bool = True
-    interval_minutes: int = 720      # 鏈上指標變化慢，半天一次即可
-    threshold_days: int = 151        # 至少持有天數
+    interval_minutes: int = 720      # 鏈上指標變化慢，半天一次即可（免費源每小時限 10 次）
+    threshold_days: int = 151        # 至少持有天數（業界標準指標約 155 天，相近）
+    source: str = "bitcoin-data"     # 免費 BTC 鏈上源
+    metric_slug: str = "illiquid-supply"  # 長期不動供給≈長期持有者；可改 hodlers / coin-age
+    onchain_symbol: str = "BTC"      # 鏈上 LTH 為 BTC 指標
 
 
 class AgentsConfig(BaseModel):
