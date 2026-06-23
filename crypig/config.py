@@ -1,6 +1,7 @@
 """設定載入。從 config.yaml 讀取，找不到時退回 config.example.yaml。"""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from functools import lru_cache
 
@@ -95,11 +96,28 @@ class Config(BaseModel):
     analyzers: AnalyzersConfig = AnalyzersConfig()
 
 
+def _apply_env(cfg: Config) -> Config:
+    """部署用環境變數覆寫（Railway 等）：
+      USE_MOCK=false        切真實資料源
+      CRYPIG_DATA_DIR=/data 把 sqlite/知識圖譜落到掛載的 volume 以持久化
+    """
+    if (v := os.getenv("USE_MOCK")) is not None:
+        cfg.use_mock = v.lower() not in ("0", "false", "no", "")
+    data_dir = os.getenv("CRYPIG_DATA_DIR")
+    if data_dir:
+        d = Path(data_dir)
+        d.mkdir(parents=True, exist_ok=True)
+        cfg.snapshot_db = str(d / Path(cfg.snapshot_db).name)
+        cfg.decisions_db = str(d / Path(cfg.decisions_db).name)
+        cfg.kg.path = str(d / Path(cfg.kg.path).name)
+    return cfg
+
+
 @lru_cache(maxsize=1)
 def get_config() -> Config:
     for name in ("config.yaml", "config.example.yaml"):
         path = _ROOT / name
         if path.exists():
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-            return Config.model_validate(data)
-    return Config()
+            return _apply_env(Config.model_validate(data))
+    return _apply_env(Config())

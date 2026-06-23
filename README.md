@@ -89,6 +89,30 @@ uvicorn crypig.dashboard.api:app --reload
 
 預設 mock 模式用 `decisions`、真實模式用 `ohlcv`，可用 `?price_source=` 覆寫。
 
+## 部署到 Railway
+
+專案已含 `railway.toml` / `Procfile`（綁 `$PORT`）。在 Railway：
+
+1. New Project → Deploy from GitHub repo，選本 repo 與分支。
+2. Railway 用 Nixpacks 依 `requirements.txt` 自動建置，啟動指令已設為
+   `uvicorn crypig.dashboard.api:app --host 0.0.0.0 --port $PORT`。
+3. 部署完按 **Generate Domain** 取得公開網址，開首頁即看板。
+
+啟動後內建**背景排程**會每隔一段時間自動跑一輪、累積決策供看板與回測。
+
+可用環境變數（Railway → Variables）：
+
+| 變數 | 預設 | 說明 |
+|---|---|---|
+| `CRYPIG_SCHEDULER` | `1` | 背景排程開關（`0` 關閉） |
+| `CRYPIG_INTERVAL_MIN` | `15` | 背景每幾分鐘跑一輪 |
+| `USE_MOCK` | （依設定檔）`true` | `false` 改用真實資料源 |
+| `CRYPIG_DATA_DIR` | 無 | 設成掛載的 volume 路徑（如 `/data`），sqlite 與知識圖譜落在此以**跨重新部署持久化**；不設則容器重啟即清空 |
+
+> 註：免費層容器檔案系統是暫態的——要保留歷史決策/回測資料，請在 Railway
+> 加一個 Volume 掛到 `/data` 並設 `CRYPIG_DATA_DIR=/data`。真實模式注意
+> bitcoin-data.com 每小時 10 次限制，背景間隔別設太短。
+
 ## 接真實資料 / 真實 LLM
 
 - 每個 agent 的 `fetch()` 內有 `TODO` 標好接點，替換即可，`analyze()` 不用動。

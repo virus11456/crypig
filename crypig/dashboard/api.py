@@ -11,6 +11,10 @@
 """
 from __future__ import annotations
 
+import logging
+import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -20,9 +24,10 @@ from ..backtest import backtest, OHLCVPriceHistory
 from ..clients.market_data import MarketDataClient
 from .page import INDEX_HTML
 
-app = FastAPI(title="Crypig", version="0.1.0")
+logger = logging.getLogger(__name__)
 _orc: Orchestrator | None = None
 _last: dict | None = None
+_sched = None
 
 
 def orchestrator() -> Orchestrator:
@@ -30,6 +35,34 @@ def orchestrator() -> Orchestrator:
     if _orc is None:
         _orc = Orchestrator()
     return _orc
+
+
+def _safe_cycle() -> None:
+    try:
+        orchestrator().run_cycle()
+    except Exception:                       # 單輪失敗（如真實 API 限流）不可拖垮排程
+        logger.exception("背景排程跑一輪失敗")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """部署時的背景排程：每隔 CRYPIG_INTERVAL_MIN 分鐘自動跑一輪，
+    讓看板與回測持續累積資料。設 CRYPIG_SCHEDULER=0 可關閉。"""
+    global _sched
+    if os.getenv("CRYPIG_SCHEDULER", "1").lower() not in ("0", "false", "no", ""):
+        from apscheduler.schedulers.background import BackgroundScheduler
+        interval = float(os.getenv("CRYPIG_INTERVAL_MIN", "15"))
+        _safe_cycle()                        # 啟動先跑一次，畫面立刻有資料
+        _sched = BackgroundScheduler(daemon=True)
+        _sched.add_job(_safe_cycle, "interval", minutes=interval)
+        _sched.start()
+        logger.info("背景排程啟動，每 %s 分鐘跑一輪", interval)
+    yield
+    if _sched:
+        _sched.shutdown(wait=False)
+
+
+app = FastAPI(title="Crypig", version="0.1.0", lifespan=lifespan)
 
 
 class AskBody(BaseModel):

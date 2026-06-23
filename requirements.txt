@@ -3,17 +3,18 @@ pydantic>=2.6
 PyYAML>=6.0
 httpx>=0.27
 
-# 市場資料 / 指標（接真實資料時）
-ccxt>=4.2
+# 市場資料 / 指標：用 httpx 直打交易所公開 REST（見 clients/market_data.py），
+# 不需 ccxt。ccxt 僅在要支援多交易所正規化時才裝（很肥，預設略過以加快部署）：
+# ccxt>=4.2
 
-# 排程
+# 排程（背景定時跑一輪）
 APScheduler>=3.10
 
-# API
+# API / 看板
 fastapi>=0.110
 uvicorn[standard]>=0.29
 
-# LLM（provider=claude 時）
+# LLM（僅 provider=claude 時動態載入；mock 模式不需要）
 anthropic>=0.40
 
 # 註：核心知識圖譜為純 Python 實作，骨架不需額外相依即可跑。
