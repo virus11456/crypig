@@ -6,9 +6,9 @@
 把每輪 LTH 供給落地，據此算變化率。
 
 真實資料源：bitcoin-data.com（免費 BTC 鏈上，每小時限 10 次）。
-  - 預設指標 illiquid-supply（長期不動供給≈長期持有者）；可改 hodlers / coin-age
+  - 預設指標 long-term-hodler-supply-btc（真正長期持有者供給，BTC）
   - 為 UTXO 幣齡指標，僅比特幣有；ETH/SOL 為帳戶模型，回中性註記
-  - 業界 LTH 門檻約 155 天，與要求的 151 天相近
+  - 業界 LTH 門檻約 155 天，與要求的「超過 151 天」相近
 """
 from __future__ import annotations
 

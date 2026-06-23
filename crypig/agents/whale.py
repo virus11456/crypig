@@ -1,16 +1,13 @@
-"""鯨魚 / 全市場持倉 Agent。
+"""鯨魚 Agent：監控「大額錢包持有者」的持倉變化量。
 
-監測「整個市場」的合約持倉量——聚合 CoinGecko 各交易所衍生品 OI（免金鑰），
-不是單一場子。配合各所平均資金費率（多空擁擠度），並把每輪快照落地，
-跨輪計算「全市場持倉量變化」判斷加倉/減倉（市場是否在賣）。
+鯨魚＝持有大量特定加密貨幣、足以影響市場的錢包。本 agent 用 bitcoin-data
+的 wallet-bands（依錢包餘額分級），追蹤鯨魚級距的鏈上總持倉，跨輪算變化：
+  - 鯨魚持倉增加 → 大戶在累積/鎖倉 → 偏多
+  - 鯨魚持倉減少 → 大戶在分配/出貨（散戶常跟著清倉）→ 偏空
+預設「鯨魚」＝餘額 ≥100 BTC 的大戶（駝背鯨 100-1K + 巨鯨 ≥1K），可在設定調整。
 
-判讀：
-  - 全市場 OI 增 + 價跌 → 空單進場（賣壓）→ 偏空
-  - 全市場 OI 增 + 價漲 → 多單進場 → 偏多
-  - 全市場 OI 減 → 去槓桿/平倉
-  - 平均資金費率明顯為正 → 多單擁擠（潛在見頂）→ 偏空
-  - 平均資金費率明顯為負 → 空單擁擠（潛在軋空）→ 偏多（反向）
-mock 版用合成資料，介面一致。
+非 BTC（ETH/SOL 為帳戶模型，此源無鯨魚分級）退回「全市場合約持倉量(OI)＋
+資金費率」的市場槓桿信號，保留多資產覆蓋。mock 版用合成資料，介面一致。
 """
 from __future__ import annotations
 
@@ -20,6 +17,7 @@ from datetime import datetime, timezone
 
 from .base import Agent
 from ..clients.market_data import MarketDataClient
+from ..clients.bitcoin_data import BitcoinDataClient, RateLimited
 from ..storage.models import Observation
 from ..storage.snapshots import SnapshotStore
 
@@ -32,50 +30,112 @@ class WhaleAgent(Agent):
     def __init__(self, config):
         super().__init__(config)
         self._client: MarketDataClient | None = None
+        self._btc: BitcoinDataClient | None = None
         self._store = SnapshotStore(config.snapshot_db)
 
-    def _market(self) -> dict:
-        if self._client is None:
-            self._client = MarketDataClient()
-        return self._client.aggregate_derivatives()
-
+    # ---------- fetch ----------
     def fetch(self, symbol: str) -> dict:
+        cfg = self.config.agents.whales
         if not self.config.use_mock:
-            agg = self._market().get(symbol, {})
-            oi = agg.get("open_interest_usd", 0.0)
-            funding = agg.get("funding_rate_med", 0.0)
-            contracts = agg.get("contracts", 0)
-            price = 0.0  # 用價格快照算變化方向（OI 為 USD，價格另取）
-            prev_oi = self._store.latest(self.name, symbol, "open_interest_usd")
-            return {
-                "open_interest_usd": oi,
-                "funding_rate_avg": funding,
-                "contracts": contracts,
-                "mark_px": price,
-                "prev_open_interest_usd": prev_oi[1] if prev_oi else None,
-            }
+            if symbol == cfg.onchain_symbol:
+                return self._fetch_whale_wallets(symbol, cfg)
+            return self._fetch_market(symbol)
 
+        # mock：BTC 走鯨魚錢包路徑、其餘走市場路徑，兩條分支都測得到
+        if symbol == cfg.onchain_symbol:
+            rng = random.Random(f"{symbol}-whalew-{int(time.time()/600)}")
+            whale_btc = rng.uniform(6.5e6, 7.5e6)
+            return {"mode": "whale_wallet", "whale_btc": whale_btc,
+                    "bands": {b: whale_btc / len(cfg.whale_bands) for b in cfg.whale_bands},
+                    "counts": {"humpbackCount": 11000, "megaWhaleCount": 1150},
+                    "prev_whale_btc": whale_btc * rng.uniform(0.99, 1.01)}
         rng = random.Random(f"{symbol}-whale-{int(time.time()/600)}")
         oi = rng.uniform(1e9, 6e10)
-        return {
-            "open_interest_usd": oi,
-            "funding_rate_avg": rng.uniform(-0.3, 0.3),
-            "contracts": rng.randint(80, 200),
-            "mark_px": 0.0,
-            "prev_open_interest_usd": oi * rng.uniform(0.9, 1.1),
-        }
+        return {"mode": "market", "open_interest_usd": oi,
+                "funding_rate_avg": rng.uniform(-0.3, 0.3),
+                "contracts": rng.randint(80, 200),
+                "prev_open_interest_usd": oi * rng.uniform(0.9, 1.1)}
 
+    def _fetch_whale_wallets(self, symbol: str, cfg) -> dict:
+        if self._btc is None:
+            self._btc = BitcoinDataClient()
+        try:
+            data = self._btc.fetch_raw("wallet-bands")
+        except RateLimited:
+            return {"mode": "whale_wallet", "whale_btc": None,
+                    "note": "bitcoin-data.com 每小時額度用完，沿用前次快照"}
+        bands = {b: float(data.get(b, 0.0)) for b in cfg.whale_bands}
+        whale_btc = sum(bands.values())
+        counts = {k: data.get(k) for k in ("whaleCount", "humpbackCount", "megaWhaleCount")}
+        prev = self._store.latest(self.name, symbol, "whale_btc")
+        return {"mode": "whale_wallet", "whale_btc": whale_btc, "bands": bands,
+                "counts": counts, "as_of": data.get("theDate"),
+                "prev_whale_btc": prev[1] if prev else None}
+
+    def _fetch_market(self, symbol: str) -> dict:
+        if self._client is None:
+            self._client = MarketDataClient()
+        agg = self._client.aggregate_derivatives().get(symbol, {})
+        oi = agg.get("open_interest_usd", 0.0)
+        prev_oi = self._store.latest(self.name, symbol, "open_interest_usd")
+        return {"mode": "market", "open_interest_usd": oi,
+                "funding_rate_avg": agg.get("funding_rate_med", 0.0),
+                "contracts": agg.get("contracts", 0),
+                "prev_open_interest_usd": prev_oi[1] if prev_oi else None}
+
+    # ---------- analyze ----------
     def analyze(self, symbol: str, raw: dict) -> Observation:
+        if raw.get("mode") == "whale_wallet":
+            return self._analyze_whale(symbol, raw)
+        return self._analyze_market(symbol, raw)
+
+    def _analyze_whale(self, symbol: str, raw: dict) -> Observation:
+        cfg = self.config.agents.whales
+        whale_btc = raw.get("whale_btc")
+        if whale_btc is None:                       # 限流無資料
+            return Observation(
+                source=self.name, symbol=symbol, signal_type="whale_holdings",
+                direction="neutral", magnitude=0.0,
+                summary=f"{symbol} 鯨魚持倉：{raw.get('note', '無資料')}。",
+                entities=[("cohort", "whales"), ("asset", symbol)], raw=raw)
+
+        ts = datetime.now(timezone.utc).isoformat()
+        prev = raw.get("prev_whale_btc")
+        self._store.record(self.name, symbol, "whale_btc", whale_btc, ts)
+
+        direction, magnitude, note = "neutral", 0.1, "（無前一輪快照，鯨魚持倉變化待累積）"
+        if prev:
+            chg = (whale_btc - prev) / prev if prev else 0.0
+            if chg > cfg.chg_threshold:
+                direction, note = "bull", f"鯨魚持倉增 {chg:+.2%}（大戶累積/鎖倉）"
+            elif chg < -cfg.chg_threshold:
+                direction, note = "bear", f"鯨魚持倉減 {chg:+.2%}（大戶分配/出貨）"
+            else:
+                note = f"鯨魚持倉變化 {chg:+.2%}（平穩）"
+            magnitude = min(abs(chg) * 80 + 0.1, 1.0)
+
+        cnt = raw.get("counts", {})
+        n = sum(v for v in (cnt.get("humpbackCount"), cnt.get("megaWhaleCount")) if v) or None
+        held = f"{whale_btc:,.0f} BTC"
+        tail = f"（{n:,} 個大戶錢包）" if n else ""
+        summary = f"{symbol} 鯨魚持倉(≥100BTC大戶 共{held}{tail})：{note}。"
+        return Observation(
+            source=self.name, symbol=symbol, signal_type="whale_holdings",
+            direction=direction, magnitude=magnitude, summary=summary,
+            entities=[("cohort", "whales"), ("asset", symbol)],
+            relations=[("whales", f"is_{direction}_on", symbol)] if direction != "neutral" else [],
+            raw=raw)
+
+    def _analyze_market(self, symbol: str, raw: dict) -> Observation:
         oi = raw["open_interest_usd"]
         funding = raw["funding_rate_avg"]
-        funding_ann = funding / 100 * _FUNDING_PERIODS_PER_YEAR   # 年化（小數）
+        funding_ann = funding / 100 * _FUNDING_PERIODS_PER_YEAR
         contracts = raw.get("contracts", 0)
         prev_oi = raw.get("prev_open_interest_usd")
 
         ts = datetime.now(timezone.utc).isoformat()
         self._store.record(self.name, symbol, "open_interest_usd", oi, ts)
 
-        # 1) 資金費率：多空擁擠度
         if funding_ann > 0.05:
             f_dir, f_note = "bear", f"多單擁擠（年化資金費率 {funding_ann:+.1%}）"
         elif funding_ann < -0.05:
@@ -83,7 +143,6 @@ class WhaleAgent(Agent):
         else:
             f_dir, f_note = "neutral", f"資金費率中性（年化 {funding_ann:+.1%}）"
 
-        # 2) 全市場持倉量變化
         oi_dir, oi_note = "neutral", "（無前一輪快照，持倉變化待累積）"
         if prev_oi:
             oi_chg = (oi - prev_oi) / prev_oi if prev_oi else 0.0
@@ -102,18 +161,11 @@ class WhaleAgent(Agent):
             direction = "neutral"
         magnitude = min(abs(funding_ann) / 0.3 + 0.2, 1.0) if direction != "neutral" else 0.1
 
-        oi_b = oi / 1e9
         summary = (f"{symbol} 全市場持倉(聚合{contracts}合約)：{oi_note}；{f_note}。"
-                   f"OI=${oi_b:,.1f}B。")
+                   f"OI=${oi/1e9:,.1f}B。")
         return Observation(
-            source=self.name,
-            symbol=symbol,
-            signal_type="market_positioning",
-            direction=direction,
-            magnitude=magnitude,
-            summary=summary,
+            source=self.name, symbol=symbol, signal_type="market_positioning",
+            direction=direction, magnitude=magnitude, summary=summary,
             entities=[("asset", symbol), ("metric", "open_interest"), ("metric", "funding")],
             relations=[("market", f"is_{direction}_positioned_on", symbol)]
-            if direction != "neutral" else [],
-            raw=raw,
-        )
+            if direction != "neutral" else [], raw=raw)

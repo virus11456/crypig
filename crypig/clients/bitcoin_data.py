@@ -4,12 +4,13 @@
 僅比特幣有這類 UTXO 幣齡/長期持有者指標。
 
 可用指標(slug，取 /v1/<slug>/last)範例：
-  hodlers           LTH/STH 供給與淨持倉變化（欄位 lthSupplyBtc=≥155天長期持有者總量）
-  illiquid-supply   長期不動(非流動)供給——長期持有者代理
-  coin-age          幣齡總和(SCA)
-  hodlers/hodl-waves 幣齡分 band（age3m6m、age6m1y… 為各齡段供給占比）
-回傳 {"date": str, "value": float}。可用 value_key 指定欄位，
-否則取非 d/unixTs 的主要數值欄位（優先含 lth 或與 slug 同名者）。
+  long-term-hodler-supply-btc  真正長期持有者(≥155天)供給(BTC)，欄位 longTermHodlerSupplyBtc
+  illiquid-supply              長期不動(非流動)供給——長期持有者代理
+  wallet-bands                 鯨魚分級錢包持倉(一次回全部)：
+                               whaleBtc(10-100)、humpbackBtc(100-1K)、megaWhaleBtc(≥1K)及各 count
+  coins-addr-1K-100-BTC …      單一餘額級距持倉(BTC)
+fetch_metric 回傳 {"date", "value"}（可用 value_key 指定欄位）。
+fetch_raw 回傳整包 dict（多欄位端點如 wallet-bands 用）。
 """
 from __future__ import annotations
 
@@ -33,17 +34,22 @@ class BitcoinDataClient:
     def close(self) -> None:
         self._client.close()
 
-    def fetch_metric(self, slug: str, value_key: str | None = None) -> dict:
+    def fetch_raw(self, slug: str) -> dict:
+        """取整包欄位（多欄位端點，如 wallet-bands 鯨魚分級）。"""
         resp = self._client.get(f"{BASE}/{slug}/last")
-        if resp.status_code == 404:        # 部分端點不支援 /last，退回 base 路徑
+        if resp.status_code == 404:
             resp = self._client.get(f"{BASE}/{slug}")
         if resp.status_code == 429:
             raise RateLimited("bitcoin-data.com 每小時 10 次額度已用完")
         resp.raise_for_status()
         data = resp.json()
-        if isinstance(data, list):         # 時序陣列取最後一筆
+        if isinstance(data, list):
             data = data[-1]
-        date = data.get("d") or data.get("day")
+        return data
+
+    def fetch_metric(self, slug: str, value_key: str | None = None) -> dict:
+        data = self.fetch_raw(slug)
+        date = data.get("d") or data.get("day") or data.get("theDate")
 
         if value_key is not None:        # 明確指定欄位
             if value_key not in data:

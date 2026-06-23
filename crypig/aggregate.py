@@ -83,11 +83,15 @@ def aggregate(observations: list[Observation], config: Config) -> dict:
 
         norm = score / wsum if wsum else 0.0        # -1 ~ +1
 
-        # 信心度＝覆蓋率 × 方向一致度
-        coverage = wsum / total_weight              # 有多少權重的訊號到位
+        # 信心度＝覆蓋率 × 方向一致度 × 表態力度
+        #   覆蓋率 coverage：多少權重的訊號到位
+        #   一致度 agreement：表態訊號中同向的佔比
+        #   力度 conviction：有多少權重在「明確表態」(非中性)——避免一堆中性卻高信心
+        coverage = wsum / total_weight
         directional = bull_w + bear_w
         agreement = (max(bull_w, bear_w) / directional) if directional else 0.0
-        confidence = round(coverage * agreement, 3)
+        conviction = min(1.0, directional / (0.5 * total_weight))   # 半數權重表態即滿
+        confidence = round(coverage * agreement * conviction, 3)
 
         # 衝突：多空兩方都有實質份量、且淨分數不大
         conflict = (

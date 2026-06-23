@@ -14,21 +14,26 @@ agents:
     pnl_threshold_usd: 1000000      # 實現獲利門檻（美金）
     window: "allTime"               # Hyperliquid 無一年窗；day|week|month|allTime
     max_traders: 100                # 取前 N 名合格交易者統計持倉
-  whales:
+  whales:                            # 真實鯨魚錢包持倉變化（大額地址）
     enabled: true
     interval_minutes: 30
+    onchain_symbol: "BTC"            # 鏈上鯨魚分級僅比特幣
+    whale_bands:                     # 哪些餘額級距算鯨魚（預設≥100 BTC大戶）
+      - "humpbackBtc"                # 100-1K BTC
+      - "megaWhaleBtc"               # ≥1K BTC（也可加 whaleBtc=10-100）
+    chg_threshold: 0.003             # 持倉變化超過此比例才算累積/分配
   divergence:
     enabled: true
     interval_minutes: 5
     exchange: "okx"                  # binance.com 美國地緣封鎖；okx 可達
     timeframe: "1h"
-  lth:                               # 長期持有者(≥門檻天數)供給變化
+  lth:                               # 長期持有者(超過151天)供給變化
     enabled: true
     interval_minutes: 720            # 鏈上指標變化慢，半天一次（免費源每小時限 10 次）
-    threshold_days: 151              # 業界標準約 155 天，相近
+    threshold_days: 151              # 超過151天即長期；資料源以業界155天為界，相近
     source: "bitcoin-data"           # 免費 BTC 鏈上源 bitcoin-data.com（已驗證）
-    metric_slug: "illiquid-supply"   # 長期不動供給≈長期持有者；可改 coin-age
-    value_key: ""                    # 留空=自動取主要數值欄位
+    metric_slug: "long-term-hodler-supply-btc"   # 真正長期持有者供給(BTC)
+    value_key: "longTermHodlerSupplyBtc"
     onchain_symbol: "BTC"            # 鏈上 LTH 僅比特幣
 
 # 知識圖譜記憶層（自我學習 RAG）

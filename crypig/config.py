@@ -22,6 +22,12 @@ class SmartMoneyConfig(BaseModel):
 class WhalesConfig(BaseModel):
     enabled: bool = True
     interval_minutes: int = 30
+    # 真實鯨魚錢包持倉：bitcoin-data wallet-bands（BTC 鏈上，免費源每小時限 10 次）
+    onchain_symbol: str = "BTC"
+    # 哪些級距算「鯨魚」：預設 ≥100 BTC 的大戶（駝背鯨+巨鯨）。
+    # 可選欄位：whaleBtc(10-100)、humpbackBtc(100-1K)、megaWhaleBtc(≥1K)
+    whale_bands: list[str] = Field(default_factory=lambda: ["humpbackBtc", "megaWhaleBtc"])
+    chg_threshold: float = 0.003     # 鯨魚持倉變化超過此比例才算累積/分配
 
 
 class OHLCVConfig(BaseModel):
@@ -36,8 +42,9 @@ class LTHConfig(BaseModel):
     interval_minutes: int = 720      # 鏈上指標變化慢，半天一次即可（免費源每小時限 10 次）
     threshold_days: int = 151        # 至少持有天數（業界標準指標約 155 天，相近）
     source: str = "bitcoin-data"     # 免費 BTC 鏈上源（已驗證可用）
-    metric_slug: str = "illiquid-supply"  # 長期不動供給≈長期持有者(≥151天)；可改 coin-age
-    value_key: str = ""              # 留空=自動取主要數值；指定 slug 有多欄位時用
+    # 真正的長期持有者供給(BTC)：持有≥155天（業界標準，與要求的151天相近）
+    metric_slug: str = "long-term-hodler-supply-btc"
+    value_key: str = "longTermHodlerSupplyBtc"
     onchain_symbol: str = "BTC"      # 鏈上 LTH 為 BTC 指標
 
 
