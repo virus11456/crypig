@@ -38,7 +38,8 @@ class LTHAgent(Agent):
             if self._client is None:
                 self._client = BitcoinDataClient()
             try:
-                m = self._client.fetch_metric(cfg.metric_slug)
+                m = self._client.fetch_metric(
+                    cfg.metric_slug, value_key=(cfg.value_key or None))
                 return {"threshold_days": cfg.threshold_days,
                         "lth_supply": m["value"], "as_of": m.get("date")}
             except RateLimited:

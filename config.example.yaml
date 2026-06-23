@@ -26,8 +26,9 @@ agents:
     enabled: true
     interval_minutes: 720            # 鏈上指標變化慢，半天一次（免費源每小時限 10 次）
     threshold_days: 151              # 業界標準約 155 天，相近
-    source: "bitcoin-data"           # 免費 BTC 鏈上源 bitcoin-data.com
-    metric_slug: "illiquid-supply"   # 長期不動供給≈長期持有者；可改 hodlers / coin-age
+    source: "bitcoin-data"           # 免費 BTC 鏈上源 bitcoin-data.com（已驗證）
+    metric_slug: "illiquid-supply"   # 長期不動供給≈長期持有者；可改 coin-age
+    value_key: ""                    # 留空=自動取主要數值欄位
     onchain_symbol: "BTC"            # 鏈上 LTH 僅比特幣
 
 # 知識圖譜記憶層（自我學習 RAG）
