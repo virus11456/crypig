@@ -72,6 +72,25 @@ class MarketDataClient:
             return self._okx(symbol, timeframe, limit)
         raise ValueError(f"不支援的交易所：{self.exchange}")
 
+    def fetch_candles(self, symbol: str, timeframe: str = "1h",
+                      limit: int = 300) -> list[tuple[int, float]]:
+        """帶時間戳的 K 線（回測對齊用）：回 [(epoch_ms, close), ...] 由舊到新。"""
+        if self.exchange != "okx":
+            raise ValueError(f"不支援的交易所：{self.exchange}")
+        bar = _OKX_BAR.get(timeframe)
+        if not bar:
+            raise ValueError(f"OKX 不支援的 timeframe：{timeframe}")
+        resp = self._client.get(
+            "https://www.okx.com/api/v5/market/candles",
+            params={"instId": f"{symbol}-USDT", "bar": bar, "limit": str(limit)},
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+        if payload.get("code") != "0":
+            raise RuntimeError(f"OKX 錯誤：{payload.get('msg')} (instId={symbol}-USDT)")
+        rows = list(reversed(payload.get("data", [])))   # OKX 由新到舊→反轉
+        return [(int(r[0]), float(r[4])) for r in rows]
+
     def _okx(self, symbol: str, timeframe: str, limit: int) -> dict[str, list[float]]:
         bar = _OKX_BAR.get(timeframe)
         if not bar:

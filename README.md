@@ -71,7 +71,7 @@ uvicorn crypig.dashboard.api:app --reload
 #   GET  /signal           最近一輪綜合評分
 #   GET  /decisions        各幣最新決策（讀持久化表）
 #   GET  /decisions/history?symbol=BTC  決策歷史（畫走勢）
-#   GET  /backtest?horizon_hours=24     回測：命中率 + 損益曲線
+#   GET  /backtest?horizon_hours=24&price_source=ohlcv  回測：命中率+損益曲線
 #   POST /ask              關聯性問答      GET /kg/stats 圖譜現況
 ```
 
@@ -81,8 +81,13 @@ uvicorn crypig.dashboard.api:app --reload
 `decisions.db`（sqlite），路徑由 `config.decisions_db` 設定。
 
 **回測**（`crypig/backtest.py`）對每筆非中性決策於當下價跟隨訊號方向進場，
-持有 `backtest_horizon_hours`（預設 24h）後以最接近到期的下一筆決策價出場，
-算 signed return，彙總命中率、平均/累積損益、損益曲線與信心度分層表現。
+持有 `backtest_horizon_hours`（預設 24h）後出場，算 signed return，彙總命中率、
+平均/累積損益、損益曲線與信心度分層表現。出/進場價兩種來源：
+- `decisions`：用決策表落地價（需系統實際跑滿一個 horizon 才有出場價）
+- `ohlcv`：用交易所**真實 K 線歷史**依決策時間對齊（免等，可立刻回測既有決策；
+  尚未到期的決策標為 pending）
+
+預設 mock 模式用 `decisions`、真實模式用 `ohlcv`，可用 `?price_source=` 覆寫。
 
 ## 接真實資料 / 真實 LLM
 

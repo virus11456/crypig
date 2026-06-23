@@ -16,7 +16,8 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from ..orchestrator import Orchestrator
-from ..backtest import backtest
+from ..backtest import backtest, OHLCVPriceHistory
+from ..clients.market_data import MarketDataClient
 from .page import INDEX_HTML
 
 app = FastAPI(title="Crypig", version="0.1.0")
@@ -73,11 +74,24 @@ def decisions_history(symbol: str = "BTC", limit: int = 50) -> dict:
 
 
 @app.get("/backtest")
-def backtest_report(horizon_hours: float | None = None) -> dict:
-    """回測：方向命中率 + 損益曲線（依決策歷史）。"""
+def backtest_report(horizon_hours: float | None = None,
+                    price_source: str | None = None) -> dict:
+    """回測：方向命中率 + 損益曲線。
+
+    price_source：
+      decisions  用決策表落地價（需系統跑滿一個 horizon 才有出場價）
+      ohlcv      用交易所真實 K 線歷史依決策時間對齊（免等，可立刻回測）
+    預設：mock 模式用 decisions、真實模式用 ohlcv；可用查詢參數覆寫。
+    """
     orc = orchestrator()
     h = orc.config.backtest_horizon_hours if horizon_hours is None else horizon_hours
-    return backtest(orc.decisions, horizon_hours=h)
+    src = price_source or ("decisions" if orc.config.use_mock else "ohlcv")
+    price_fn = None
+    if src == "ohlcv":
+        dv = orc.config.agents.divergence
+        price_fn = OHLCVPriceHistory(
+            MarketDataClient(exchange=dv.exchange), timeframe=dv.timeframe)
+    return backtest(orc.decisions, horizon_hours=h, price_fn=price_fn)
 
 
 @app.post("/ask")
