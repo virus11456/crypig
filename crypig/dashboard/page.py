@@ -95,116 +95,14 @@ INDEX_HTML = r"""<!doctype html>
 <section id="macro" class="bt"><div class="empty">宏觀載入中…</div></section>
 <section id="table" class="bt"><div class="empty">幣別總表載入中…</div></section>
 <section id="bt" class="bt"><div class="empty">回測載入中…</div></section>
-<main id="cards"><div class="empty">載入中…</div></main>
 <script>
 const C={bull:'#3fb950',bear:'#f85149',neutral:'#8b949e'};
 const LBLC=l=>l.includes('多')?C.bull:l.includes('空')?C.bear:l==='訊號分歧'?'#d29922':C.neutral;
 
-function gauge(score){ // score -1..1
-  const pct=Math.min(Math.abs(score),1)*50;
-  const col=score>0?C.bull:score<0?C.bear:C.neutral;
-  const style=score>=0?`left:50%;width:${pct}%`:`right:50%;width:${pct}%`;
-  return `<div class="gauge"><div class="mid"></div>
-          <div class="fill" style="${style};background:${col}"></div></div>`;
-}
-const SRC={smart_money:'🧠 聰明錢',whale_flow:'🐋 巨鯨持有者',
-           divergence:'📊 量價',lth_supply:'💎 長期持有者'};
-const DIRZH={bull:'偏多',bear:'偏空',neutral:'中性'};
 function money(x){
   if(x==null) return '—';
   const n=Number(x);
   return '$'+n.toLocaleString('en-US',{maximumFractionDigits:n<10?4:n<1000?2:0});
-}
-function sigbar(s){
-  const name=SRC[s.source]||s.source;
-  // 無資料／不適用：忠實標示，不假裝有分析
-  if(s.status==='no_data'){
-    return `<div class="sig nodata">
-      <div class="sigtitle"><span>${name}</span>
-        <span class="chip" style="background:#8b949e22;color:#8b949e">⛔ 無資料／不適用</span></div>
-      <div class="meta">${s.summary}</div></div>`;
-  }
-  const col=C[s.direction], sign=s.contribution>=0?'+':'';
-  const w=Math.min(Math.abs(s.contribution)*200,100);
-  const chip = s.status==='warming'
-    ? `<span class="chip" style="background:#d2992222;color:#d29922">⏳ 蒐集中</span>`
-    : `<span class="chip" style="background:${col}22;color:${col}">${DIRZH[s.direction]}</span>`;
-  return `<div class="sig">
-    <div class="sigtitle"><span>${name}</span>${chip}</div>
-    <div class="calc">權重 ${s.weight} × 強度 ${s.magnitude} = 貢獻 <b style="color:${col}">${sign}${s.contribution}</b></div>
-    <div class="bar"><i style="width:${Math.max(w,3)}%;background:${col}"></i></div>
-    <div class="meta">${s.summary}</div></div>`;
-}
-function cbar(con){
-  const b=con.bull||0,s=con.bear||0,n=con.neutral||0,t=b+s+n||1;
-  return `<div class="cbar">
-    <i style="width:${b/t*100}%;background:${C.bull}"></i>
-    <i style="width:${s/t*100}%;background:${C.bear}"></i>
-    <i style="width:${n/t*100}%;background:${C.neutral}"></i></div>`;
-}
-function spark(hist){
-  if(hist.length<2) return '';
-  const W=300,H=40,n=hist.length;
-  const xs=i=>i/(n-1)*W, ys=v=>H/2-(Math.max(-1,Math.min(1,v)))*(H/2-2);
-  const pts=hist.map((h,i)=>`${xs(i).toFixed(1)},${ys(h.score).toFixed(1)}`).join(' ');
-  return `<svg class="spark" width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-    <line x1="0" y1="${H/2}" x2="${W}" y2="${H/2}" stroke="#30363d" stroke-width="1"/>
-    <polyline points="${pts}" fill="none" stroke="#58a6ff" stroke-width="1.5"/></svg>`;
-}
-function pspark(hist){
-  const pts=hist.filter(h=>h.price!=null);
-  if(pts.length<2) return '';
-  const W=300,H=36,n=pts.length,vs=pts.map(h=>h.price);
-  const mn=Math.min(...vs),mx=Math.max(...vs),pad=(mx-mn)*0.1||1;
-  const xs=i=>i/(n-1)*W, ys=v=>H-(v-(mn-pad))/((mx+pad)-(mn-pad))*H;
-  const poly=vs.map((v,i)=>`${xs(i).toFixed(1)},${ys(v).toFixed(1)}`).join(' ');
-  const up=vs[vs.length-1]>=vs[0];
-  return `<svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-    <polyline points="${poly}" fill="none" stroke="${up?C.bull:C.bear}" stroke-width="1.5"/></svg>`;
-}
-async function loadCard(d, cm){
-  let hist=[];
-  try{hist=(await (await fetch(`/decisions/history?symbol=${d.symbol}&limit=50`)).json()).history;}catch(e){}
-  const con=d.consensus||{}, ssp=spark(hist), psp=pspark(hist);
-  let ratios='';
-  if(cm){
-    const fa=cm.hl_funding_ann!=null?cm.hl_funding_ann:cm.funding_ann;
-    const ff=cm.hl_funding_ann!=null?cm.hl_funding_flag:cm.funding_flag;
-    const fl=FFLAG[ff]||FFLAG.normal;
-    const fund = fa==null ? '' :
-      `<span>資金費率 <b style="color:${fl.c}">${fa>=0?'+':''}${(fa*100).toFixed(1)}%</b>`
-      + (ff&&ff!=='normal'?` <span class="chip" style="background:${fl.c}22;color:${fl.c}">${fl.t}</span>`:'')
-      + `</span>`;
-    ratios = `<div class="ratios">
-      <span>OI/Cap <b style="color:#58a6ff">${cm.oi_cap==null?'—':(cm.oi_cap*100).toFixed(2)+'%'}</b></span>
-      <span>Vol/Cap <b style="color:#58a6ff">${cm.vol_cap==null?'—':(cm.vol_cap*100).toFixed(2)+'%'}</b></span>
-      ${fund}
-      <span>OI ${bigMoney(cm.open_interest)}</span>
-      <span>市值 ${bigMoney(cm.market_cap)}</span>
-    </div>`;
-  }
-  return `<div class="card">
-    <div class="row"><span class="sym">${d.symbol}</span>
-      <span class="badge" style="background:${LBLC(d.label)}22;color:${LBLC(d.label)}">${d.label}</span></div>
-    <div class="price">參考價 ${money(d.price)} ｜ 更新 ${new Date(d.ts).toLocaleString()}</div>
-    ${gauge(d.score)}
-    <div class="stats">
-      <div class="stat"><div class="v" style="color:${LBLC(d.label)}">${d.score}</div><div class="k">綜合分數 −1~+1</div></div>
-      <div class="stat"><div class="v">${(d.confidence*100).toFixed(0)}%</div><div class="k">信心度</div></div>
-      <div class="stat"><div class="v">${money(d.price)}</div><div class="k">參考價</div></div>
-    </div>
-    ${ratios}
-    <div class="action" style="color:${LBLC(d.label)}">${d.action}</div>
-    <div class="reason">${d.reason}</div>
-    <div class="sec">多空共識（加權佔比）</div>
-    ${cbar(con)}
-    <div class="meta">多 ${con.bull??0} ｜ 空 ${con.bear??0} ｜ 中 ${con.neutral??0}</div>
-    <div class="sec">訊號明細（${(d.signals||[]).length} 項）</div>
-    ${(d.signals||[]).map(sigbar).join('')}
-    ${(d.alerts&&d.alerts.length)?`<div class="alerts">⚠ ${d.alerts.join('<br>⚠ ')}</div>`:''}
-    ${ssp?`<div class="sec">分數走勢</div>${ssp}`:''}
-    ${psp?`<div class="sec">參考價走勢</div>${psp}`:''}
-  </div>`;
 }
 function pct(x){return x==null?'—':(x*100).toFixed(1)+'%';}
 function bigMoney(x){
@@ -317,7 +215,7 @@ function renderTable(){
 }
 async function refresh(){
   loadBacktest();
-  const cmap=await loadMacro();
+  await loadMacro();
   let decisions=[], hlcoins=[], scores={};
   try{ decisions=(await (await fetch('/decisions')).json()).decisions||[]; }catch(e){}
   try{ hlcoins=(await (await fetch('/hl_market')).json()).coins||[]; }catch(e){}
@@ -335,11 +233,6 @@ async function refresh(){
   MROWS=Object.values(bySym);
   renderTable();
   document.getElementById('ts').textContent=decisions[0]?('更新：'+new Date(decisions[0].ts).toLocaleString()):'';
-  try{
-    if(!decisions.length){document.getElementById('cards').innerHTML='<div class="empty">尚無決策，點「立即跑一輪」。</div>';return;}
-    const html=await Promise.all(decisions.map(d=>loadCard(d, cmap[d.symbol])));
-    document.getElementById('cards').innerHTML=html.join('');
-  }catch(e){document.getElementById('cards').innerHTML='<div class="empty">載入失敗：'+e+'</div>';}
 }
 async function runCycle(){
   const b=document.getElementById('run');b.disabled=true;b.textContent='跑一輪中…';
