@@ -79,6 +79,10 @@ INDEX_HTML = r"""<!doctype html>
   .tbl th:hover{color:var(--fg)}
   .tbl tbody tr:hover{background:#1c2230}
   .tbl .symc{font-weight:700;font-size:14px}
+  .scroll{max-height:540px;overflow:auto;border-radius:8px}
+  .scroll thead th{position:sticky;top:0;background:#161b22;z-index:1}
+  .filt{background:#0d1117;border:1px solid var(--line);color:var(--fg);border-radius:6px;
+        padding:6px 10px;font-size:13px;margin-left:auto}
 </style>
 </head>
 <body>
@@ -90,6 +94,7 @@ INDEX_HTML = r"""<!doctype html>
 </header>
 <section id="macro" class="bt"><div class="empty">宏觀載入中…</div></section>
 <section id="list" class="bt"><div class="empty">列表載入中…</div></section>
+<section id="hl" class="bt"><div class="empty">Hyperliquid 全市場載入中…</div></section>
 <section id="bt" class="bt"><div class="empty">回測載入中…</div></section>
 <main id="cards"><div class="empty">載入中…</div></main>
 <script>
@@ -262,13 +267,14 @@ async function loadBacktest(){
 let LISTROWS=[], SORT={col:'score',dir:-1};
 const FFLAG={hot:{t:'🔴 過熱',c:'#f85149'},warm:{t:'🟠 偏擁擠',c:'#d29922'},
              squeeze:{t:'🟢 空方擁擠',c:'#3fb950'},normal:{t:'正常',c:'#8b949e'}};
-function fundCell(r){
-  if(r.funding_ann==null) return '—';
-  const fl=FFLAG[r.funding_flag]||FFLAG.normal, sign=r.funding_ann>=0?'+':'';
-  const badge=r.funding_flag&&r.funding_flag!=='normal'
+function fundFmt(ann, flag){
+  if(ann==null) return '—';
+  const fl=FFLAG[flag]||FFLAG.normal, sign=ann>=0?'+':'';
+  const badge=flag&&flag!=='normal'
     ? ` <span class="chip" style="background:${fl.c}22;color:${fl.c}">${fl.t}</span>`:'';
-  return `<span style="color:${fl.c}">${sign}${(r.funding_ann*100).toFixed(1)}%</span>${badge}`;
+  return `<span style="color:${fl.c}">${sign}${(ann*100).toFixed(1)}%</span>${badge}`;
 }
+const fundCell=r=>fundFmt(r.funding_ann, r.funding_flag);
 const LCOLS=[
   {k:'symbol',t:'幣別',  f:r=>`<span class="symc">${r.symbol}</span>`},
   {k:'label', t:'判斷',  f:r=>`<span style="color:${LBLC(r.label)}">${r.label}</span>`},
@@ -277,7 +283,8 @@ const LCOLS=[
   {k:'price', t:'參考價',f:r=>money(r.price)},
   {k:'oi_cap',t:'OI/Cap',f:r=>r.oi_cap==null?'—':(r.oi_cap*100).toFixed(2)+'%'},
   {k:'vol_cap',t:'Vol/Cap',f:r=>r.vol_cap==null?'—':(r.vol_cap*100).toFixed(2)+'%'},
-  {k:'funding_ann',t:'資金費率(年化)',f:fundCell},
+  {k:'funding_ann',t:'資金費率·跨所',f:fundCell},
+  {k:'hl_funding_ann',t:'資金費率·HL',f:r=>fundFmt(r.hl_funding_ann, r.hl_funding_flag)},
   {k:'open_interest',t:'OI',f:r=>bigMoney(r.open_interest)},
   {k:'market_cap',t:'市值',f:r=>bigMoney(r.market_cap)},
 ];
@@ -297,8 +304,48 @@ function renderList(){
     <h2>📋 幣別列表 <small>點欄位標題排序（再點一次反向）</small></h2>
     <table class="tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
+// ---- Hyperliquid 全市場資金費率掃描（全部幣，列表） ----
+let HLROWS=[], HLSORT={col:'funding_ann',dir:-1}, HLFILT='';
+const HLCOLS=[
+  {k:'symbol',t:'幣別', f:r=>`<span class="symc">${r.symbol}</span>`},
+  {k:'price', t:'標記價',f:r=>money(r.price)},
+  {k:'funding_ann',t:'資金費率(年化)',f:fundCell},
+  {k:'open_interest_usd',t:'OI',f:r=>bigMoney(r.open_interest_usd)},
+  {k:'premium',t:'溢價',f:r=>r.premium==null?'—':(r.premium*100).toFixed(3)+'%'},
+];
+function hlRows(){
+  let rows=HLFILT?HLROWS.filter(r=>r.symbol.includes(HLFILT)):HLROWS;
+  return [...rows].sort((a,b)=>{
+    let va=HLSORT.col==='funding_ann'?Math.abs(a.funding_ann):a[HLSORT.col];
+    let vb=HLSORT.col==='funding_ann'?Math.abs(b.funding_ann):b[HLSORT.col];
+    if(va==null) return 1; if(vb==null) return -1;
+    if(typeof va==='string') return HLSORT.dir*va.localeCompare(vb);
+    return HLSORT.dir*(va-vb);
+  });
+}
+function hlBodyHTML(){return hlRows().map(r=>`<tr>${HLCOLS.map(c=>`<td>${c.f(r)}</td>`).join('')}</tr>`).join('');}
+function renderHLBody(){const el=document.getElementById('hlbody'); if(el) el.innerHTML=hlBodyHTML();}
+function hlSort(col){ if(HLSORT.col===col) HLSORT.dir*=-1; else {HLSORT.col=col;HLSORT.dir=-1;} renderHL(); }
+function renderHL(){
+  const arrow=k=>HLSORT.col===k?(HLSORT.dir<0?' ▼':' ▲'):'';
+  const head=HLCOLS.map(c=>`<th onclick="hlSort('${c.k}')">${c.t}${arrow(c.k)}</th>`).join('');
+  document.getElementById('hl').innerHTML=`<div class="box">
+    <div class="row" style="margin-bottom:10px;gap:12px">
+      <h2 style="margin:0">🟣 Hyperliquid 全市場資金費率掃描 <small>共 ${HLROWS.length} 幣 · 預設依 |費率| · 點標題排序</small></h2>
+      <input class="filt" placeholder="搜尋幣別…" oninput="HLFILT=this.value.trim().toUpperCase();renderHLBody()" value="${HLFILT}">
+    </div>
+    <div class="scroll"><table class="tbl"><thead><tr>${head}</tr></thead><tbody id="hlbody">${hlBodyHTML()}</tbody></table></div></div>`;
+}
+async function loadHL(){
+  try{
+    const r=await (await fetch('/hl_market')).json();
+    HLROWS=r.coins||[];
+    if(!HLROWS.length){document.getElementById('hl').innerHTML='<div class="box empty">Hyperliquid 全市場暫無資料</div>';return;}
+    renderHL();
+  }catch(e){document.getElementById('hl').innerHTML='<div class="box empty">Hyperliquid 載入失敗：'+e+'</div>';}
+}
 async function refresh(){
-  loadBacktest();
+  loadBacktest(); loadHL();
   const cmap=await loadMacro();
   try{
     const {decisions}=await (await fetch('/decisions')).json();

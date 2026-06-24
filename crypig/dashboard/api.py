@@ -128,6 +128,7 @@ def backtest_report(horizon_hours: float | None = None,
 
 
 _market: MarketDataClient | None = None
+_hl = None
 
 
 def market() -> MarketDataClient:
@@ -135,6 +136,33 @@ def market() -> MarketDataClient:
     if _market is None:
         _market = MarketDataClient()
     return _market
+
+
+def hl():
+    global _hl
+    if _hl is None:
+        from ..clients.hyperliquid import HyperliquidClient
+        _hl = HyperliquidClient()
+    return _hl
+
+
+def _mock_hl_scan() -> list[dict]:
+    import math
+    import time
+    t = time.time() / 3600
+    from ..clients.hyperliquid import funding_flag
+    seed = [("BTC", 64000, 0.08), ("ETH", 3400, 0.30), ("SOL", 150, 0.62),
+            ("DOGE", 0.16, -0.12), ("HYPE", 28, 1.4), ("PEPE", 1e-5, -0.6),
+            ("WIF", 2.3, 0.9), ("LINK", 18, 0.04), ("AVAX", 38, -0.2),
+            ("APT", 9, 0.5), ("ARB", 1.1, -0.08), ("TIA", 6.5, 0.18)]
+    out = []
+    for i, (s, px, fr) in enumerate(seed):
+        ann = fr * (1 + 0.3 * math.sin(t + i))
+        out.append({"symbol": s, "price": px, "funding_ann": ann,
+                    "open_interest_usd": 5e8 / (i + 1), "premium": ann / 50,
+                    "funding_flag": funding_flag(ann)})
+    out.sort(key=lambda r: abs(r["funding_ann"]), reverse=True)
+    return out
 
 
 def _mock_macro(syms: list[str]) -> dict:
@@ -167,16 +195,41 @@ def _mock_macro(syms: list[str]) -> dict:
 
 @app.get("/macro")
 def macro() -> dict:
-    """全市場宏觀 + 各幣 OI/Cap、Vol/Cap。mock 模式回合成值。"""
+    """全市場宏觀 + 各幣 OI/Cap、Vol/Cap + HL 場內資金費率對照。mock 回合成值。"""
     orc = orchestrator()
     syms = orc.config.symbols
     if orc.config.use_mock:
-        return _mock_macro(syms)
-    m = market()
-    try:
-        return {"global": m.global_macro(), "per_symbol": m.coin_macro(syms)}
-    except Exception as e:                       # 外部 API 失敗時不讓看板崩
-        return {"error": str(e), "global": None, "per_symbol": {}}
+        out = _mock_macro(syms)
+        hlmap = {r["symbol"]: r for r in _mock_hl_scan()}
+    else:
+        m = market()
+        try:
+            out = {"global": m.global_macro(), "per_symbol": m.coin_macro(syms)}
+        except Exception as e:
+            out = {"error": str(e), "global": None, "per_symbol": {}}
+        try:
+            hlmap = {r["symbol"]: r for r in hl().funding_scan()}
+        except Exception:
+            hlmap = {}
+    for s, v in (out.get("per_symbol") or {}).items():   # 併入 HL 場內資金費率對照
+        h = hlmap.get(s)
+        if h:
+            v["hl_funding_ann"] = h["funding_ann"]
+            v["hl_funding_flag"] = h["funding_flag"]
+    return out
+
+
+@app.get("/hl_market")
+def hl_market() -> dict:
+    """Hyperliquid 全市場（全部永續幣）資金費率掃描，依 |年化費率| 排序。"""
+    if orchestrator().config.use_mock:
+        coins = _mock_hl_scan()
+    else:
+        try:
+            coins = hl().funding_scan()
+        except Exception as e:
+            return {"error": str(e), "count": 0, "coins": []}
+    return {"count": len(coins), "coins": coins}
 
 
 @app.post("/ask")

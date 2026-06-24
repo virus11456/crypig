@@ -27,6 +27,18 @@ LEADERBOARD_URL = "https://stats-data.hyperliquid.xyz/Mainnet/leaderboard"
 WINDOWS = {"day", "week", "month", "allTime"}
 
 
+def funding_flag(ann: float) -> str:
+    """資金費率(年化小數)異常分級：hot 多單過熱 / warm 偏擁擠 /
+    squeeze 空方擁擠(負費率,潛在軋空) / normal 正常。"""
+    if ann > 0.50:
+        return "hot"
+    if ann > 0.25:
+        return "warm"
+    if ann < -0.05:
+        return "squeeze"
+    return "normal"
+
+
 class HyperliquidClient:
     def __init__(self, timeout: float = 15.0,
                  leaderboard_ttl: float = 3600.0,
@@ -37,6 +49,8 @@ class HyperliquidClient:
         self._state_ttl = state_ttl
         self._lb_cache: tuple[float, list[dict]] | None = None
         self._state_cache: dict[str, tuple[float, dict]] = {}
+        self._mc_cache: tuple[float, dict] | None = None
+        self._mc_ttl = 120.0
 
     def close(self) -> None:
         self._client.close()
@@ -91,7 +105,13 @@ class HyperliquidClient:
 
     # ---- 全市場脈絡（持倉量 / 資金費率）----
     def market_contexts(self) -> dict[str, dict]:
-        """回傳每個幣的 {funding, open_interest, mark_px, premium}（全市場）。"""
+        """回傳每個幣的 {funding, open_interest, mark_px, premium}（全市場，含快取）。
+
+        funding 為「每小時」費率（小數）；open_interest 單位為幣數量。
+        """
+        now = time.time()
+        if self._mc_cache and now - self._mc_cache[0] < self._mc_ttl:
+            return self._mc_cache[1]
         resp = self._client.post(INFO_URL, json={"type": "metaAndAssetCtxs"})
         resp.raise_for_status()
         meta, ctxs = resp.json()
@@ -106,6 +126,26 @@ class HyperliquidClient:
                 "mark_px": float(ctx.get("markPx", 0.0) or 0.0),
                 "premium": float(ctx.get("premium", 0.0) or 0.0),
             }
+        self._mc_cache = (now, out)
+        return out
+
+    def funding_scan(self) -> list[dict]:
+        """全市場資金費率掃描：每幣年化資金費率、OI(USD)、溢價、異常分級。
+
+        funding(每小時) → 年化 ×24×365。依 |年化費率| 由大到小排序。
+        """
+        out: list[dict] = []
+        for name, v in self.market_contexts().items():
+            ann = v["funding"] * 24 * 365
+            out.append({
+                "symbol": name,
+                "price": v["mark_px"],
+                "funding_ann": ann,
+                "open_interest_usd": v["open_interest"] * v["mark_px"],
+                "premium": v["premium"],
+                "funding_flag": funding_flag(ann),
+            })
+        out.sort(key=lambda r: abs(r["funding_ann"]), reverse=True)
         return out
 
     @staticmethod
