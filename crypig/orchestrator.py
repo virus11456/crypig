@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from .config import Config, get_config
 from .agents import SmartMoneyAgent, WhaleAgent, DivergenceAgent, LTHAgent
+from .clients.market_data import MarketDataClient
 from .aggregate import aggregate
 from .kg import SelfLearningRAG
 from .storage.models import Observation
@@ -20,6 +21,11 @@ class Orchestrator:
         self.rag = SelfLearningRAG(self.config)
         self.decisions = DecisionStore(self.config.decisions_db)
         self.all_scores: dict[str, dict] = {}   # 全市場各幣輕量決策(聰明錢+資金費率)
+        # 以下 CoinGecko 資料只在每輪(背景)抓一次並快取，請求端只讀不打 API（避免被封）
+        self.macro: dict | None = None          # 全市場宏觀
+        self.market_caps: dict[str, dict] = {}  # SYMBOL -> {market_cap, volume_24h}
+        self.deriv_agg: dict[str, dict] = {}    # SYMBOL -> 跨所聚合 OI/funding
+        self._md: MarketDataClient | None = None
         self.agents = []
         a = self.config.agents
         if a.smart_money.enabled:
@@ -44,6 +50,7 @@ class Orchestrator:
         ts = datetime.now(timezone.utc).isoformat()
         saved = self.decisions.record_cycle(signals, ts, prices)
         self.all_scores = self._compute_all_scores()      # 全市場各幣輕量決策
+        self._refresh_market_data()                       # 背景抓一次 CoinGecko 並快取
         logger.info("知識圖譜新增 %d 條關係；決策落地 %d 筆；全市場評分 %d 幣；圖譜現況 %s",
                     added, saved, len(self.all_scores), self.rag.stats())
         return {"signals": signals, "kg": self.rag.stats(), "ingested": added,
@@ -107,6 +114,28 @@ class Orchestrator:
                     out[coin] = {"score": r["score"], "label": r["label"],
                                  "confidence": r["confidence"], "divergence": ddir}
         return out
+
+    def _refresh_market_data(self) -> None:
+        """每輪(背景)抓一次 CoinGecko：全市場宏觀、各幣市值、跨所聚合 OI。
+        全部快取在本物件，請求端只讀，CoinGecko 從『每次刷新都打』降到 20 分鐘 3 支。
+        失敗時沿用上次快取（不清空）。"""
+        if self.config.use_mock:
+            return
+        if self._md is None:
+            self._md = MarketDataClient()
+        for name, fn in (("deriv", lambda: self._md.aggregate_derivatives(ttl=0)),
+                         ("macro", self._md.global_macro),
+                         ("caps", self._md.top_markets)):
+            try:
+                val = fn()
+                if name == "deriv" and val:
+                    self.deriv_agg = val
+                elif name == "macro" and val:
+                    self.macro = val
+                elif name == "caps" and val:
+                    self.market_caps = val
+            except Exception:
+                logger.warning("CoinGecko %s 抓取失敗，沿用上次快取", name)
 
     def _divergence_scan(self, hlc, coins: list[str]) -> dict[str, tuple]:
         """並發抓日線、算每幣量價背離（direction, magnitude, note）。失敗回空。"""

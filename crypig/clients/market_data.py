@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import os
 import statistics
 import time
 from collections import defaultdict
@@ -27,8 +28,13 @@ _OKX_BAR = {
 class MarketDataClient:
     def __init__(self, exchange: str = "okx", timeout: float = 15.0):
         self.exchange = exchange
-        self._client = httpx.Client(
-            timeout=timeout, headers={"User-Agent": "crypig/0.1"})
+        # CoinGecko 免費 Demo 金鑰（env COINGECKO_API_KEY）：100 次/分、10k 次/月，
+        # 且不會像無金鑰版那樣封鎖雲端 IP。沒設則用無金鑰(本地可、雲端易被擋)。
+        headers = {"User-Agent": "crypig/0.1"}
+        key = os.getenv("COINGECKO_API_KEY")
+        if key:
+            headers["x-cg-demo-api-key"] = key
+        self._client = httpx.Client(timeout=timeout, headers=headers)
         self._deriv_cache: dict | None = None
         self._deriv_ts: float = 0.0
         self._macro_cache: dict | None = None

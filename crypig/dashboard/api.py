@@ -202,15 +202,13 @@ def _mock_macro(syms: list[str]) -> dict:
 
 @app.get("/macro")
 def macro() -> dict:
-    """全市場宏觀（總市值/量/OI、OI-Cap、Vol-Cap、BTC 市佔）。只取 global，
-    各幣明細已由 /hl_market 提供，避免重複打 CoinGecko 觸發限流。mock 回合成。"""
+    """全市場宏觀。讀每輪背景算好的快取（請求端不打 CoinGecko，避免被封）。"""
     orc = orchestrator()
     if orc.config.use_mock:
         return {"global": _mock_macro(orc.config.symbols)["global"]}
-    try:
-        return {"global": market().global_macro()}
-    except Exception as e:
-        return {"error": str(e), "global": None}
+    if orc.macro is None:
+        orc.run_cycle()
+    return {"global": orc.macro}
 
 
 @app.get("/scores")
@@ -229,22 +227,18 @@ def hl_market() -> dict:
     跨平台整合：HL（標記價、資金費率、溢價、OI 後備）＋ CoinGecko（市值、量、
     跨所聚合 OI）。OI 優先用跨所聚合、否則 HL；市值對得上的幣才有(同名取最大市值)。
     """
-    if orchestrator().config.use_mock:
+    orc = orchestrator()
+    if orc.config.use_mock:
         coins = _mock_hl_scan()
         return {"count": len(coins), "coins": coins}
     try:
         coins = hl().funding_scan()
     except Exception as e:
         return {"error": str(e), "count": 0, "coins": []}
-    m = market()
-    try:
-        tm = m.top_markets()
-    except Exception:
-        tm = {}
-    try:
-        deriv = m.aggregate_derivatives()
-    except Exception:
-        deriv = {}
+    if not orc.market_caps:                 # 首次：先讓背景把市值/OI 快取算好
+        orc.run_cycle()
+    tm = orc.market_caps                     # 讀每輪背景快取，不打 CoinGecko
+    deriv = orc.deriv_agg
     for c in coins:
         s = c["symbol"]
         info = tm.get(s)

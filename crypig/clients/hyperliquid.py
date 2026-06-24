@@ -105,7 +105,7 @@ class HyperliquidClient:
         return data
 
     def states_bulk(self, addresses: list[str],
-                    workers: int = 16) -> dict[str, dict]:
+                    workers: int = 8) -> dict[str, dict]:
         """並發抓多個帳號的 clearinghouseState（各自走快取）。回 {address: state}。"""
         def fetch(addr: str):
             try:
@@ -165,7 +165,7 @@ class HyperliquidClient:
         return out
 
     def daily_closes_bulk(self, coins: list[str], days: int = 45,
-                          workers: int = 16) -> dict[str, tuple[list[float], list[float]]]:
+                          workers: int = 8) -> dict[str, tuple[list[float], list[float]]]:
         """並發抓多個幣的日線（收盤, 量）。回 {coin: (closes, volumes)}。
 
         230 幣循序約 100s；16 並發約 6-10s。httpx.Client 可跨執行緒共用。
