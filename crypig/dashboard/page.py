@@ -162,12 +162,21 @@ async function loadCard(d, cm){
   let hist=[];
   try{hist=(await (await fetch(`/decisions/history?symbol=${d.symbol}&limit=50`)).json()).history;}catch(e){}
   const con=d.consensus||{}, ssp=spark(hist), psp=pspark(hist);
-  const ratios = cm ? `<div class="ratios">
-      <span>OI/Cap <b style="color:#58a6ff">${(cm.oi_cap*100).toFixed(2)}%</b></span>
-      <span>Vol/Cap <b style="color:#58a6ff">${(cm.vol_cap*100).toFixed(2)}%</b></span>
+  let ratios='';
+  if(cm){
+    const fl=FFLAG[cm.funding_flag]||FFLAG.normal;
+    const fund = cm.funding_ann==null ? '' :
+      `<span>資金費率 <b style="color:${fl.c}">${cm.funding_ann>=0?'+':''}${(cm.funding_ann*100).toFixed(1)}%</b>`
+      + (cm.funding_flag&&cm.funding_flag!=='normal'?` <span class="chip" style="background:${fl.c}22;color:${fl.c}">${fl.t}</span>`:'')
+      + `</span>`;
+    ratios = `<div class="ratios">
+      <span>OI/Cap <b style="color:#58a6ff">${cm.oi_cap==null?'—':(cm.oi_cap*100).toFixed(2)+'%'}</b></span>
+      <span>Vol/Cap <b style="color:#58a6ff">${cm.vol_cap==null?'—':(cm.vol_cap*100).toFixed(2)+'%'}</b></span>
+      ${fund}
       <span>OI ${bigMoney(cm.open_interest)}</span>
       <span>市值 ${bigMoney(cm.market_cap)}</span>
-    </div>` : '';
+    </div>`;
+  }
   return `<div class="card">
     <div class="row"><span class="sym">${d.symbol}</span>
       <span class="badge" style="background:${LBLC(d.label)}22;color:${LBLC(d.label)}">${d.label}</span></div>
@@ -211,8 +220,8 @@ async function loadMacro(){
         <div class="kpi"><div class="v">${bigMoney(g.market_cap)}</div><div class="k">總市值</div></div>
         <div class="kpi"><div class="v">${bigMoney(g.volume_24h)}</div><div class="k">24h 成交量</div></div>
         <div class="kpi"><div class="v">${bigMoney(g.open_interest)}</div><div class="k">全市場未平倉 OI</div></div>
-        <div class="kpi"><div class="v" style="color:#58a6ff">${(g.oi_cap*100).toFixed(2)}%</div><div class="k">OI/Cap 槓桿水位</div></div>
-        <div class="kpi"><div class="v" style="color:#58a6ff">${(g.vol_cap*100).toFixed(2)}%</div><div class="k">Vol/Cap 換手率</div></div>
+        <div class="kpi"><div class="v" style="color:#58a6ff">${g.oi_cap==null?'—':(g.oi_cap*100).toFixed(2)+'%'}</div><div class="k">OI/Cap 槓桿水位</div></div>
+        <div class="kpi"><div class="v" style="color:#58a6ff">${g.vol_cap==null?'—':(g.vol_cap*100).toFixed(2)+'%'}</div><div class="k">Vol/Cap 換手率</div></div>
         <div class="kpi"><div class="v">${(g.btc_dominance||0).toFixed(1)}%</div><div class="k">BTC 市佔</div></div>
       </div>
     </div>`;
@@ -251,6 +260,15 @@ async function loadBacktest(){
 }
 // ---- 可排序幣別列表 ----
 let LISTROWS=[], SORT={col:'score',dir:-1};
+const FFLAG={hot:{t:'🔴 過熱',c:'#f85149'},warm:{t:'🟠 偏擁擠',c:'#d29922'},
+             squeeze:{t:'🟢 空方擁擠',c:'#3fb950'},normal:{t:'正常',c:'#8b949e'}};
+function fundCell(r){
+  if(r.funding_ann==null) return '—';
+  const fl=FFLAG[r.funding_flag]||FFLAG.normal, sign=r.funding_ann>=0?'+':'';
+  const badge=r.funding_flag&&r.funding_flag!=='normal'
+    ? ` <span class="chip" style="background:${fl.c}22;color:${fl.c}">${fl.t}</span>`:'';
+  return `<span style="color:${fl.c}">${sign}${(r.funding_ann*100).toFixed(1)}%</span>${badge}`;
+}
 const LCOLS=[
   {k:'symbol',t:'幣別',  f:r=>`<span class="symc">${r.symbol}</span>`},
   {k:'label', t:'判斷',  f:r=>`<span style="color:${LBLC(r.label)}">${r.label}</span>`},
@@ -259,6 +277,7 @@ const LCOLS=[
   {k:'price', t:'參考價',f:r=>money(r.price)},
   {k:'oi_cap',t:'OI/Cap',f:r=>r.oi_cap==null?'—':(r.oi_cap*100).toFixed(2)+'%'},
   {k:'vol_cap',t:'Vol/Cap',f:r=>r.vol_cap==null?'—':(r.vol_cap*100).toFixed(2)+'%'},
+  {k:'funding_ann',t:'資金費率(年化)',f:fundCell},
   {k:'open_interest',t:'OI',f:r=>bigMoney(r.open_interest)},
   {k:'market_cap',t:'市值',f:r=>bigMoney(r.market_cap)},
 ];

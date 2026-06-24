@@ -14,6 +14,8 @@ from collections import defaultdict
 
 import httpx
 
+_FUNDING_PER_YEAR = 3 * 365   # CoinGecko funding 為 %/8h → 一年 3*365 期
+
 # 通用 timeframe -> 各交易所 bar 代碼
 _OKX_BAR = {
     "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
@@ -43,9 +45,14 @@ class MarketDataClient:
             return self._deriv_cache
         resp = self._client.get("https://api.coingecko.com/api/v3/derivatives")
         resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, list):       # 限流/錯誤時回的是 dict，視為無資料
+            return self._deriv_cache or {}
         agg: dict[str, dict] = defaultdict(
             lambda: {"open_interest_usd": 0.0, "_fr": [], "contracts": 0})
-        for x in resp.json():
+        for x in data:
+            if not isinstance(x, dict):
+                continue
             base = (x.get("index_id") or "").upper()
             oi = x.get("open_interest")
             if not base or not oi:
@@ -70,30 +77,60 @@ class MarketDataClient:
               "BNB": "binancecoin", "XRP": "ripple", "DOGE": "dogecoin"}
 
     def global_macro(self, ttl: float = 120.0) -> dict:
-        """全市場宏觀：總市值、24h 量、全市場 OI，及 OI/Cap、Vol/Cap。"""
+        """全市場宏觀：總市值、24h 量、全市場 OI，及 OI/Cap、Vol/Cap。
+
+        CoinGecko 對雲端 IP 可能限流→回非預期格式，故全程防護；OI 取不到時
+        以 None 表示（前端忠實顯示「—」），市值/量仍盡量回傳。
+        """
         if self._macro_cache is not None and time.time() - self._macro_ts < ttl:
             return self._macro_cache
-        g = self._client.get("https://api.coingecko.com/api/v3/global").json()["data"]
+        raw = self._client.get("https://api.coingecko.com/api/v3/global").json()
+        g = raw.get("data") if isinstance(raw, dict) else None
+        if not isinstance(g, dict) or "total_market_cap" not in g:
+            raise RuntimeError("CoinGecko /global 回傳異常（可能限流）")
         cap = float(g["total_market_cap"]["usd"])
         vol = float(g["total_volume"]["usd"])
-        deriv = self._client.get("https://api.coingecko.com/api/v3/derivatives").json()
-        oi = sum(float(x["open_interest"]) for x in deriv if x.get("open_interest"))
+        oi = None
+        try:
+            deriv = self._client.get("https://api.coingecko.com/api/v3/derivatives").json()
+            if isinstance(deriv, list):
+                oi = sum(float(x["open_interest"]) for x in deriv
+                         if isinstance(x, dict) and x.get("open_interest"))
+        except Exception:
+            oi = None
         out = {
             "market_cap": cap, "volume_24h": vol, "open_interest": oi,
-            "oi_cap": oi / cap if cap else 0.0,
-            "vol_cap": vol / cap if cap else 0.0,
+            "oi_cap": (oi / cap) if (oi and cap) else None,
+            "vol_cap": (vol / cap) if cap else None,
             "btc_dominance": float(g.get("market_cap_percentage", {}).get("btc", 0.0)),
         }
         self._macro_cache, self._macro_ts = out, time.time()
         return out
 
+    @staticmethod
+    def _funding_flag(ann: float) -> str:
+        """資金費率(年化小數)異常分級：
+          hot     多單過度擁擠（年化 > 50%）→ 過熱、回調風險
+          warm    多單偏擁擠（年化 > 25%）
+          squeeze 空單擁擠/負費率（年化 < -5%）→ 潛在軋空
+          normal  正常
+        """
+        if ann > 0.50:
+            return "hot"
+        if ann > 0.25:
+            return "warm"
+        if ann < -0.05:
+            return "squeeze"
+        return "normal"
+
     def coin_macro(self, symbols: list[str], ttl: float = 120.0) -> dict[str, dict]:
-        """各幣 OI/Cap、Vol/Cap：市值/量取自 CoinGecko，OI 取自聚合衍生品。"""
+        """各幣 OI/Cap、Vol/Cap、資金費率(年化)與異常分級。"""
         ids = ",".join(self._CG_ID[s] for s in symbols if s in self._CG_ID)
-        markets = self._client.get(
+        raw = self._client.get(
             "https://api.coingecko.com/api/v3/coins/markets",
             params={"vs_currency": "usd", "ids": ids}).json()
-        by_id = {m["id"]: m for m in markets}
+        markets = raw if isinstance(raw, list) else []
+        by_id = {m["id"]: m for m in markets if isinstance(m, dict)}
         deriv = self.aggregate_derivatives()
         out: dict[str, dict] = {}
         for s in symbols:
@@ -103,11 +140,16 @@ class MarketDataClient:
                 continue
             cap = float(m.get("market_cap") or 0.0)
             vol = float(m.get("total_volume") or 0.0)
-            oi = float(deriv.get(s, {}).get("open_interest_usd", 0.0))
+            d = deriv.get(s, {})
+            oi = float(d.get("open_interest_usd") or 0.0)
+            # CoinGecko funding 為 %/8h → 年化小數
+            fund_ann = float(d.get("funding_rate_med") or 0.0) / 100 * _FUNDING_PER_YEAR
             out[s] = {
                 "market_cap": cap, "volume_24h": vol, "open_interest": oi,
-                "oi_cap": oi / cap if cap else 0.0,
-                "vol_cap": vol / cap if cap else 0.0,
+                "oi_cap": (oi / cap) if (oi and cap) else None,
+                "vol_cap": (vol / cap) if cap else None,
+                "funding_ann": fund_ann,
+                "funding_flag": self._funding_flag(fund_ann),
             }
         return out
 

@@ -147,15 +147,21 @@ def _mock_macro(syms: list[str]) -> dict:
     g = {"market_cap": cap, "volume_24h": vol, "open_interest": oi,
          "oi_cap": oi / cap, "vol_cap": vol / cap,
          "btc_dominance": 54.0 + 2 * math.sin(t)}
-    base = {"BTC": (1.30e12, 3.0e10, 3.1e10), "ETH": (4.0e11, 1.5e10, 1.2e10),
-            "SOL": (7.0e10, 4.0e9, 6.0e9)}
+    # (市值, 量, OI, 基準年化資金費率) — SOL 給個過熱、ETH 偏擁擠示意
+    base = {"BTC": (1.30e12, 3.0e10, 3.1e10, 0.08),
+            "ETH": (4.0e11, 1.5e10, 1.2e10, 0.30),
+            "SOL": (7.0e10, 4.0e9, 6.0e9, 0.62)}
+
+    def flag(a):
+        return "hot" if a > 0.50 else "warm" if a > 0.25 else "squeeze" if a < -0.05 else "normal"
     per: dict[str, dict] = {}
     for s in syms:
-        c, v, o = base.get(s, (5.0e10, 2.0e9, 1.0e9))
+        c, v, o, fr = base.get(s, (5.0e10, 2.0e9, 1.0e9, 0.05))
         c *= 1 + 0.02 * math.sin(t); v *= 1 + 0.10 * math.sin(t * 1.7)
-        o *= 1 + 0.05 * math.cos(t * 1.2)
+        o *= 1 + 0.05 * math.cos(t * 1.2); fr *= 1 + 0.3 * math.sin(t * 2.1)
         per[s] = {"market_cap": c, "volume_24h": v, "open_interest": o,
-                  "oi_cap": o / c, "vol_cap": v / c}
+                  "oi_cap": o / c, "vol_cap": v / c,
+                  "funding_ann": fr, "funding_flag": flag(fr)}
     return {"global": g, "per_symbol": per}
 
 
