@@ -29,7 +29,7 @@ class DefiLlamaClient:
                     "value": cur,
                     "chg_7d": (cur - tvl[-8]["tvl"]) / tvl[-8]["tvl"],
                     "chg_30d": (cur - tvl[-31]["tvl"]) / tvl[-31]["tvl"],
-                    "history": [{"v": x["tvl"]} for x in tvl[-60:]],
+                    "history": [{"v": x["tvl"], "t": x.get("date")} for x in tvl[-60:]],
                 }
         except Exception:
             pass

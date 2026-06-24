@@ -282,7 +282,7 @@ async function loadDefi(){
         <div class="kpi"><div class="v">${chg(sc.chg_30d)}</div><div class="k">穩定幣 30天</div></div>
       </div>
       <div class="meta" style="margin-top:8px">前 6 大鏈 TVL：${chainHtml}</div>
-      <div class="meta">${lineChart((tvl.history||[]).map(h=>({d:'',v:h.v})))}</div>
+      <div class="meta">${lineChart((tvl.history||[]).map(h=>({d:fmtD(h.t),v:h.v})))}</div>
     </div>`;
   }catch(e){document.getElementById('defi').innerHTML='<div class="box empty">資金動向載入失敗：'+e+'</div>';}
 }
@@ -297,6 +297,7 @@ async function loadPositioning(){
     </div>`;
   }catch(e){document.getElementById('pos').innerHTML='<div class="box empty">決心面板載入失敗：'+e+'</div>';}
 }
+function fmtD(t){ if(!t) return ''; const d=new Date(t*1000); return (d.getMonth()+1)+'/'+d.getDate(); }
 function lineChart(pts, label){
   if(!pts||pts.length<2) return '<span class="meta">資料累積中…</span>';
   const W=900,H=120,n=pts.length,vs=pts.map(p=>p.v);
@@ -305,7 +306,8 @@ function lineChart(pts, label){
   const poly=vs.map((v,i)=>`${xs(i).toFixed(1)},${ys(v).toFixed(1)}`).join(' ');
   const up=vs[n-1]>=vs[0];
   const ticks=[0,Math.floor(n/2),n-1].map(i=>`<text x="${xs(i)}" y="${H-4}" fill="#8b949e" font-size="11" text-anchor="middle">${pts[i].d}</text>`).join('');
-  const ylab=`<text x="4" y="14" fill="#8b949e" font-size="11">${(mx/1e6).toFixed(2)}M</text><text x="4" y="${H-22}" fill="#8b949e" font-size="11">${(mn/1e6).toFixed(2)}M</text>`;
+  const fa=v=>{const a=Math.abs(v);return a>=1e9?(v/1e9).toFixed(1)+'B':a>=1e6?(v/1e6).toFixed(2)+'M':a>=1e3?(v/1e3).toFixed(1)+'K':(''+Math.round(v));};
+  const ylab=`<text x="4" y="14" fill="#8b949e" font-size="11">${fa(mx)}</text><text x="4" y="${H-22}" fill="#8b949e" font-size="11">${fa(mn)}</text>`;
   return `<svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
     <polyline points="${poly}" fill="none" stroke="${up?'#3fb950':'#f85149'}" stroke-width="2"/>
     ${ticks}${ylab}</svg>`;
@@ -376,7 +378,7 @@ async function loadSocial(){
     let fgHtml='';
     if(fg.value!=null){
       const col=fgColor(fg.value);
-      const spark=lineChart((fg.history||[]).map(h=>({d:'',v:h.v})));
+      const spark=lineChart((fg.history||[]).map(h=>({d:fmtD(h.t),v:h.v})));
       fgHtml=`<div class="box">
         <h2>😱 恐懼貪婪指數 <small>全市場情緒（免費 alternative.me）｜極度恐懼常是反向買點</small></h2>
         <div class="kpis"><div class="kpi"><div class="v" style="color:${col};font-size:34px">${fg.value}</div>
