@@ -83,20 +83,38 @@ INDEX_HTML = r"""<!doctype html>
   .scroll thead th{position:sticky;top:0;background:#161b22;z-index:1}
   .filt{background:#0d1117;border:1px solid var(--line);color:var(--fg);border-radius:6px;
         padding:6px 10px;font-size:13px;margin-left:auto}
+  .nav{display:flex;gap:8px;margin-left:8px}
+  .nav button{background:#21262d;color:var(--mut);font-weight:600}
+  .nav button.on{background:var(--accent);color:#0d1117}
+  .ask{display:flex;gap:8px;margin:10px 0}
+  .ask input{flex:1;background:#0d1117;border:1px solid var(--line);color:var(--fg);
+             border-radius:6px;padding:9px 12px;font-size:14px}
+  .dl{display:inline-block;background:var(--accent);color:#0d1117;font-weight:700;
+      padding:10px 16px;border-radius:8px;text-decoration:none}
+  .step{margin:6px 0;color:var(--mut);font-size:13px}
+  .socbar{height:8px;background:#21262d;border-radius:999px;overflow:hidden;margin-top:4px}
+  .socbar i{display:block;height:8px}
 </style>
 </head>
 <body>
 <header>
-  <h1>🐷 Crypig 決策看板</h1>
+  <h1>🐷 Crypig 中台</h1>
+  <span class="nav">
+    <button id="nav-market" class="on" onclick="showPage('market')">📊 市場看板</button>
+    <button id="nav-strategy" onclick="showPage('strategy')">🧠 策略 / Obsidian</button>
+  </span>
   <span class="ts" id="ts">載入中…</span>
   <span style="flex:1"></span>
   <button id="run" onclick="runCycle()">立即跑一輪</button>
 </header>
+<div id="page-strategy" style="display:none"></div>
+<div id="page-market">
 <section id="macro" class="bt"><div class="empty">宏觀載入中…</div></section>
 <section id="pos" class="bt"><div class="empty">大玩家決心載入中…</div></section>
 <section id="whalechart" class="bt"><div class="empty">鯨魚每日變化載入中…</div></section>
 <section id="table" class="bt"><div class="empty">幣別總表載入中…</div></section>
 <section id="bt" class="bt"><div class="empty">回測載入中…</div></section>
+</div>
 <script>
 const C={bull:'#3fb950',bear:'#f85149',neutral:'#8b949e'};
 const LBLC=l=>l.includes('多')?C.bull:l.includes('空')?C.bear:l==='訊號分歧'?'#d29922':C.neutral;
@@ -312,6 +330,66 @@ async function runCycle(){
   const b=document.getElementById('run');b.disabled=true;b.textContent='跑一輪中…';
   try{await fetch('/cycle',{method:'POST'});await refresh();}
   finally{b.disabled=false;b.textContent='立即跑一輪';}
+}
+// ---- 頁2：策略 / Obsidian ----
+let STRATLOADED=false;
+function showPage(name){
+  document.getElementById('page-market').style.display = name==='market'?'block':'none';
+  document.getElementById('page-strategy').style.display = name==='strategy'?'block':'none';
+  document.getElementById('nav-market').className = name==='market'?'on':'';
+  document.getElementById('nav-strategy').className = name==='strategy'?'on':'';
+  if(name==='strategy' && !STRATLOADED){ STRATLOADED=true; loadStrategy(); }
+}
+async function askKB(){
+  const q=document.getElementById('kbq').value.trim(); if(!q) return;
+  const out=document.getElementById('kbout'); out.textContent='思考中…';
+  try{ const r=await (await fetch('/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q})})).json();
+    out.textContent=r.answer||JSON.stringify(r); }
+  catch(e){ out.textContent='問答失敗：'+e; }
+}
+async function loadSocial(){
+  try{
+    const r=await (await fetch('/social')).json();
+    const soc=r.social||{};
+    if(!r.enabled || !Object.keys(soc).length){
+      document.getElementById('social').innerHTML=`<div class="box">
+        <h2>💬 社群情緒（LunarCrush）</h2>
+        <div class="meta">尚未啟用——設定 <b>LUNARCRUSH_API_KEY</b> 後自動顯示各幣社群情緒(正面貼文%)、Galaxy Score，並寫進 Obsidian 的幣筆記/KOL 頁。</div></div>`;
+      return;
+    }
+    const rows=Object.entries(soc).filter(([s])=>['BTC','ETH','SOL','HYPE','DOGE','XRP','BNB'].includes(s))
+      .map(([s,v])=>{
+        const sen=v.sentiment; const col=sen>=60?'#3fb950':sen>=45?'#d29922':'#f85149';
+        return `<div class="sig"><div class="sigtitle"><span>${s}</span>
+          <span style="color:${col}">情緒 ${sen??'—'}% ｜ Galaxy ${v.galaxy_score??'—'}</span></div>
+          <div class="socbar"><i style="width:${sen||0}%;background:${col}"></i></div></div>`;
+      }).join('');
+    document.getElementById('social').innerHTML=`<div class="box">
+      <h2>💬 社群情緒（LunarCrush）<small>正面貼文%；可與聰明錢方向對照找「群眾 vs 聰明錢」分歧</small></h2>${rows}</div>`;
+  }catch(e){document.getElementById('social').innerHTML='<div class="box empty">社群情緒載入失敗：'+e+'</div>';}
+}
+function loadStrategy(){
+  document.getElementById('page-strategy').innerHTML=`
+  <section class="bt"><div class="box">
+    <h2>🧠 Obsidian 策略知識庫 <small>把所有訊號變成可複盤的個人知識圖，找 alpha</small></h2>
+    <p><a class="dl" href="/vault.zip">⬇ 下載 Obsidian Vault (.zip)</a></p>
+    <div class="step">1. 解壓 → Obsidian「開啟資料夾作為 Vault」</div>
+    <div class="step">2. 看 Graph View：訊號 ↔ 幣 ↔ KOL 連成一張圖</div>
+    <div class="step">3. 內含 Coins/(40幣)、Journal/(每日快照)、KOL/、Strategies/(寫假設掛回測)</div>
+    <div class="step">4. 在 Strategies 寫你的策略假設，對照 Journal 複盤、找 edge</div>
+  </div></section>
+  <section class="bt" id="social"><div class="empty">社群情緒載入中…</div></section>
+  <section class="bt"><div class="box">
+    <h2>🔎 知識庫問答 <small>對累積的決策/關係問答（RAG）</small></h2>
+    <div class="ask"><input id="kbq" placeholder="例：聰明錢和鯨魚現在對 ETH 的態度一致嗎？" onkeydown="if(event.key==='Enter')askKB()">
+      <button onclick="askKB()">問</button></div>
+    <div id="kbout" class="meta"></div>
+  </div></section>
+  <section class="bt"><div class="box">
+    <h2>📈 策略回測 <small>跟隨訊號方向的事後命中率</small></h2>
+    <div id="bt2"><div class="empty">同「市場看板」的回測面板</div></div>
+  </div></section>`;
+  loadSocial();
 }
 refresh(); setInterval(refresh,30000);
 </script>

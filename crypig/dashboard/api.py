@@ -313,6 +313,23 @@ def vault_zip():
         headers={"Content-Disposition": "attachment; filename=crypig-vault.zip"})
 
 
+@app.get("/social")
+def social() -> dict:
+    """LunarCrush 社群情緒（需金鑰）。回各幣 sentiment/galaxy_score 與是否啟用。"""
+    orc = orchestrator()
+    if not orc.social and not orc.config.use_mock:
+        orc.run_cycle()
+    if orc.config.use_mock:
+        import math
+        import time
+        t = time.time() / 3600
+        demo = {s: {"sentiment": round(55 + 20 * math.sin(t + i), 1),
+                    "galaxy_score": round(60 + 15 * math.cos(t + i)), "social_volume": 1000 * (i + 1)}
+                for i, s in enumerate(["BTC", "ETH", "SOL"])}
+        return {"enabled": True, "mock": True, "social": demo}
+    return {"enabled": bool(orc.social), "social": orc.social}
+
+
 @app.get("/scores")
 def scores() -> dict:
     """全市場各幣輕量決策（聰明錢持倉 + 資金費率擁擠）。表為空時先跑一輪。"""

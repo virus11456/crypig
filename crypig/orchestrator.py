@@ -27,7 +27,9 @@ class Orchestrator:
         self.macro: dict | None = None          # 全市場宏觀
         self.market_caps: dict[str, dict] = {}  # SYMBOL -> {market_cap, volume_24h}
         self.deriv_agg: dict[str, dict] = {}    # SYMBOL -> 跨所聚合 OI/funding
+        self.social: dict[str, dict] = {}       # SYMBOL -> LunarCrush 社群情緒(需金鑰)
         self._md: MarketDataClient | None = None
+        self._lc = None
         self.agents = []
         a = self.config.agents
         if a.smart_money.enabled:
@@ -165,6 +167,17 @@ class Orchestrator:
                     self.market_caps = val
             except Exception:
                 logger.warning("CoinGecko %s 抓取失敗，沿用上次快取", name)
+        # LunarCrush 社群情緒（有金鑰才抓）
+        try:
+            if self._lc is None:
+                from .clients.lunarcrush import LunarCrushClient
+                self._lc = LunarCrushClient()
+            if self._lc.enabled:
+                soc = self._lc.fetch_coins_sentiment()
+                if soc:
+                    self.social = soc
+        except Exception:
+            logger.warning("LunarCrush 社群情緒抓取失敗")
 
     def _divergence_scan(self, hlc, coins: list[str]) -> dict[str, tuple]:
         """並發抓日線、算每幣量價背離（direction, magnitude, note）。失敗回空。"""
