@@ -347,26 +347,39 @@ async function askKB(){
     out.textContent=r.answer||JSON.stringify(r); }
   catch(e){ out.textContent='問答失敗：'+e; }
 }
+function fgColor(v){return v<25?'#f85149':v<45?'#d29922':v<55?'#8b949e':v<75?'#3fb950':'#2ea043';}
 async function loadSocial(){
   try{
     const r=await (await fetch('/social')).json();
-    const soc=r.social||{};
-    if(!r.enabled || !Object.keys(soc).length){
-      document.getElementById('social').innerHTML=`<div class="box">
-        <h2>💬 社群情緒（LunarCrush）</h2>
-        <div class="meta">尚未啟用——設定 <b>LUNARCRUSH_API_KEY</b> 後自動顯示各幣社群情緒(正面貼文%)、Galaxy Score，並寫進 Obsidian 的幣筆記/KOL 頁。</div></div>`;
-      return;
+    const fg=r.fear_greed||{};
+    let fgHtml='';
+    if(fg.value!=null){
+      const col=fgColor(fg.value);
+      const spark=lineChart((fg.history||[]).map(h=>({d:'',v:h.v})));
+      fgHtml=`<div class="box">
+        <h2>😱 恐懼貪婪指數 <small>全市場情緒（免費 alternative.me）｜極度恐懼常是反向買點</small></h2>
+        <div class="kpis"><div class="kpi"><div class="v" style="color:${col};font-size:34px">${fg.value}</div>
+          <div class="k">${fg.label}</div></div>
+          <div style="flex:1">${spark}</div></div>
+        <div class="meta">對照：若此處「極度恐懼」但聰明錢/鯨魚也在做空 → 順勢偏空；若聰明錢開始翻多 → 反向訊號。</div>
+      </div>`;
     }
-    const rows=Object.entries(soc).filter(([s])=>['BTC','ETH','SOL','HYPE','DOGE','XRP','BNB'].includes(s))
-      .map(([s,v])=>{
-        const sen=v.sentiment; const col=sen>=60?'#3fb950':sen>=45?'#d29922':'#f85149';
-        return `<div class="sig"><div class="sigtitle"><span>${s}</span>
-          <span style="color:${col}">情緒 ${sen??'—'}% ｜ Galaxy ${v.galaxy_score??'—'}</span></div>
-          <div class="socbar"><i style="width:${sen||0}%;background:${col}"></i></div></div>`;
-      }).join('');
-    document.getElementById('social').innerHTML=`<div class="box">
-      <h2>💬 社群情緒（LunarCrush）<small>正面貼文%；可與聰明錢方向對照找「群眾 vs 聰明錢」分歧</small></h2>${rows}</div>`;
-  }catch(e){document.getElementById('social').innerHTML='<div class="box empty">社群情緒載入失敗：'+e+'</div>';}
+    const soc=r.social||{};
+    let lcHtml;
+    if(r.lunarcrush_enabled && Object.keys(soc).length){
+      const rows=Object.entries(soc).filter(([s])=>['BTC','ETH','SOL','HYPE','DOGE','XRP','BNB'].includes(s))
+        .map(([s,v])=>{const sen=v.sentiment,col=sen>=60?'#3fb950':sen>=45?'#d29922':'#f85149';
+          return `<div class="sig"><div class="sigtitle"><span>${s}</span>
+            <span style="color:${col}">情緒 ${sen??'—'}% ｜ Galaxy ${v.galaxy_score??'—'}</span></div>
+            <div class="socbar"><i style="width:${sen||0}%;background:${col}"></i></div></div>`;}).join('');
+      lcHtml=`<div class="box"><h2>💬 各幣社群情緒（LunarCrush）</h2>${rows}</div>`;
+    }else{
+      lcHtml=`<div class="box"><h2>💬 各幣社群情緒 / KOL（LunarCrush）</h2>
+        <div class="meta">需 LunarCrush 付費 Individual 方案（~$24/月）。升級後設 <b>LUNARCRUSH_API_KEY</b>，
+        各幣社群情緒、KOL 影響力會自動顯示並寫進 Obsidian。目前用免費的恐懼貪婪指數＋CoinGecko 社群投票替代。</div></div>`;
+    }
+    document.getElementById('social').innerHTML=fgHtml+lcHtml;
+  }catch(e){document.getElementById('social').innerHTML='<div class="box empty">情緒載入失敗：'+e+'</div>';}
 }
 function loadStrategy(){
   document.getElementById('page-strategy').innerHTML=`

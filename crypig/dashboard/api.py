@@ -315,19 +315,21 @@ def vault_zip():
 
 @app.get("/social")
 def social() -> dict:
-    """LunarCrush 社群情緒（需金鑰）。回各幣 sentiment/galaxy_score 與是否啟用。"""
+    """社群/市場情緒：恐懼貪婪指數(免費) + LunarCrush 各幣情緒(需付費金鑰)。"""
     orc = orchestrator()
-    if not orc.social and not orc.config.use_mock:
-        orc.run_cycle()
     if orc.config.use_mock:
         import math
         import time
         t = time.time() / 3600
-        demo = {s: {"sentiment": round(55 + 20 * math.sin(t + i), 1),
-                    "galaxy_score": round(60 + 15 * math.cos(t + i)), "social_volume": 1000 * (i + 1)}
-                for i, s in enumerate(["BTC", "ETH", "SOL"])}
-        return {"enabled": True, "mock": True, "social": demo}
-    return {"enabled": bool(orc.social), "social": orc.social}
+        hist = [{"v": int(30 + 25 * math.sin(t + i / 3)), "t": 0} for i in range(30)]
+        return {"fear_greed": {"value": hist[-1]["v"],
+                               "label": "Fear" if hist[-1]["v"] < 45 else "Greed",
+                               "history": hist},
+                "lunarcrush_enabled": False, "social": {}}
+    if not orc.fear_greed and not orc.social:
+        orc.run_cycle()
+    return {"fear_greed": orc.fear_greed,
+            "lunarcrush_enabled": bool(orc.social), "social": orc.social}
 
 
 @app.get("/scores")

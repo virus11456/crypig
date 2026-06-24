@@ -27,7 +27,8 @@ class Orchestrator:
         self.macro: dict | None = None          # 全市場宏觀
         self.market_caps: dict[str, dict] = {}  # SYMBOL -> {market_cap, volume_24h}
         self.deriv_agg: dict[str, dict] = {}    # SYMBOL -> 跨所聚合 OI/funding
-        self.social: dict[str, dict] = {}       # SYMBOL -> LunarCrush 社群情緒(需金鑰)
+        self.social: dict[str, dict] = {}       # SYMBOL -> LunarCrush 社群情緒(需付費金鑰)
+        self.fear_greed: dict = {}              # 全市場恐懼貪婪指數(免費 alternative.me)
         self._md: MarketDataClient | None = None
         self._lc = None
         self.agents = []
@@ -167,7 +168,19 @@ class Orchestrator:
                     self.market_caps = val
             except Exception:
                 logger.warning("CoinGecko %s 抓取失敗，沿用上次快取", name)
-        # LunarCrush 社群情緒（有金鑰才抓）
+        # 恐懼貪婪指數（免費、無金鑰、全市場情緒）
+        try:
+            r = self._md._client.get("https://api.alternative.me/fng/?limit=30")
+            d = r.json().get("data") if r.status_code == 200 else None
+            if isinstance(d, list) and d:
+                self.fear_greed = {
+                    "value": int(d[0]["value"]),
+                    "label": d[0]["value_classification"],
+                    "history": [{"v": int(x["value"]), "t": x["timestamp"]} for x in reversed(d)],
+                }
+        except Exception:
+            logger.warning("Fear&Greed 抓取失敗")
+        # LunarCrush 社群情緒（需付費金鑰；有才抓）
         try:
             if self._lc is None:
                 from .clients.lunarcrush import LunarCrushClient
