@@ -93,8 +93,7 @@ INDEX_HTML = r"""<!doctype html>
   <button id="run" onclick="runCycle()">立即跑一輪</button>
 </header>
 <section id="macro" class="bt"><div class="empty">宏觀載入中…</div></section>
-<section id="list" class="bt"><div class="empty">列表載入中…</div></section>
-<section id="hl" class="bt"><div class="empty">Hyperliquid 全市場載入中…</div></section>
+<section id="table" class="bt"><div class="empty">幣別總表載入中…</div></section>
 <section id="bt" class="bt"><div class="empty">回測載入中…</div></section>
 <main id="cards"><div class="empty">載入中…</div></main>
 <script>
@@ -263,8 +262,7 @@ async function loadBacktest(){
     </div>`;
   }catch(e){document.getElementById('bt').innerHTML='<div class="box empty">回測載入失敗：'+e+'</div>';}
 }
-// ---- 可排序幣別列表 ----
-let LISTROWS=[], SORT={col:'score',dir:-1};
+// ---- 全市場幣別總表（合併：決策 + CoinGecko 宏觀 + Hyperliquid 場內）----
 const FFLAG={hot:{t:'🔴 過熱',c:'#f85149'},warm:{t:'🟠 偏擁擠',c:'#d29922'},
              squeeze:{t:'🟢 空方擁擠',c:'#3fb950'},normal:{t:'正常',c:'#8b949e'}};
 function fundFmt(ann, flag){
@@ -275,86 +273,69 @@ function fundFmt(ann, flag){
   return `<span style="color:${fl.c}">${sign}${(ann*100).toFixed(1)}%</span>${badge}`;
 }
 const fundCell=r=>fundFmt(r.funding_ann, r.funding_flag);
-const LCOLS=[
-  {k:'symbol',t:'幣別',  f:r=>`<span class="symc">${r.symbol}</span>`},
-  {k:'label', t:'判斷',  f:r=>`<span style="color:${LBLC(r.label)}">${r.label}</span>`},
-  {k:'score', t:'分數',  f:r=>r.score==null?'—':r.score.toFixed(3)},
+let MROWS=[], MSORT={col:'score',dir:-1}, MFILT='';
+const MABS=new Set(['funding_ann','hl_funding_ann']);   // 費率欄按絕對值排（抓最極端）
+const MCOLS=[
+  {k:'symbol',t:'幣別',f:r=>`<span class="symc">${r.symbol}</span>`},
+  {k:'label', t:'判斷',f:r=>r.label?`<span style="color:${LBLC(r.label)}">${r.label}</span>`:'—'},
+  {k:'score', t:'分數',f:r=>r.score==null?'—':r.score.toFixed(3)},
   {k:'confidence',t:'信心',f:r=>r.confidence==null?'—':(r.confidence*100).toFixed(0)+'%'},
-  {k:'price', t:'參考價',f:r=>money(r.price)},
+  {k:'price',t:'標記價',f:r=>money(r.price)},
   {k:'oi_cap',t:'OI/Cap',f:r=>r.oi_cap==null?'—':(r.oi_cap*100).toFixed(2)+'%'},
   {k:'vol_cap',t:'Vol/Cap',f:r=>r.vol_cap==null?'—':(r.vol_cap*100).toFixed(2)+'%'},
-  {k:'funding_ann',t:'資金費率·跨所',f:fundCell},
-  {k:'hl_funding_ann',t:'資金費率·HL',f:r=>fundFmt(r.hl_funding_ann, r.hl_funding_flag)},
+  {k:'funding_ann',t:'費率·跨所',f:fundCell},
+  {k:'hl_funding_ann',t:'費率·HL',f:r=>fundFmt(r.hl_funding_ann, r.hl_funding_flag)},
   {k:'open_interest',t:'OI',f:r=>bigMoney(r.open_interest)},
+  {k:'premium',t:'溢價',f:r=>r.premium==null?'—':(r.premium*100).toFixed(3)+'%'},
   {k:'market_cap',t:'市值',f:r=>bigMoney(r.market_cap)},
 ];
-function sortList(col){ if(SORT.col===col) SORT.dir*=-1; else {SORT.col=col;SORT.dir=-1;} renderList(); }
-function renderList(){
-  if(!LISTROWS.length){document.getElementById('list').innerHTML='';return;}
-  const rows=[...LISTROWS].sort((a,b)=>{
-    let va=a[SORT.col], vb=b[SORT.col];
-    if(va==null) return 1; if(vb==null) return -1;
-    if(typeof va==='string') return SORT.dir*va.localeCompare(vb);
-    return SORT.dir*(va-vb);
-  });
-  const arrow=k=>SORT.col===k?(SORT.dir<0?' ▼':' ▲'):'';
-  const head=LCOLS.map(c=>`<th onclick="sortList('${c.k}')">${c.t}${arrow(c.k)}</th>`).join('');
-  const body=rows.map(r=>`<tr>${LCOLS.map(c=>`<td>${c.f(r)}</td>`).join('')}</tr>`).join('');
-  document.getElementById('list').innerHTML=`<div class="box">
-    <h2>📋 幣別列表 <small>點欄位標題排序（再點一次反向）</small></h2>
-    <table class="tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
-}
-// ---- Hyperliquid 全市場資金費率掃描（全部幣，列表） ----
-let HLROWS=[], HLSORT={col:'funding_ann',dir:-1}, HLFILT='';
-const HLCOLS=[
-  {k:'symbol',t:'幣別', f:r=>`<span class="symc">${r.symbol}</span>`},
-  {k:'price', t:'標記價',f:r=>money(r.price)},
-  {k:'funding_ann',t:'資金費率(年化)',f:fundCell},
-  {k:'open_interest_usd',t:'OI',f:r=>bigMoney(r.open_interest_usd)},
-  {k:'premium',t:'溢價',f:r=>r.premium==null?'—':(r.premium*100).toFixed(3)+'%'},
-];
-function hlRows(){
-  let rows=HLFILT?HLROWS.filter(r=>r.symbol.includes(HLFILT)):HLROWS;
+function mRows(){
+  let rows=MFILT?MROWS.filter(r=>r.symbol.includes(MFILT)):MROWS;
   return [...rows].sort((a,b)=>{
-    let va=HLSORT.col==='funding_ann'?Math.abs(a.funding_ann):a[HLSORT.col];
-    let vb=HLSORT.col==='funding_ann'?Math.abs(b.funding_ann):b[HLSORT.col];
+    let va=MABS.has(MSORT.col)?(a[MSORT.col]==null?null:Math.abs(a[MSORT.col])):a[MSORT.col];
+    let vb=MABS.has(MSORT.col)?(b[MSORT.col]==null?null:Math.abs(b[MSORT.col])):b[MSORT.col];
+    if(va==null&&vb==null) return 0;
     if(va==null) return 1; if(vb==null) return -1;
-    if(typeof va==='string') return HLSORT.dir*va.localeCompare(vb);
-    return HLSORT.dir*(va-vb);
+    if(typeof va==='string') return MSORT.dir*va.localeCompare(vb);
+    return MSORT.dir*(va-vb);
   });
 }
-function hlBodyHTML(){return hlRows().map(r=>`<tr>${HLCOLS.map(c=>`<td>${c.f(r)}</td>`).join('')}</tr>`).join('');}
-function renderHLBody(){const el=document.getElementById('hlbody'); if(el) el.innerHTML=hlBodyHTML();}
-function hlSort(col){ if(HLSORT.col===col) HLSORT.dir*=-1; else {HLSORT.col=col;HLSORT.dir=-1;} renderHL(); }
-function renderHL(){
-  const arrow=k=>HLSORT.col===k?(HLSORT.dir<0?' ▼':' ▲'):'';
-  const head=HLCOLS.map(c=>`<th onclick="hlSort('${c.k}')">${c.t}${arrow(c.k)}</th>`).join('');
-  document.getElementById('hl').innerHTML=`<div class="box">
+function mBodyHTML(){return mRows().map(r=>`<tr>${MCOLS.map(c=>`<td>${c.f(r)}</td>`).join('')}</tr>`).join('');}
+function renderMBody(){const el=document.getElementById('mbody'); if(el) el.innerHTML=mBodyHTML();}
+function mSort(col){ if(MSORT.col===col) MSORT.dir*=-1; else {MSORT.col=col;MSORT.dir=-1;} renderTable(); }
+function renderTable(){
+  if(!MROWS.length){document.getElementById('table').innerHTML='<div class="box empty">幣別資料暫無</div>';return;}
+  const arrow=k=>MSORT.col===k?(MSORT.dir<0?' ▼':' ▲'):'';
+  const head=MCOLS.map(c=>`<th onclick="mSort('${c.k}')">${c.t}${arrow(c.k)}</th>`).join('');
+  document.getElementById('table').innerHTML=`<div class="box">
     <div class="row" style="margin-bottom:10px;gap:12px">
-      <h2 style="margin:0">🟣 Hyperliquid 全市場資金費率掃描 <small>共 ${HLROWS.length} 幣 · 預設依 |費率| · 點標題排序</small></h2>
-      <input class="filt" placeholder="搜尋幣別…" oninput="HLFILT=this.value.trim().toUpperCase();renderHLBody()" value="${HLFILT}">
+      <h2 style="margin:0">📋 幣別總表 <small>共 ${MROWS.length} 幣 · 分析幣(BTC/ETH/SOL)含完整決策、其餘顯示 HL 場內 · 點標題排序</small></h2>
+      <input class="filt" placeholder="搜尋幣別…" oninput="MFILT=this.value.trim().toUpperCase();renderMBody()" value="${MFILT}">
     </div>
-    <div class="scroll"><table class="tbl"><thead><tr>${head}</tr></thead><tbody id="hlbody">${hlBodyHTML()}</tbody></table></div></div>`;
-}
-async function loadHL(){
-  try{
-    const r=await (await fetch('/hl_market')).json();
-    HLROWS=r.coins||[];
-    if(!HLROWS.length){document.getElementById('hl').innerHTML='<div class="box empty">Hyperliquid 全市場暫無資料</div>';return;}
-    renderHL();
-  }catch(e){document.getElementById('hl').innerHTML='<div class="box empty">Hyperliquid 載入失敗：'+e+'</div>';}
+    <div class="scroll"><table class="tbl"><thead><tr>${head}</tr></thead><tbody id="mbody">${mBodyHTML()}</tbody></table></div></div>`;
 }
 async function refresh(){
-  loadBacktest(); loadHL();
+  loadBacktest();
   const cmap=await loadMacro();
+  let decisions=[], hlcoins=[];
+  try{ decisions=(await (await fetch('/decisions')).json()).decisions||[]; }catch(e){}
+  try{ hlcoins=(await (await fetch('/hl_market')).json()).coins||[]; }catch(e){}
+  // 合併：以全市場幣為底，疊加決策與 CoinGecko 宏觀
+  const bySym={};
+  hlcoins.forEach(c=>bySym[c.symbol]={symbol:c.symbol, price:c.price,
+    hl_funding_ann:c.funding_ann, hl_funding_flag:c.funding_flag,
+    open_interest:c.open_interest_usd, premium:c.premium});
+  decisions.forEach(d=>{ const r=bySym[d.symbol]||(bySym[d.symbol]={symbol:d.symbol});
+    r.label=d.label; r.score=d.score; r.confidence=d.confidence; if(r.price==null)r.price=d.price; });
+  Object.entries(cmap).forEach(([s,v])=>{ const r=bySym[s]||(bySym[s]={symbol:s});
+    r.oi_cap=v.oi_cap; r.vol_cap=v.vol_cap; r.funding_ann=v.funding_ann; r.funding_flag=v.funding_flag;
+    r.market_cap=v.market_cap; if(r.open_interest==null)r.open_interest=v.open_interest;
+    if(r.hl_funding_ann==null){r.hl_funding_ann=v.hl_funding_ann; r.hl_funding_flag=v.hl_funding_flag;} });
+  MROWS=Object.values(bySym);
+  renderTable();
+  document.getElementById('ts').textContent=decisions[0]?('更新：'+new Date(decisions[0].ts).toLocaleString()):'';
   try{
-    const {decisions}=await (await fetch('/decisions')).json();
-    document.getElementById('ts').textContent=decisions[0]?('更新：'+new Date(decisions[0].ts).toLocaleString()):'';
     if(!decisions.length){document.getElementById('cards').innerHTML='<div class="empty">尚無決策，點「立即跑一輪」。</div>';return;}
-    LISTROWS=decisions.map(d=>Object.assign(
-      {symbol:d.symbol,label:d.label,score:d.score,confidence:d.confidence,price:d.price},
-      cmap[d.symbol]||{}));
-    renderList();
     const html=await Promise.all(decisions.map(d=>loadCard(d, cmap[d.symbol])));
     document.getElementById('cards').innerHTML=html.join('');
   }catch(e){document.getElementById('cards').innerHTML='<div class="empty">載入失敗：'+e+'</div>';}
