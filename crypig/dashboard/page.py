@@ -93,6 +93,8 @@ INDEX_HTML = r"""<!doctype html>
   <button id="run" onclick="runCycle()">立即跑一輪</button>
 </header>
 <section id="macro" class="bt"><div class="empty">宏觀載入中…</div></section>
+<section id="pos" class="bt"><div class="empty">大玩家決心載入中…</div></section>
+<section id="whalechart" class="bt"><div class="empty">鯨魚每日變化載入中…</div></section>
 <section id="table" class="bt"><div class="empty">幣別總表載入中…</div></section>
 <section id="bt" class="bt"><div class="empty">回測載入中…</div></section>
 <script>
@@ -232,8 +234,61 @@ function renderTable(){
     </div>
     <div class="scroll"><table class="tbl"><thead><tr>${head}</tr></thead><tbody id="mbody">${mBodyHTML()}</tbody></table></div></div>`;
 }
+function posRow(name, g, color){
+  if(!g||!g.total) return `<div class="meta">${name}：無資料</div>`;
+  const sp=g.short_pct, lp=g.long_pct;
+  const lean = sp==null?'—':sp>lp?`<b style="color:#f85149">空方 ${(sp*100).toFixed(0)}%</b>`
+                                  :`<b style="color:#3fb950">多方 ${(lp*100).toFixed(0)}%</b>`;
+  return `<div style="margin:8px 0">
+    <span style="font-weight:700;color:${color}">${name}</span>（前 ${g.total} 名）：
+    <span style="color:#3fb950">多 ${g.long}</span> ／
+    <span style="color:#f85149">空 ${g.short}</span> ／
+    <span style="color:#8b949e">觀望 ${g.flat}</span>
+    ｜ 表態傾向 ${lean}
+    ｜ 槓桿 中位 <b>${g.lev_median??'—'}x</b>（最高 ${g.lev_max??'—'}x）</div>`;
+}
+async function loadPositioning(){
+  try{
+    const p=await (await fetch('/positioning')).json();
+    document.getElementById('pos').innerHTML=`<div class="box">
+      <h2>🧭 大玩家決心 <small>多空人數＋槓桿（人數=表態強度，槓桿=決心）</small></h2>
+      ${posRow('🧠 聰明錢(獲利前N)', p.smart, '#58a6ff')}
+      ${posRow('🐋 巨鯨(淨值前N)', p.whale, '#d29922')}
+      <div class="meta">註：觀望=目前無持倉；表態傾向只計有開倉者。</div>
+    </div>`;
+  }catch(e){document.getElementById('pos').innerHTML='<div class="box empty">決心面板載入失敗：'+e+'</div>';}
+}
+function lineChart(pts, label){
+  if(!pts||pts.length<2) return '<span class="meta">資料累積中…</span>';
+  const W=900,H=120,n=pts.length,vs=pts.map(p=>p.v);
+  const mn=Math.min(...vs),mx=Math.max(...vs),pad=(mx-mn)*0.1||1;
+  const xs=i=>40+i/(n-1)*(W-50), ys=v=>H-20-(v-(mn-pad))/((mx+pad)-(mn-pad))*(H-35);
+  const poly=vs.map((v,i)=>`${xs(i).toFixed(1)},${ys(v).toFixed(1)}`).join(' ');
+  const up=vs[n-1]>=vs[0];
+  const ticks=[0,Math.floor(n/2),n-1].map(i=>`<text x="${xs(i)}" y="${H-4}" fill="#8b949e" font-size="11" text-anchor="middle">${pts[i].d}</text>`).join('');
+  const ylab=`<text x="4" y="14" fill="#8b949e" font-size="11">${(mx/1e6).toFixed(2)}M</text><text x="4" y="${H-22}" fill="#8b949e" font-size="11">${(mn/1e6).toFixed(2)}M</text>`;
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <polyline points="${poly}" fill="none" stroke="${up?'#3fb950':'#f85149'}" stroke-width="2"/>
+    ${ticks}${ylab}</svg>`;
+}
+async function loadWhaleChart(){
+  try{
+    const r=await (await fetch('/whale_history')).json();
+    const h=r.history||[];
+    if(!h.length){document.getElementById('whalechart').innerHTML='<div class="box empty">鯨魚歷史暫無</div>';return;}
+    const pts=h.map(x=>({d:(x.date||'').slice(5), v:x.whale_btc}));
+    const first=h[0].whale_btc, last=h[h.length-1].whale_btc, chg=(last-first)/first;
+    const col=chg>=0?'#3fb950':'#f85149';
+    document.getElementById('whalechart').innerHTML=`<div class="box">
+      <h2>🐋 鏈上 BTC 鯨魚每日持倉 <small>≥100 BTC 大戶(駝背鯨+巨鯨)，近 ${h.length} 天</small></h2>
+      <div class="meta">期間變化 <b style="color:${col}">${(chg*100).toFixed(2)}%</b>
+        ｜ 最新 <b>${(last/1e6).toFixed(3)}M BTC</b>（${chg>=0?'累積':'分配/出貨'}）</div>
+      ${lineChart(pts)}
+    </div>`;
+  }catch(e){document.getElementById('whalechart').innerHTML='<div class="box empty">鯨魚圖載入失敗：'+e+'</div>';}
+}
 async function refresh(){
-  loadBacktest();
+  loadBacktest(); loadPositioning(); loadWhaleChart();
   await loadMacro();
   let decisions=[], hlcoins=[], scores={};
   try{ decisions=(await (await fetch('/decisions')).json()).decisions||[]; }catch(e){}

@@ -32,6 +32,30 @@ class SmartMoneyAgent(Agent):
         self._agg_ts: float = 0.0
         self._trader_count: int = 0
         self._whale_count: int = 0
+        self._trader_summary: dict = {}
+
+    @staticmethod
+    def _summarize_traders(accounts: list[dict], whale_addrs: set) -> dict:
+        """前 N 名交易者的多空人數、比例、槓桿（看『決心』）。smart=全部、whale=淨值前N。"""
+        import statistics
+
+        def grp(accs):
+            longs = [a for a in accs if a["net"] > 0]
+            shorts = [a for a in accs if a["net"] < 0]
+            flat = [a for a in accs if a["net"] == 0]
+            levs = [a["lev"] for a in accs if a["lev"] > 0]
+            directional = len(longs) + len(shorts)
+            return {
+                "total": len(accs), "long": len(longs), "short": len(shorts),
+                "flat": len(flat),
+                "short_pct": round(len(shorts) / directional, 4) if directional else None,
+                "long_pct": round(len(longs) / directional, 4) if directional else None,
+                "lev_median": round(statistics.median(levs), 2) if levs else None,
+                "lev_avg": round(statistics.mean(levs), 2) if levs else None,
+                "lev_max": round(max(levs), 2) if levs else None,
+            }
+        whales = [a for a in accounts if a["addr"] in whale_addrs]
+        return {"smart": grp(accounts), "whale": grp(whales)}
 
     def _coin_aggregates(self) -> dict[str, dict]:
         """從 Hyperliquid 取前 N 名合格交易者的持倉，聚合成 coin -> 多空名目。"""
@@ -50,25 +74,37 @@ class SmartMoneyAgent(Agent):
         )
         states = self._client.states_bulk([addr for addr, _ in traders])  # 並發抓持倉
 
-        # 每個帳號的淨值(accountValue)＋持倉；鯨魚＝淨值最大的前 N 名（錢很多的人）
-        accounts: list[tuple[str, float, list]] = []
+        # 每個帳號：淨值(accountValue)、總名目(totalNtlPos→槓桿)、淨多空、持倉
+        # 鯨魚＝淨值最大的前 N 名（錢很多的人）
+        accounts = []
         for addr, _pnl in traders:
             state = states.get(addr)
             if state is None:
                 continue
+            ms = state.get("marginSummary") or {}
             try:
-                av = float((state.get("marginSummary") or {}).get("accountValue", 0.0) or 0.0)
+                av = float(ms.get("accountValue", 0.0) or 0.0)
+                ntl = float(ms.get("totalNtlPos", 0.0) or 0.0)
             except (TypeError, ValueError):
-                av = 0.0
-            accounts.append((addr, av, list(self._client.iter_positions(state))))
+                av = ntl = 0.0
+            positions = list(self._client.iter_positions(state))
+            net = 0.0
+            for pos in positions:
+                try:
+                    szi = float(pos.get("szi", 0.0))
+                    net += float(pos.get("positionValue", 0.0)) * (1 if szi > 0 else -1)
+                except (TypeError, ValueError):
+                    continue
+            accounts.append({"addr": addr, "av": av, "lev": ntl / av if av > 0 else 0.0,
+                             "net": net, "positions": positions})
 
-        whale_addrs = {a for a, _av, _p in
-                       sorted(accounts, key=lambda x: x[1], reverse=True)[:cfg.whale_top_n]}
+        whale_addrs = {a["addr"] for a in
+                       sorted(accounts, key=lambda x: x["av"], reverse=True)[:cfg.whale_top_n]}
 
         agg: dict[str, dict] = {}
-        for addr, _av, positions in accounts:
-            is_whale = addr in whale_addrs
-            for pos in positions:
+        for a in accounts:
+            is_whale = a["addr"] in whale_addrs
+            for pos in a["positions"]:
                 coin = pos["coin"]
                 try:
                     szi = float(pos.get("szi", 0.0))
@@ -85,6 +121,7 @@ class SmartMoneyAgent(Agent):
                         b["whale_" + side] += notional
                         b["whale_count"] += 1
 
+        self._trader_summary = self._summarize_traders(accounts, whale_addrs)
         self._agg = agg
         self._agg_ts = time.time()
         self._trader_count = len(accounts)

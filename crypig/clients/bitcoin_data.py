@@ -34,6 +34,23 @@ class BitcoinDataClient:
     def close(self) -> None:
         self._client.close()
 
+    def fetch_history(self, slug: str, ttl: float = 21600.0) -> list[dict]:
+        """取整段歷史（不加 /last，回時序陣列）。日資料，預設快取 6 小時省額度。"""
+        import time
+        cache = getattr(self, "_hist_cache", {})
+        hit = cache.get(slug)
+        if hit and time.time() - hit[0] < ttl:
+            return hit[1]
+        resp = self._client.get(f"{BASE}/{slug}")
+        if resp.status_code == 429:
+            raise RateLimited("bitcoin-data.com 每小時 10 次額度已用完")
+        resp.raise_for_status()
+        data = resp.json()
+        rows = data if isinstance(data, list) else []
+        cache[slug] = (time.time(), rows)
+        self._hist_cache = cache
+        return rows
+
     def fetch_raw(self, slug: str) -> dict:
         """取整包欄位（多欄位端點，如 wallet-bands 鯨魚分級）。"""
         resp = self._client.get(f"{BASE}/{slug}/last")

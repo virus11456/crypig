@@ -22,6 +22,7 @@ class Orchestrator:
         self.decisions = DecisionStore(self.config.decisions_db)
         self.all_scores: dict[str, dict] = {}   # 全市場各幣輕量決策(聰明錢+資金費率)
         self._prev_pos: dict[str, dict] = {}    # 上一輪各幣 聰明錢/鯨魚 淨多空(算20分鐘變化)
+        self.trader_summary: dict = {}          # 前N名交易者多空人數/比例/槓桿(看決心)
         # 以下 CoinGecko 資料只在每輪(背景)抓一次並快取，請求端只讀不打 API（避免被封）
         self.macro: dict | None = None          # 全市場宏觀
         self.market_caps: dict[str, dict] = {}  # SYMBOL -> {market_cap, volume_24h}
@@ -71,6 +72,7 @@ class Orchestrator:
         except Exception:
             logger.exception("全市場評分：聰明錢聚合失敗")
             return {}
+        self.trader_summary = sm._trader_summary       # 多空人數/槓桿摘要
         cfg = self.config.agents.smart_money
         from .clients.hyperliquid import HyperliquidClient
         hlc = sm._client or HyperliquidClient()

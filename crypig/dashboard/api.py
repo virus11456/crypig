@@ -211,6 +211,48 @@ def macro() -> dict:
     return {"global": orc.macro}
 
 
+@app.get("/positioning")
+def positioning() -> dict:
+    """前N名交易者多空人數/比例/槓桿（看決心）。mock 回合成。"""
+    orc = orchestrator()
+    if orc.config.use_mock:
+        return {"smart": {"total": 100, "long": 38, "short": 22, "flat": 40,
+                          "short_pct": 0.37, "long_pct": 0.63,
+                          "lev_median": 3.2, "lev_avg": 3.5, "lev_max": 9.0},
+                "whale": {"total": 30, "long": 11, "short": 8, "flat": 11,
+                          "short_pct": 0.42, "long_pct": 0.58,
+                          "lev_median": 2.8, "lev_avg": 3.0, "lev_max": 7.0}}
+    if not orc.trader_summary:
+        orc.run_cycle()
+    return orc.trader_summary
+
+
+@app.get("/whale_history")
+def whale_history(days: int = 60) -> dict:
+    """鏈上 BTC 鯨魚(≥100BTC大戶=駝背鯨+巨鯨)每日持倉，畫變化圖。"""
+    if orchestrator().config.use_mock:
+        import math
+        import time
+        t0 = time.time()
+        out = []
+        for i in range(30):
+            d = 7.2e6 + 3e4 * math.sin(i / 4) + i * 1500
+            out.append({"date": f"D-{29 - i}", "whale_btc": d})
+        return {"history": out}
+    from ..clients.bitcoin_data import BitcoinDataClient, RateLimited
+    try:
+        rows = BitcoinDataClient().fetch_history("wallet-bands")
+    except (RateLimited, Exception) as e:
+        return {"error": str(e), "history": []}
+    out = []
+    for r in rows[-days:]:
+        hb = float(r.get("humpbackBtc") or 0)
+        mw = float(r.get("megaWhaleBtc") or 0)
+        out.append({"date": r.get("theDate"), "whale_btc": hb + mw,
+                    "humpback": hb, "mega_whale": mw})
+    return {"history": out}
+
+
 @app.get("/scores")
 def scores() -> dict:
     """全市場各幣輕量決策（聰明錢持倉 + 資金費率擁擠）。表為空時先跑一輪。"""
