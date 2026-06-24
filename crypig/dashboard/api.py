@@ -202,28 +202,15 @@ def _mock_macro(syms: list[str]) -> dict:
 
 @app.get("/macro")
 def macro() -> dict:
-    """全市場宏觀 + 各幣 OI/Cap、Vol/Cap + HL 場內資金費率對照。mock 回合成值。"""
+    """全市場宏觀（總市值/量/OI、OI-Cap、Vol-Cap、BTC 市佔）。只取 global，
+    各幣明細已由 /hl_market 提供，避免重複打 CoinGecko 觸發限流。mock 回合成。"""
     orc = orchestrator()
-    syms = orc.config.symbols
     if orc.config.use_mock:
-        out = _mock_macro(syms)
-        hlmap = {r["symbol"]: r for r in _mock_hl_scan()}
-    else:
-        m = market()
-        try:
-            out = {"global": m.global_macro(), "per_symbol": m.coin_macro(syms)}
-        except Exception as e:
-            out = {"error": str(e), "global": None, "per_symbol": {}}
-        try:
-            hlmap = {r["symbol"]: r for r in hl().funding_scan()}
-        except Exception:
-            hlmap = {}
-    for s, v in (out.get("per_symbol") or {}).items():   # 併入 HL 場內資金費率對照
-        h = hlmap.get(s)
-        if h:
-            v["hl_funding_ann"] = h["funding_ann"]
-            v["hl_funding_flag"] = h["funding_flag"]
-    return out
+        return {"global": _mock_macro(orc.config.symbols)["global"]}
+    try:
+        return {"global": market().global_macro()}
+    except Exception as e:
+        return {"error": str(e), "global": None}
 
 
 @app.get("/scores")

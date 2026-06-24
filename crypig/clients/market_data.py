@@ -127,17 +127,21 @@ class MarketDataClient:
             return "squeeze"
         return "normal"
 
-    def top_markets(self, per_page: int = 250, ttl: float = 300.0) -> dict[str, dict]:
+    def top_markets(self, per_page: int = 250, ttl: float = 600.0) -> dict[str, dict]:
         """CoinGecko 前 N 大市值幣的 {SYMBOL: {market_cap, volume_24h}}（一次抓、快取）。
 
-        用來補全市場列表中各幣的市值與量（同名取市值最大者）。
+        用來補全市場列表中各幣的市值與量（同名取市值最大者）。CoinGecko 對雲端
+        IP 會限流，故：失敗時沿用上次好的快取（不回空），TTL 拉長到 10 分鐘。
         """
         if self._top_cache is not None and time.time() - self._top_ts < ttl:
             return self._top_cache
-        raw = self._client.get(
-            "https://api.coingecko.com/api/v3/coins/markets",
-            params={"vs_currency": "usd", "order": "market_cap_desc",
-                    "per_page": str(per_page), "page": "1"}).json()
+        try:
+            raw = self._client.get(
+                "https://api.coingecko.com/api/v3/coins/markets",
+                params={"vs_currency": "usd", "order": "market_cap_desc",
+                        "per_page": str(per_page), "page": "1"}).json()
+        except Exception:
+            return self._top_cache or {}
         out: dict[str, dict] = {}
         if isinstance(raw, list):
             for m in raw:
@@ -149,7 +153,8 @@ class MarketDataClient:
                                 "volume_24h": float(m.get("total_volume") or 0.0)}
         if out:
             self._top_cache, self._top_ts = out, time.time()
-        return out
+            return out
+        return self._top_cache or {}              # 限流回非 list → 用上次快取
 
     def coin_macro(self, symbols: list[str], ttl: float = 120.0) -> dict[str, dict]:
         """各幣 OI/Cap、Vol/Cap、資金費率(年化)與異常分級。快取以減少 CoinGecko 呼叫。"""
