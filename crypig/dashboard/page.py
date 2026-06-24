@@ -379,12 +379,16 @@ async function loadSocial(){
     if(fg.value!=null){
       const col=fgColor(fg.value);
       const spark=lineChart((fg.history||[]).map(h=>({d:fmtD(h.t),v:h.v})));
+      const pctNote = fg.percentile!=null
+        ? `歷史第 <b style="color:${col}">${fg.percentile}</b> 百分位${fg.percentile<=10?'（極罕見，越低越接近大底）':fg.percentile>=90?'（極度貪婪，留意風險）':''}`
+        : '';
       fgHtml=`<div class="box">
-        <h2>😱 恐懼貪婪指數 <small>全市場情緒（免費 alternative.me）｜極度恐懼常是反向買點</small></h2>
+        <h2>😱 恐懼貪婪指數 <small>全市場情緒（alternative.me，全區間 ${fg.days||''} 天 2018至今）｜極度恐懼常是反向買點</small></h2>
         <div class="kpis"><div class="kpi"><div class="v" style="color:${col};font-size:34px">${fg.value}</div>
           <div class="k">${fg.label}</div></div>
-          <div style="flex:1">${spark}</div></div>
-        <div class="meta">對照：若此處「極度恐懼」但聰明錢/鯨魚也在做空 → 順勢偏空；若聰明錢開始翻多 → 反向訊號。</div>
+          <div class="kpi"><div class="v" style="color:${col}">${fg.percentile??'—'}%</div><div class="k">歷史百分位</div></div>
+          <div style="flex:1;min-width:260px">${spark}</div></div>
+        <div class="meta">${pctNote}｜區間 ${fg.hist_min}–${fg.hist_max}。對照：極度恐懼+聰明錢仍做空→順勢偏空；聰明錢開始翻多→底部反向訊號。</div>
       </div>`;
     }
     const soc=r.social||{};

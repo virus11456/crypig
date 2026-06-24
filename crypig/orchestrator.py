@@ -172,14 +172,19 @@ class Orchestrator:
                     self.market_caps = val
             except Exception:
                 logger.warning("CoinGecko %s 抓取失敗，沿用上次快取", name)
-        # 恐懼貪婪指數（免費、無金鑰、全市場情緒）
+        # 恐懼貪婪指數（免費、無金鑰、全市場情緒）—— 全區間歷史(2018至今)
         try:
-            r = self._md._client.get("https://api.alternative.me/fng/?limit=30")
+            r = self._md._client.get("https://api.alternative.me/fng/?limit=0")
             d = r.json().get("data") if r.status_code == 200 else None
             if isinstance(d, list) and d:
+                vals = [int(x["value"]) for x in d]
+                cur = int(d[0]["value"])
+                below = sum(1 for v in vals if v < cur)
                 self.fear_greed = {
-                    "value": int(d[0]["value"]),
+                    "value": cur,
                     "label": d[0]["value_classification"],
+                    "percentile": round(below / len(vals) * 100),   # 歷史百分位(越低=越罕見的恐懼)
+                    "hist_min": min(vals), "hist_max": max(vals), "days": len(vals),
                     "history": [{"v": int(x["value"]), "t": x["timestamp"]} for x in reversed(d)],
                 }
         except Exception:
