@@ -332,6 +332,40 @@ def social() -> dict:
             "lunarcrush_enabled": bool(orc.social), "social": orc.social}
 
 
+@app.get("/reddit")
+def reddit_buzz() -> dict:
+    """Reddit 散戶討論熱度/情緒（取代推特；需 app 憑證）。"""
+    orc = orchestrator()
+    if orc.config.use_mock:
+        return {"enabled": True, "total_posts": 200, "total_comments": 18000,
+                "coins": {"BTC": {"mentions": 31, "score": 12000, "comments": 4200, "sentiment": 78.0},
+                          "ETH": {"mentions": 18, "score": 5400, "comments": 2100, "sentiment": 71.0},
+                          "SOL": {"mentions": 12, "score": 3300, "comments": 1500, "sentiment": 83.0},
+                          "PEPE": {"mentions": 6, "score": 900, "comments": 600, "sentiment": 88.0}}}
+    if not orc.reddit:
+        orc.run_cycle()
+    return {"enabled": bool(orc.reddit), **(orc.reddit or {})}
+
+
+@app.get("/defi")
+def defi() -> dict:
+    """DefiLlama 資金動向：DeFi 總 TVL、穩定幣總市值、各鏈 TVL（免費）。"""
+    orc = orchestrator()
+    if orc.config.use_mock:
+        import math
+        import time
+        t = time.time() / 3600
+        hist = [{"v": 70e9 + 8e9 * math.sin(t + i / 5)} for i in range(60)]
+        return {"tvl": {"value": hist[-1]["v"], "chg_7d": -0.05, "chg_30d": -0.12, "history": hist},
+                "stablecoin": {"value": 314e9, "chg_30d": -0.02,
+                               "history": [{"v": 314e9 + 4e9 * math.sin(t + i / 6)} for i in range(60)]},
+                "chains": [{"name": "Ethereum", "tvl": 37e9}, {"name": "Solana", "tvl": 4.7e9},
+                           {"name": "BSC", "tvl": 5e9}, {"name": "Base", "tvl": 4.1e9}]}
+    if not orc.defi:
+        orc.run_cycle()
+    return orc.defi
+
+
 @app.get("/scores")
 def scores() -> dict:
     """全市場各幣輕量決策（聰明錢持倉 + 資金費率擁擠）。表為空時先跑一輪。"""

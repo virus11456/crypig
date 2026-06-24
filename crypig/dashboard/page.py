@@ -110,6 +110,7 @@ INDEX_HTML = r"""<!doctype html>
 <div id="page-strategy" style="display:none"></div>
 <div id="page-market">
 <section id="macro" class="bt"><div class="empty">宏觀載入中…</div></section>
+<section id="defi" class="bt"><div class="empty">資金動向載入中…</div></section>
 <section id="pos" class="bt"><div class="empty">大玩家決心載入中…</div></section>
 <section id="whalechart" class="bt"><div class="empty">鯨魚每日變化載入中…</div></section>
 <section id="table" class="bt"><div class="empty">幣別總表載入中…</div></section>
@@ -265,6 +266,26 @@ function posRow(name, g, color){
     ｜ 表態傾向 ${lean}
     ｜ 槓桿 中位 <b>${g.lev_median??'—'}x</b>（最高 ${g.lev_max??'—'}x）</div>`;
 }
+async function loadDefi(){
+  try{
+    const d=await (await fetch('/defi')).json();
+    const tvl=d.tvl||{}, sc=d.stablecoin||{}, chains=d.chains||[];
+    const chg=(x)=>x==null?'—':`<b style="color:${x>=0?'#3fb950':'#f85149'}">${(x*100).toFixed(1)}%</b>`;
+    const chainHtml=chains.map(c=>`<span style="margin-right:14px">${c.name} <b>$${(c.tvl/1e9).toFixed(1)}B</b></span>`).join('');
+    document.getElementById('defi').innerHTML=`<div class="box">
+      <h2>💰 資金動向（DefiLlama）<small>TVL=風險偏好；穩定幣=場邊乾火藥</small></h2>
+      <div class="kpis">
+        <div class="kpi"><div class="v">$${tvl.value?(tvl.value/1e9).toFixed(1):'—'}B</div><div class="k">DeFi 總 TVL</div></div>
+        <div class="kpi"><div class="v">${chg(tvl.chg_7d)}</div><div class="k">TVL 7天</div></div>
+        <div class="kpi"><div class="v">${chg(tvl.chg_30d)}</div><div class="k">TVL 30天</div></div>
+        <div class="kpi"><div class="v">$${sc.value?(sc.value/1e9).toFixed(0):'—'}B</div><div class="k">穩定幣總市值</div></div>
+        <div class="kpi"><div class="v">${chg(sc.chg_30d)}</div><div class="k">穩定幣 30天</div></div>
+      </div>
+      <div class="meta" style="margin-top:8px">前 6 大鏈 TVL：${chainHtml}</div>
+      <div class="meta">${lineChart((tvl.history||[]).map(h=>({d:'',v:h.v})))}</div>
+    </div>`;
+  }catch(e){document.getElementById('defi').innerHTML='<div class="box empty">資金動向載入失敗：'+e+'</div>';}
+}
 async function loadPositioning(){
   try{
     const p=await (await fetch('/positioning')).json();
@@ -306,7 +327,7 @@ async function loadWhaleChart(){
   }catch(e){document.getElementById('whalechart').innerHTML='<div class="box empty">鯨魚圖載入失敗：'+e+'</div>';}
 }
 async function refresh(){
-  loadBacktest(); loadPositioning(); loadWhaleChart();
+  loadBacktest(); loadDefi(); loadPositioning(); loadWhaleChart();
   await loadMacro();
   let decisions=[], hlcoins=[], scores={};
   try{ decisions=(await (await fetch('/decisions')).json()).decisions||[]; }catch(e){}
@@ -392,6 +413,7 @@ function loadStrategy(){
     <div class="step">4. 在 Strategies 寫你的策略假設，對照 Journal 複盤、找 edge</div>
   </div></section>
   <section class="bt" id="social"><div class="empty">社群情緒載入中…</div></section>
+  <section class="bt" id="reddit"><div class="empty">Reddit 討論熱度載入中…</div></section>
   <section class="bt"><div class="box">
     <h2>🔎 知識庫問答 <small>對累積的決策/關係問答（RAG）</small></h2>
     <div class="ask"><input id="kbq" placeholder="例：聰明錢和鯨魚現在對 ETH 的態度一致嗎？" onkeydown="if(event.key==='Enter')askKB()">
@@ -402,7 +424,28 @@ function loadStrategy(){
     <h2>📈 策略回測 <small>跟隨訊號方向的事後命中率</small></h2>
     <div id="bt2"><div class="empty">同「市場看板」的回測面板</div></div>
   </div></section>`;
-  loadSocial();
+  loadSocial(); loadReddit();
+}
+async function loadReddit(){
+  try{
+    const r=await (await fetch('/reddit')).json();
+    const coins=r.coins||{};
+    if(!r.enabled || !Object.keys(coins).length){
+      document.getElementById('reddit').innerHTML=`<div class="box">
+        <h2>👽 Reddit 散戶討論熱度（取代推特）</h2>
+        <div class="meta">尚未啟用——到 reddit.com/prefs/apps 建 script app，設
+        <b>REDDIT_CLIENT_ID</b> / <b>REDDIT_CLIENT_SECRET</b> 後自動顯示各幣討論熱度與情緒。</div></div>`;
+      return;
+    }
+    const rows=Object.entries(coins).sort((a,b)=>b[1].mentions-a[1].mentions).slice(0,10)
+      .map(([s,v])=>{const sen=v.sentiment,col=sen>=70?'#3fb950':sen>=50?'#d29922':'#f85149';
+        return `<div class="sig"><div class="sigtitle"><span>${s}</span>
+          <span class="meta">提及 ${v.mentions} ｜ 互動 ${(v.score+v.comments).toLocaleString()} ｜ 情緒 <b style="color:${col}">${sen??'—'}%</b></span></div></div>`;}).join('');
+    document.getElementById('reddit').innerHTML=`<div class="box">
+      <h2>👽 Reddit 散戶討論熱度 <small>r/CryptoCurrency+CryptoMarkets 熱門 ${r.total_posts} 篇｜散戶熱炒=反指標線索</small></h2>
+      <div class="meta" style="margin-bottom:8px">用法：某幣 Reddit 討論暴增＋聰明錢在做空 → 散戶 FOMO 反指標 alpha</div>
+      ${rows}</div>`;
+  }catch(e){document.getElementById('reddit').innerHTML='<div class="box empty">Reddit 載入失敗：'+e+'</div>';}
 }
 refresh(); setInterval(refresh,30000);
 </script>

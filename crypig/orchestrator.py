@@ -29,8 +29,12 @@ class Orchestrator:
         self.deriv_agg: dict[str, dict] = {}    # SYMBOL -> 跨所聚合 OI/funding
         self.social: dict[str, dict] = {}       # SYMBOL -> LunarCrush 社群情緒(需付費金鑰)
         self.fear_greed: dict = {}              # 全市場恐懼貪婪指數(免費 alternative.me)
+        self.defi: dict = {}                    # DefiLlama 資金動向(TVL/穩定幣/各鏈，免費)
+        self.reddit: dict = {}                  # Reddit 散戶討論熱度/情緒(需 app 憑證)
         self._md: MarketDataClient | None = None
         self._lc = None
+        self._dl = None
+        self._rd = None
         self.agents = []
         a = self.config.agents
         if a.smart_money.enabled:
@@ -180,6 +184,27 @@ class Orchestrator:
                 }
         except Exception:
             logger.warning("Fear&Greed 抓取失敗")
+        # DefiLlama 資金動向（免費）
+        try:
+            if self._dl is None:
+                from .clients.defillama import DefiLlamaClient
+                self._dl = DefiLlamaClient()
+            snap = self._dl.snapshot()
+            if snap:
+                self.defi = snap
+        except Exception:
+            logger.warning("DefiLlama 抓取失敗")
+        # Reddit 散戶討論熱度（需 app 憑證才抓）
+        try:
+            if self._rd is None:
+                from .clients.reddit import RedditClient
+                self._rd = RedditClient()
+            if self._rd.enabled:
+                buzz = self._rd.crypto_buzz()
+                if buzz:
+                    self.reddit = buzz
+        except Exception:
+            logger.warning("Reddit 討論熱度抓取失敗")
         # LunarCrush 社群情緒（需付費金鑰；有才抓）
         try:
             if self._lc is None:
