@@ -16,7 +16,7 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
 from ..orchestrator import Orchestrator
@@ -251,6 +251,66 @@ def whale_history(days: int = 60) -> dict:
         out.append({"date": r.get("theDate"), "whale_btc": hb + mw,
                     "humpback": hb, "mega_whale": mw})
     return {"history": out}
+
+
+def _build_vault_data(orc) -> dict:
+    """彙整匯出 Obsidian 所需資料：重點幣、大玩家決心、鯨魚鏈上變化。"""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    try:
+        hlmap = {r["symbol"]: r for r in hl().funding_scan()}
+    except Exception:
+        hlmap = {}
+    caps, deriv = orc.market_caps, orc.deriv_agg
+    coins = []
+    for sym, sc in (orc.all_scores or {}).items():
+        h = hlmap.get(sym, {})
+        cap = (caps.get(sym) or {}).get("market_cap")
+        oi = (deriv.get(sym) or {}).get("open_interest_usd") or h.get("open_interest_usd")
+        coins.append({"symbol": sym, **sc, "funding_ann": h.get("funding_ann"),
+                      "oi_cap": (oi / cap) if (oi and cap) else None, "_oi": oi or 0})
+    coins.sort(key=lambda c: c["_oi"], reverse=True)
+    coins = coins[:40]
+
+    overall = {}
+    try:
+        wh = whale_history(days=60).get("history", [])
+        if len(wh) >= 2:
+            chg = (wh[-1]["whale_btc"] - wh[0]["whale_btc"]) / wh[0]["whale_btc"]
+            overall["whale_chain"] = f"{chg*100:+.2f}%（近 {len(wh)} 天，{'累積' if chg>=0 else '出貨'}）"
+    except Exception:
+        pass
+
+    ts = orc.all_scores and now.isoformat(timespec="minutes") or now.isoformat(timespec="minutes")
+    summ = orc.trader_summary or {}
+    return {"coins": coins, "ts": ts, "date": now.strftime("%Y-%m-%d"),
+            "smart_summary": summ.get("smart"), "whale_summary": summ.get("whale"),
+            "overall": overall}
+
+
+@app.get("/vault.zip")
+def vault_zip():
+    """把目前的知識庫打包成 Obsidian vault（.zip）下載：Coins/Journal/KOL。"""
+    import io
+    import tempfile
+    import zipfile
+    from pathlib import Path
+    from ..obsidian import export_vault
+
+    orc = orchestrator()
+    if not orc.all_scores and not orc.config.use_mock:
+        orc.run_cycle()
+    data = _build_vault_data(orc)
+    tmp = tempfile.mkdtemp()
+    export_vault(data, tmp + "/CrypigVault")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for p in Path(tmp).rglob("*.md"):
+            z.write(p, p.relative_to(tmp))
+    buf.seek(0)
+    return StreamingResponse(
+        buf, media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=crypig-vault.zip"})
 
 
 @app.get("/scores")
