@@ -1,7 +1,32 @@
-# Crypig — 加密貨幣量化分析 Agent 中台
+# Crypig — 加密貨幣量化分析中台
 
-多個資料源各派一隻 **Agent** 採集 → 觀察堆進 **自我學習 RAG 知識圖譜** 當記憶 →
-產出 **綜合偏多/偏空評分** 與 **關聯性問答**。
+多資料源 **Agent** 採集 → **自我學習 RAG 知識圖譜** 記憶 → **綜合決策＋全市場掃描**，
+並可匯出 **Obsidian 知識庫** 持續優化個人交易策略、尋找 alpha。
+
+## 🌐 線上 Demo
+
+**https://web-production-f997d.up.railway.app**（Railway，真實資料、每 20 分鐘自動更新）
+
+兩頁式中台：
+- **📊 市場看板**：全市場宏觀 / 資金動向(DefiLlama) / 大玩家決心 / 鯨魚每日持倉 /
+  幣別總表(全 230 幣：判斷·聰明錢多空·鯨魚多空·日線背離·資金費率·OI-Cap·市值) / 回測
+- **🧠 策略·Obsidian**：下載知識庫 vault、恐懼貪婪指數、Reddit 散戶情緒、RAG 問答、回測
+
+## 功能總覽
+
+| 層 | 內容 | 來源（皆免費/免金鑰或免費層） |
+|---|---|---|
+| 大戶持倉 | 聰明錢(獲利前N)/鯨魚(淨值前N)各幣淨多空 + **20分鐘變化** + 多空人數·槓桿(決心) | Hyperliquid |
+| 全市場掃描 | 230 幣判斷·分數·信心(聰明錢+資金費率+日線背離輕量評分) | Hyperliquid |
+| 量價背離 | 全幣日線底/頂背離(RSI+量能) | Hyperliquid 日線 |
+| 鏈上鯨魚 | BTC ≥100BTC 大戶每日持倉折線圖 | bitcoin-data.com |
+| 宏觀 | 總市值/OI/OI-Cap/Vol-Cap/BTC市佔、各幣市值 | CoinGecko(Demo金鑰) |
+| 資金動向 | DeFi TVL/穩定幣/各鏈 TVL | DefiLlama |
+| 情緒 | 恐懼貪婪指數 / Reddit 散戶討論熱度 / (LunarCrush 需付費) | alternative.me / Reddit API |
+| 決策/回測 | 綜合評分·信心·共識·動作建議；命中率+損益曲線(真實K線對齊) | — |
+| 知識庫 | Obsidian markdown 匯出(Coins/Journal/KOL/Strategies)、RAG 問答 | — |
+
+> 找 alpha 核心：**散戶/全市場情緒(恐懼貪婪·Reddit) vs 大戶持倉(聰明錢·鯨魚)** 的分歧。
 
 ## 架構
 
@@ -32,10 +57,10 @@
 | Agent | 訊號 | 來源 | 狀態 |
 |---|---|---|---|
 | `smart_money` | 聰明錢多空 | Hyperliquid leaderboard + 持倉 | ✅ 真實資料 |
-| `whale_flow` | 全市場持倉量 + 資金費率 | CoinGecko 聚合各交易所衍生品 OI（含快照算變化）| ✅ 真實資料 |
-| `divergence` | 量價頂/底背離 | OKX OHLCV（httpx REST）| ✅ 真實資料（RSI + 量能）|
-| `lth_supply` | 長期持有者(≥151天)供給變化 | bitcoin-data.com 鏈上（illiquid-supply）| ✅ 真實資料（BTC；含快照算變化）|
-| `twitter`(二期) | KOL/機構/美聯儲情緒 | X API + LLM 打分 | 規劃中 |
+| `whale_flow` | 真實鯨魚錢包(≥100BTC)/全市場 OI + 資金費率 | bitcoin-data wallet-bands / CoinGecko | ✅ 真實資料 |
+| `divergence` | 量價頂/底背離 | OKX / Hyperliquid 日線（RSI + 量能）| ✅ 真實資料 |
+| `lth_supply` | 長期持有者(≥151天)供給變化 | bitcoin-data.com（long-term-hodler-supply）| ✅ 真實資料（BTC）|
+| 情緒(取代推特) | 恐懼貪婪 / Reddit 散戶 / DefiLlama 資金 | alternative.me / Reddit API / DefiLlama | ✅ 免費源（Reddit 需 app 憑證）|
 
 > **網路/地緣備註**：環境為美國 IP，`binance.com` 被封鎖(451)；改用 OKX。
 > ccxt 在沙箱無法走 proxy，故用 httpx 直打 REST。時序快照存 SQLite（`snapshots.db`），
