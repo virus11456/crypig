@@ -47,12 +47,11 @@ class SmartMoneyAgent(Agent):
             pnl_threshold=cfg.pnl_threshold_usd,
             limit=cfg.max_traders,
         )
+        states = self._client.states_bulk([addr for addr, _ in traders])  # 並發抓持倉
         agg: dict[str, dict] = {}
         for addr, _pnl in traders:
-            try:
-                state = self._client.clearinghouse_state(addr)
-            except Exception:           # 單一帳號失敗不影響整體
-                logger.warning("clearinghouseState 失敗：%s", addr)
+            state = states.get(addr)
+            if state is None:           # 單一帳號失敗不影響整體
                 continue
             for pos in self._client.iter_positions(state):
                 coin = pos["coin"]

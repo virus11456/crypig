@@ -64,18 +64,22 @@ class Orchestrator:
             logger.exception("全市場評分：聰明錢聚合失敗")
             return {}
         cfg = self.config.agents.smart_money
+        from .clients.hyperliquid import HyperliquidClient
+        hlc = sm._client or HyperliquidClient()
         funding: dict[str, float] = {}
         try:
-            from .clients.hyperliquid import HyperliquidClient
-            hlc = sm._client or HyperliquidClient()
             funding = {r["symbol"]: r["funding_ann"] for r in hlc.funding_scan()}
         except Exception:
             funding = {}
 
+        coins = set(aggs) | set(funding)
+        div = self._divergence_scan(hlc, sorted(coins))   # {coin: (direction,mag,note)}
+
         out: dict[str, dict] = {}
-        for coin, agg in aggs.items():
+        for coin in coins:
             obs: list[Observation] = []
-            if agg["long"] + agg["short"] > 0:            # 聰明錢持倉訊號
+            agg = aggs.get(coin)
+            if agg and agg["long"] + agg["short"] > 0:    # 聰明錢持倉訊號
                 obs.append(sm.analyze(coin, {
                     "threshold_usd": cfg.pnl_threshold_usd, "window": cfg.window,
                     "trader_count": sm._trader_count, "position_count": agg["count"],
@@ -92,12 +96,31 @@ class Orchestrator:
                     source="whale_flow", symbol=coin, signal_type="funding",
                     direction=fdir, magnitude=fmag,
                     summary=f"{coin} 資金費率年化 {fa*100:+.1f}%"))
+            ddir, dmag, dnote = div.get(coin, ("neutral", 0.0, ""))
+            if ddir != "neutral":                         # 日線量價背離訊號
+                obs.append(Observation(
+                    source="divergence", symbol=coin, signal_type="divergence",
+                    direction=ddir, magnitude=dmag, summary=dnote))
             if obs:
                 r = aggregate(obs, self.config).get(coin)
                 if r:
                     out[coin] = {"score": r["score"], "label": r["label"],
-                                 "confidence": r["confidence"]}
+                                 "confidence": r["confidence"], "divergence": ddir}
         return out
+
+    def _divergence_scan(self, hlc, coins: list[str]) -> dict[str, tuple]:
+        """並發抓日線、算每幣量價背離（direction, magnitude, note）。失敗回空。"""
+        try:
+            from .agents.divergence import classify_divergence
+            bulk = hlc.daily_closes_bulk(coins)
+            out: dict[str, tuple] = {}
+            for coin, (closes, vols) in bulk.items():
+                if len(closes) >= 31:
+                    out[coin] = classify_divergence(closes, vols)
+            return out
+        except Exception:
+            logger.exception("全市場背離掃描失敗")
+            return {}
 
     @staticmethod
     def _prices(observations: list[Observation]) -> dict[str, float]:

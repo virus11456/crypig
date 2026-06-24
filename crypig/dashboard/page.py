@@ -180,6 +180,11 @@ const MCOLS=[
   {k:'label', t:'判斷',f:r=>r.label?`<span style="color:${LBLC(r.label)}">${r.label}</span>`:'—'},
   {k:'score', t:'分數',f:r=>r.score==null?'—':r.score.toFixed(3)},
   {k:'confidence',t:'信心',f:r=>r.confidence==null?'—':(r.confidence*100).toFixed(0)+'%'},
+  {k:'divergence',t:'日線背離',f:r=>{
+    if(!r.divergence) return '—';
+    if(r.divergence==='bull') return '<span style="color:#3fb950">📈 底背離</span>';
+    if(r.divergence==='bear') return '<span style="color:#f85149">📉 頂背離</span>';
+    return '<span style="color:#8b949e">無</span>';}},
   {k:'price',t:'標記價',f:r=>money(r.price)},
   {k:'oi_cap',t:'OI/Cap',f:r=>r.oi_cap==null?'—':(r.oi_cap*100).toFixed(2)+'%'},
   {k:'vol_cap',t:'Vol/Cap',f:r=>r.vol_cap==null?'—':(r.vol_cap*100).toFixed(2)+'%'},
@@ -227,7 +232,7 @@ async function refresh(){
     open_interest:c.open_interest_usd, premium:c.premium,
     market_cap:c.market_cap, oi_cap:c.oi_cap, vol_cap:c.vol_cap});
   Object.entries(scores).forEach(([s,v])=>{ const r=bySym[s]||(bySym[s]={symbol:s});
-    r.label=v.label; r.score=v.score; r.confidence=v.confidence; });
+    r.label=v.label; r.score=v.score; r.confidence=v.confidence; r.divergence=v.divergence; });
   decisions.forEach(d=>{ const r=bySym[d.symbol]||(bySym[d.symbol]={symbol:d.symbol});
     r.label=d.label; r.score=d.score; r.confidence=d.confidence; if(r.price==null)r.price=d.price; });
   MROWS=Object.values(bySym);

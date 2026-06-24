@@ -15,6 +15,7 @@
 """
 from __future__ import annotations
 
+import concurrent.futures
 import time
 from typing import Any
 
@@ -103,6 +104,21 @@ class HyperliquidClient:
         self._state_cache[address] = (now, data)
         return data
 
+    def states_bulk(self, addresses: list[str],
+                    workers: int = 16) -> dict[str, dict]:
+        """並發抓多個帳號的 clearinghouseState（各自走快取）。回 {address: state}。"""
+        def fetch(addr: str):
+            try:
+                return addr, self.clearinghouse_state(addr)
+            except Exception:
+                return addr, None
+        out: dict[str, dict] = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+            for addr, state in ex.map(fetch, addresses):
+                if state is not None:
+                    out[addr] = state
+        return out
+
     # ---- 全市場脈絡（持倉量 / 資金費率）----
     def market_contexts(self) -> dict[str, dict]:
         """回傳每個幣的 {funding, open_interest, mark_px, premium}（全市場，含快取）。
@@ -146,6 +162,37 @@ class HyperliquidClient:
                 "funding_flag": funding_flag(ann),
             })
         out.sort(key=lambda r: abs(r["funding_ann"]), reverse=True)
+        return out
+
+    def daily_closes_bulk(self, coins: list[str], days: int = 45,
+                          workers: int = 16) -> dict[str, tuple[list[float], list[float]]]:
+        """並發抓多個幣的日線（收盤, 量）。回 {coin: (closes, volumes)}。
+
+        230 幣循序約 100s；16 並發約 6-10s。httpx.Client 可跨執行緒共用。
+        """
+        now = int(time.time() * 1000)
+        start = now - days * 24 * 3600 * 1000
+
+        def fetch(coin: str):
+            try:
+                r = self._client.post(INFO_URL, json={
+                    "type": "candleSnapshot",
+                    "req": {"coin": coin, "interval": "1d",
+                            "startTime": start, "endTime": now}})
+                data = r.json()
+                if not isinstance(data, list):
+                    return coin, None
+                closes = [float(c["c"]) for c in data]
+                vols = [float(c["v"]) for c in data]
+                return coin, (closes, vols)
+            except Exception:
+                return coin, None
+
+        out: dict[str, tuple] = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+            for coin, res in ex.map(fetch, coins):
+                if res:
+                    out[coin] = res
         return out
 
     @staticmethod

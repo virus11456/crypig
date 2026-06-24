@@ -37,6 +37,36 @@ def rsi(closes: list[float], period: int = 14) -> list[float]:
     return out
 
 
+def classify_divergence(closes: list[float], vols: list[float] | None = None):
+    """從收盤(+成交量)判斷量價背離，回 (direction, magnitude, note)。
+    底背離(價更低、RSI走高)=bull；頂背離(價更高、RSI走弱)=bear；否則 neutral。
+    """
+    direction, magnitude, note = "neutral", 0.0, "量價同步，無明顯背離"
+    rsis = rsi(closes)
+    if len(rsis) >= 30:
+        seg_c = closes[-len(rsis):]
+        half = len(rsis) // 2
+        p_prev_low, p_now_low = min(seg_c[:half]), min(seg_c[half:])
+        r_prev_low, r_now_low = min(rsis[:half]), min(rsis[half:])
+        p_prev_high, p_now_high = max(seg_c[:half]), max(seg_c[half:])
+        r_prev_high, r_now_high = max(rsis[:half]), max(rsis[half:])
+        if p_now_low < p_prev_low and r_now_low > r_prev_low:
+            direction = "bull"
+            magnitude = min((r_now_low - r_prev_low) / 100 + 0.2, 1.0)
+            note = "底背離：價格創更低低點但 RSI 走高，下跌動能衰竭"
+        elif p_now_high > p_prev_high and r_now_high < r_prev_high:
+            direction = "bear"
+            magnitude = min((r_prev_high - r_now_high) / 100 + 0.2, 1.0)
+            note = "頂背離：價格創更高高點但 RSI 走弱，上漲動能衰竭"
+        if vols and direction != "neutral":
+            v_prev = sum(vols[:half]) / half
+            v_now = sum(vols[half:]) / (len(vols) - half)
+            if v_now < v_prev:
+                magnitude = min(magnitude + 0.1, 1.0)
+                note += "；量能萎縮印證"
+    return direction, magnitude, note
+
+
 class DivergenceAgent(Agent):
     name = "divergence"
 
@@ -64,33 +94,7 @@ class DivergenceAgent(Agent):
     def analyze(self, symbol: str, raw: dict) -> Observation:
         closes = raw["closes"]
         vols = raw["volumes"]
-        rsis = rsi(closes)
-        direction, magnitude, note = "neutral", 0.0, "量價同步，無明顯背離"
-
-        if len(rsis) >= 30:
-            seg_c = closes[-len(rsis):]
-            half = len(rsis) // 2
-            # 比較前半 / 後半的極值，判斷背離
-            p_prev_low, p_now_low = min(seg_c[:half]), min(seg_c[half:])
-            r_prev_low, r_now_low = min(rsis[:half]), min(rsis[half:])
-            p_prev_high, p_now_high = max(seg_c[:half]), max(seg_c[half:])
-            r_prev_high, r_now_high = max(rsis[:half]), max(rsis[half:])
-
-            if p_now_low < p_prev_low and r_now_low > r_prev_low:
-                direction = "bull"
-                magnitude = min((r_now_low - r_prev_low) / 100 + 0.2, 1.0)
-                note = "底背離：價格創更低低點但 RSI 走高，下跌動能衰竭"
-            elif p_now_high > p_prev_high and r_now_high < r_prev_high:
-                direction = "bear"
-                magnitude = min((r_prev_high - r_now_high) / 100 + 0.2, 1.0)
-                note = "頂背離：價格創更高高點但 RSI 走弱，上漲動能衰竭"
-
-            # 量能輔助：越跌量縮 / 越漲量縮 → 動能衰竭，略增強度
-            v_prev, v_now = sum(vols[:half]) / half, sum(vols[half:]) / (len(vols) - half)
-            if direction != "neutral" and v_now < v_prev:
-                magnitude = min(magnitude + 0.1, 1.0)
-                note += "；量能萎縮印證"
-
+        direction, magnitude, note = classify_divergence(closes, vols)
         summary = f"{symbol} 量價分析：{note}。"
         return Observation(
             source=self.name,
