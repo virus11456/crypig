@@ -21,6 +21,7 @@ class Orchestrator:
         self.rag = SelfLearningRAG(self.config)
         self.decisions = DecisionStore(self.config.decisions_db)
         self.all_scores: dict[str, dict] = {}   # 全市場各幣輕量決策(聰明錢+資金費率)
+        self._prev_pos: dict[str, dict] = {}    # 上一輪各幣 聰明錢/鯨魚 淨多空(算20分鐘變化)
         # 以下 CoinGecko 資料只在每輪(背景)抓一次並快取，請求端只讀不打 API（避免被封）
         self.macro: dict | None = None          # 全市場宏觀
         self.market_caps: dict[str, dict] = {}  # SYMBOL -> {market_cap, volume_24h}
@@ -83,6 +84,7 @@ class Orchestrator:
         div = self._divergence_scan(hlc, sorted(coins))   # {coin: (direction,mag,note)}
 
         out: dict[str, dict] = {}
+        new_pos: dict[str, dict] = {}
         for coin in coins:
             obs: list[Observation] = []
             agg = aggs.get(coin)
@@ -108,11 +110,36 @@ class Orchestrator:
                 obs.append(Observation(
                     source="divergence", symbol=coin, signal_type="divergence",
                     direction=ddir, magnitude=dmag, summary=dnote))
+            # 聰明錢 / 鯨魚 淨多空 + 與上一輪(約20分鐘)的變化
+            sm_net = whale_net = None
+            if agg:
+                tot = agg["long"] + agg["short"]
+                if tot > 0:
+                    sm_net = (agg["long"] - agg["short"]) / tot
+                wtot = agg.get("whale_long", 0) + agg.get("whale_short", 0)
+                if wtot > 0:
+                    whale_net = (agg["whale_long"] - agg["whale_short"]) / wtot
+            prev = self._prev_pos.get(coin, {})
+            entry = {}
+            if sm_net is not None:
+                entry["sm_net"] = round(sm_net, 4)
+                if "sm_net" in prev:
+                    entry["sm_delta"] = round(sm_net - prev["sm_net"], 4)
+            if whale_net is not None:
+                entry["whale_net"] = round(whale_net, 4)
+                entry["whale_count"] = agg.get("whale_count", 0)
+                if "whale_net" in prev:
+                    entry["whale_delta"] = round(whale_net - prev["whale_net"], 4)
+            new_pos[coin] = {k: entry[k] for k in ("sm_net", "whale_net") if k in entry}
+
             if obs:
                 r = aggregate(obs, self.config).get(coin)
                 if r:
-                    out[coin] = {"score": r["score"], "label": r["label"],
-                                 "confidence": r["confidence"], "divergence": ddir}
+                    entry.update({"score": r["score"], "label": r["label"],
+                                  "confidence": r["confidence"], "divergence": ddir})
+            if entry:
+                out[coin] = entry
+        self._prev_pos = new_pos
         return out
 
     def _refresh_market_data(self) -> None:

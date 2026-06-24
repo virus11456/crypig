@@ -173,6 +173,18 @@ function fundFmt(ann, flag){
   return `<span style="color:${fl.c}">${sign}${(ann*100).toFixed(1)}%</span>${badge}`;
 }
 const fundCell=r=>fundFmt(r.funding_ann, r.funding_flag);
+// 淨多空 + 與上一輪(20分鐘)變化；whale=true 時把「減多/加空」標成「在賣」
+function netCell(net, delta, whale){
+  if(net==null) return '—';
+  const col = net>0.05?'#3fb950':net<-0.05?'#f85149':'#8b949e';
+  const side = net>0.05?'偏多':net<-0.05?'偏空':'中性';
+  let mv='';
+  if(delta!=null && Math.abs(delta)>=0.02){
+    if(delta>0) mv=` <span style="color:#3fb950">▲${whale?'加倉':'加多'}</span>`;
+    else mv=` <span style="color:#f85149">▼${whale?'在賣':'加空'}</span>`;
+  }
+  return `<span style="color:${col}">${side} ${(net*100).toFixed(0)}%</span>${mv}`;
+}
 let MROWS=[], MSORT={col:'score',dir:-1}, MFILT='';
 const MABS=new Set(['funding_ann']);   // 費率欄按絕對值排（抓最極端）
 const MCOLS=[
@@ -180,6 +192,8 @@ const MCOLS=[
   {k:'label', t:'判斷',f:r=>r.label?`<span style="color:${LBLC(r.label)}">${r.label}</span>`:'—'},
   {k:'score', t:'分數',f:r=>r.score==null?'—':r.score.toFixed(3)},
   {k:'confidence',t:'信心',f:r=>r.confidence==null?'—':(r.confidence*100).toFixed(0)+'%'},
+  {k:'sm_net',t:'聰明錢多空',f:r=>netCell(r.sm_net, r.sm_delta)},
+  {k:'whale_net',t:'巨鯨多空',f:r=>netCell(r.whale_net, r.whale_delta, true)},
   {k:'divergence',t:'日線背離',f:r=>{
     if(!r.divergence) return '—';
     if(r.divergence==='bull') return '<span style="color:#3fb950">📈 底背離</span>';
@@ -232,7 +246,7 @@ async function refresh(){
     open_interest:c.open_interest_usd, premium:c.premium,
     market_cap:c.market_cap, oi_cap:c.oi_cap, vol_cap:c.vol_cap});
   Object.entries(scores).forEach(([s,v])=>{ const r=bySym[s]||(bySym[s]={symbol:s});
-    r.label=v.label; r.score=v.score; r.confidence=v.confidence; r.divergence=v.divergence; });
+    Object.assign(r, v); });   // label/score/confidence/divergence/sm_net/whale_net/…
   decisions.forEach(d=>{ const r=bySym[d.symbol]||(bySym[d.symbol]={symbol:d.symbol});
     r.label=d.label; r.score=d.score; r.confidence=d.confidence; if(r.price==null)r.price=d.price; });
   MROWS=Object.values(bySym);

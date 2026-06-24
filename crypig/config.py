@@ -18,6 +18,7 @@ class SmartMoneyConfig(BaseModel):
     # Hyperliquid 無「一年」時間窗；allTime / month 為最接近代理
     window: str = "allTime"          # day | week | month | allTime
     max_traders: int = 100           # 取前 N 名合格交易者統計持倉
+    whale_top_n: int = 30            # 鯨魚＝這批帳號中總部位名目最大的前 N 名（與獲利無關）
 
 
 class WhalesConfig(BaseModel):

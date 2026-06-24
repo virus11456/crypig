@@ -31,6 +31,7 @@ class SmartMoneyAgent(Agent):
         self._agg: dict[str, dict] | None = None
         self._agg_ts: float = 0.0
         self._trader_count: int = 0
+        self._whale_count: int = 0
 
     def _coin_aggregates(self) -> dict[str, dict]:
         """從 Hyperliquid 取前 N 名合格交易者的持倉，聚合成 coin -> 多空名目。"""
@@ -48,28 +49,46 @@ class SmartMoneyAgent(Agent):
             limit=cfg.max_traders,
         )
         states = self._client.states_bulk([addr for addr, _ in traders])  # 並發抓持倉
-        agg: dict[str, dict] = {}
+
+        # 每個帳號的淨值(accountValue)＋持倉；鯨魚＝淨值最大的前 N 名（錢很多的人）
+        accounts: list[tuple[str, float, list]] = []
         for addr, _pnl in traders:
             state = states.get(addr)
-            if state is None:           # 單一帳號失敗不影響整體
+            if state is None:
                 continue
-            for pos in self._client.iter_positions(state):
+            try:
+                av = float((state.get("marginSummary") or {}).get("accountValue", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                av = 0.0
+            accounts.append((addr, av, list(self._client.iter_positions(state))))
+
+        whale_addrs = {a for a, _av, _p in
+                       sorted(accounts, key=lambda x: x[1], reverse=True)[:cfg.whale_top_n]}
+
+        agg: dict[str, dict] = {}
+        for addr, _av, positions in accounts:
+            is_whale = addr in whale_addrs
+            for pos in positions:
                 coin = pos["coin"]
                 try:
                     szi = float(pos.get("szi", 0.0))
                     notional = abs(float(pos.get("positionValue", 0.0)))
                 except (TypeError, ValueError):
                     continue
-                bucket = agg.setdefault(coin, {"long": 0.0, "short": 0.0, "count": 0})
-                if szi > 0:
-                    bucket["long"] += notional
-                elif szi < 0:
-                    bucket["short"] += notional
-                bucket["count"] += 1
+                b = agg.setdefault(coin, {"long": 0.0, "short": 0.0, "count": 0,
+                                          "whale_long": 0.0, "whale_short": 0.0, "whale_count": 0})
+                side = "long" if szi > 0 else "short" if szi < 0 else None
+                if side:
+                    b[side] += notional
+                    b["count"] += 1
+                    if is_whale:
+                        b["whale_" + side] += notional
+                        b["whale_count"] += 1
 
         self._agg = agg
         self._agg_ts = time.time()
-        self._trader_count = len(traders)
+        self._trader_count = len(accounts)
+        self._whale_count = len(whale_addrs)
         return agg
 
     def fetch(self, symbol: str) -> dict:
