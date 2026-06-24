@@ -168,10 +168,12 @@ async function loadCard(d, cm){
   const con=d.consensus||{}, ssp=spark(hist), psp=pspark(hist);
   let ratios='';
   if(cm){
-    const fl=FFLAG[cm.funding_flag]||FFLAG.normal;
-    const fund = cm.funding_ann==null ? '' :
-      `<span>資金費率 <b style="color:${fl.c}">${cm.funding_ann>=0?'+':''}${(cm.funding_ann*100).toFixed(1)}%</b>`
-      + (cm.funding_flag&&cm.funding_flag!=='normal'?` <span class="chip" style="background:${fl.c}22;color:${fl.c}">${fl.t}</span>`:'')
+    const fa=cm.hl_funding_ann!=null?cm.hl_funding_ann:cm.funding_ann;
+    const ff=cm.hl_funding_ann!=null?cm.hl_funding_flag:cm.funding_flag;
+    const fl=FFLAG[ff]||FFLAG.normal;
+    const fund = fa==null ? '' :
+      `<span>資金費率 <b style="color:${fl.c}">${fa>=0?'+':''}${(fa*100).toFixed(1)}%</b>`
+      + (ff&&ff!=='normal'?` <span class="chip" style="background:${fl.c}22;color:${fl.c}">${fl.t}</span>`:'')
       + `</span>`;
     ratios = `<div class="ratios">
       <span>OI/Cap <b style="color:#58a6ff">${cm.oi_cap==null?'—':(cm.oi_cap*100).toFixed(2)+'%'}</b></span>
@@ -274,7 +276,7 @@ function fundFmt(ann, flag){
 }
 const fundCell=r=>fundFmt(r.funding_ann, r.funding_flag);
 let MROWS=[], MSORT={col:'score',dir:-1}, MFILT='';
-const MABS=new Set(['funding_ann','hl_funding_ann']);   // 費率欄按絕對值排（抓最極端）
+const MABS=new Set(['funding_ann']);   // 費率欄按絕對值排（抓最極端）
 const MCOLS=[
   {k:'symbol',t:'幣別',f:r=>`<span class="symc">${r.symbol}</span>`},
   {k:'label', t:'判斷',f:r=>r.label?`<span style="color:${LBLC(r.label)}">${r.label}</span>`:'—'},
@@ -283,8 +285,7 @@ const MCOLS=[
   {k:'price',t:'標記價',f:r=>money(r.price)},
   {k:'oi_cap',t:'OI/Cap',f:r=>r.oi_cap==null?'—':(r.oi_cap*100).toFixed(2)+'%'},
   {k:'vol_cap',t:'Vol/Cap',f:r=>r.vol_cap==null?'—':(r.vol_cap*100).toFixed(2)+'%'},
-  {k:'funding_ann',t:'費率·跨所',f:fundCell},
-  {k:'hl_funding_ann',t:'費率·HL',f:r=>fundFmt(r.hl_funding_ann, r.hl_funding_flag)},
+  {k:'funding_ann',t:'資金費率(年化)',f:fundCell},
   {k:'open_interest',t:'OI',f:r=>bigMoney(r.open_interest)},
   {k:'premium',t:'溢價',f:r=>r.premium==null?'—':(r.premium*100).toFixed(3)+'%'},
   {k:'market_cap',t:'市值',f:r=>bigMoney(r.market_cap)},
@@ -320,17 +321,14 @@ async function refresh(){
   let decisions=[], hlcoins=[];
   try{ decisions=(await (await fetch('/decisions')).json()).decisions||[]; }catch(e){}
   try{ hlcoins=(await (await fetch('/hl_market')).json()).coins||[]; }catch(e){}
-  // 合併：以全市場幣為底，疊加決策與 CoinGecko 宏觀
+  // 合併：以全市場幣(HL+CoinGecko 已整合)為底，疊加決策。費率統一用 HL。
   const bySym={};
   hlcoins.forEach(c=>bySym[c.symbol]={symbol:c.symbol, price:c.price,
-    hl_funding_ann:c.funding_ann, hl_funding_flag:c.funding_flag,
-    open_interest:c.open_interest_usd, premium:c.premium});
+    funding_ann:c.funding_ann, funding_flag:c.funding_flag,
+    open_interest:c.open_interest_usd, premium:c.premium,
+    market_cap:c.market_cap, oi_cap:c.oi_cap, vol_cap:c.vol_cap});
   decisions.forEach(d=>{ const r=bySym[d.symbol]||(bySym[d.symbol]={symbol:d.symbol});
     r.label=d.label; r.score=d.score; r.confidence=d.confidence; if(r.price==null)r.price=d.price; });
-  Object.entries(cmap).forEach(([s,v])=>{ const r=bySym[s]||(bySym[s]={symbol:s});
-    r.oi_cap=v.oi_cap; r.vol_cap=v.vol_cap; r.funding_ann=v.funding_ann; r.funding_flag=v.funding_flag;
-    r.market_cap=v.market_cap; if(r.open_interest==null)r.open_interest=v.open_interest;
-    if(r.hl_funding_ann==null){r.hl_funding_ann=v.hl_funding_ann; r.hl_funding_flag=v.hl_funding_flag;} });
   MROWS=Object.values(bySym);
   renderTable();
   document.getElementById('ts').textContent=decisions[0]?('更新：'+new Date(decisions[0].ts).toLocaleString()):'';

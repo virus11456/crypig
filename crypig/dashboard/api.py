@@ -151,16 +151,23 @@ def _mock_hl_scan() -> list[dict]:
     import time
     t = time.time() / 3600
     from ..clients.hyperliquid import funding_flag
-    seed = [("BTC", 64000, 0.08), ("ETH", 3400, 0.30), ("SOL", 150, 0.62),
-            ("DOGE", 0.16, -0.12), ("HYPE", 28, 1.4), ("PEPE", 1e-5, -0.6),
-            ("WIF", 2.3, 0.9), ("LINK", 18, 0.04), ("AVAX", 38, -0.2),
-            ("APT", 9, 0.5), ("ARB", 1.1, -0.08), ("TIA", 6.5, 0.18)]
+    # (symbol, price, 基準費率, 市值)
+    seed = [("BTC", 64000, 0.08, 1.26e12), ("ETH", 3400, 0.30, 4.0e11),
+            ("SOL", 150, 0.62, 7.0e10), ("DOGE", 0.16, -0.12, 2.3e10),
+            ("HYPE", 28, 1.4, 9.0e9), ("PEPE", 1e-5, -0.6, 4.0e9),
+            ("WIF", 2.3, 0.9, 2.3e9), ("LINK", 18, 0.04, 1.1e10),
+            ("AVAX", 38, -0.2, 1.5e10), ("APT", 9, 0.5, 5.0e9),
+            ("ARB", 1.1, -0.08, 3.0e9), ("TIA", 6.5, 0.18, 1.2e9)]
     out = []
-    for i, (s, px, fr) in enumerate(seed):
+    for i, (s, px, fr, cap) in enumerate(seed):
         ann = fr * (1 + 0.3 * math.sin(t + i))
+        oi = 5e8 / (i + 1)
+        vol = cap * 0.05 * (1 + 0.2 * math.sin(t + i))
         out.append({"symbol": s, "price": px, "funding_ann": ann,
-                    "open_interest_usd": 5e8 / (i + 1), "premium": ann / 50,
-                    "funding_flag": funding_flag(ann)})
+                    "open_interest_usd": oi, "premium": ann / 50,
+                    "funding_flag": funding_flag(ann),
+                    "market_cap": cap, "volume_24h": vol,
+                    "oi_cap": oi / cap, "vol_cap": vol / cap})
     out.sort(key=lambda r: abs(r["funding_ann"]), reverse=True)
     return out
 
@@ -221,14 +228,39 @@ def macro() -> dict:
 
 @app.get("/hl_market")
 def hl_market() -> dict:
-    """Hyperliquid 全市場（全部永續幣）資金費率掃描，依 |年化費率| 排序。"""
+    """Hyperliquid 全市場（全部永續幣）資金費率掃描 + 跨平台補市值/OI-Cap/Vol-Cap。
+
+    跨平台整合：HL（標記價、資金費率、溢價、OI 後備）＋ CoinGecko（市值、量、
+    跨所聚合 OI）。OI 優先用跨所聚合、否則 HL；市值對得上的幣才有(同名取最大市值)。
+    """
     if orchestrator().config.use_mock:
         coins = _mock_hl_scan()
-    else:
-        try:
-            coins = hl().funding_scan()
-        except Exception as e:
-            return {"error": str(e), "count": 0, "coins": []}
+        return {"count": len(coins), "coins": coins}
+    try:
+        coins = hl().funding_scan()
+    except Exception as e:
+        return {"error": str(e), "count": 0, "coins": []}
+    m = market()
+    try:
+        tm = m.top_markets()
+    except Exception:
+        tm = {}
+    try:
+        deriv = m.aggregate_derivatives()
+    except Exception:
+        deriv = {}
+    for c in coins:
+        s = c["symbol"]
+        info = tm.get(s)
+        cap = info["market_cap"] if info else None
+        vol = info["volume_24h"] if info else None
+        c["market_cap"] = cap
+        c["volume_24h"] = vol
+        c["vol_cap"] = (vol / cap) if (cap and vol) else None
+        agg = deriv.get(s)
+        oi = agg["open_interest_usd"] if (agg and agg.get("open_interest_usd")) else c["open_interest_usd"]
+        c["open_interest_usd"] = oi
+        c["oi_cap"] = (oi / cap) if (cap and oi) else None
     return {"count": len(coins), "coins": coins}
 
 

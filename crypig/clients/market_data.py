@@ -36,6 +36,8 @@ class MarketDataClient:
         self._coin_cache: dict | None = None
         self._coin_key: str = ""
         self._coin_ts: float = 0.0
+        self._top_cache: dict | None = None
+        self._top_ts: float = 0.0
 
     def aggregate_derivatives(self, ttl: float = 60.0) -> dict[str, dict]:
         """全市場合約持倉量：聚合 CoinGecko 各交易所衍生品（免金鑰）。
@@ -124,6 +126,30 @@ class MarketDataClient:
         if ann < -0.05:
             return "squeeze"
         return "normal"
+
+    def top_markets(self, per_page: int = 250, ttl: float = 300.0) -> dict[str, dict]:
+        """CoinGecko 前 N 大市值幣的 {SYMBOL: {market_cap, volume_24h}}（一次抓、快取）。
+
+        用來補全市場列表中各幣的市值與量（同名取市值最大者）。
+        """
+        if self._top_cache is not None and time.time() - self._top_ts < ttl:
+            return self._top_cache
+        raw = self._client.get(
+            "https://api.coingecko.com/api/v3/coins/markets",
+            params={"vs_currency": "usd", "order": "market_cap_desc",
+                    "per_page": str(per_page), "page": "1"}).json()
+        out: dict[str, dict] = {}
+        if isinstance(raw, list):
+            for m in raw:
+                if not isinstance(m, dict):
+                    continue
+                sym = (m.get("symbol") or "").upper()
+                if sym and sym not in out:        # 同名取第一個(市值最大)
+                    out[sym] = {"market_cap": float(m.get("market_cap") or 0.0),
+                                "volume_24h": float(m.get("total_volume") or 0.0)}
+        if out:
+            self._top_cache, self._top_ts = out, time.time()
+        return out
 
     def coin_macro(self, symbols: list[str], ttl: float = 120.0) -> dict[str, dict]:
         """各幣 OI/Cap、Vol/Cap、資金費率(年化)與異常分級。快取以減少 CoinGecko 呼叫。"""
