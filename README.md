@@ -89,6 +89,14 @@ uvicorn crypig.dashboard.api:app --reload
 
 預設 mock 模式用 `decisions`、真實模式用 `ohlcv`，可用 `?price_source=` 覆寫。
 
+## 線上 Demo
+
+**https://web-production-f997d.up.railway.app**（Railway，真實資料模式）
+
+部署在 Railway，已連結本 GitHub repo：**push 到部署分支即自動重新部署**。
+線上實例設 `USE_MOCK=false`，跑真實資料源（Hyperliquid／CoinGecko／OKX／
+bitcoin-data）；鯨魚與 LTH 為鏈上日更指標，需跨日才看得到變化量。
+
 ## 部署到 Railway
 
 專案已含 `railway.toml` / `Procfile`（綁 `$PORT`）。在 Railway：
@@ -99,6 +107,7 @@ uvicorn crypig.dashboard.api:app --reload
 3. 部署完按 **Generate Domain** 取得公開網址，開首頁即看板。
 
 啟動後內建**背景排程**會每隔一段時間自動跑一輪、累積決策供看板與回測。
+service 連到 GitHub 後，之後 push 會自動觸發部署（CI/CD）。
 
 可用環境變數（Railway → Variables）：
 
