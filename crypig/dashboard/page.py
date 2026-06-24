@@ -310,7 +310,7 @@ function renderTable(){
   const head=MCOLS.map(c=>`<th onclick="mSort('${c.k}')">${c.t}${arrow(c.k)}</th>`).join('');
   document.getElementById('table').innerHTML=`<div class="box">
     <div class="row" style="margin-bottom:10px;gap:12px">
-      <h2 style="margin:0">📋 幣別總表 <small>共 ${MROWS.length} 幣 · 分析幣(BTC/ETH/SOL)含完整決策、其餘顯示 HL 場內 · 點標題排序</small></h2>
+      <h2 style="margin:0">📋 幣別總表 <small>共 ${MROWS.length} 幣 · BTC/ETH/SOL 完整4訊號決策、其餘為聰明錢+資金費率輕量評分 · 點標題排序</small></h2>
       <input class="filt" placeholder="搜尋幣別…" oninput="MFILT=this.value.trim().toUpperCase();renderMBody()" value="${MFILT}">
     </div>
     <div class="scroll"><table class="tbl"><thead><tr>${head}</tr></thead><tbody id="mbody">${mBodyHTML()}</tbody></table></div></div>`;
@@ -318,15 +318,18 @@ function renderTable(){
 async function refresh(){
   loadBacktest();
   const cmap=await loadMacro();
-  let decisions=[], hlcoins=[];
+  let decisions=[], hlcoins=[], scores={};
   try{ decisions=(await (await fetch('/decisions')).json()).decisions||[]; }catch(e){}
   try{ hlcoins=(await (await fetch('/hl_market')).json()).coins||[]; }catch(e){}
-  // 合併：以全市場幣(HL+CoinGecko 已整合)為底，疊加決策。費率統一用 HL。
+  try{ scores=(await (await fetch('/scores')).json()).scores||{}; }catch(e){}
+  // 合併：HL+CoinGecko 已整合為底；輕量全幣評分疊上；watchlist 完整決策最後覆蓋。
   const bySym={};
   hlcoins.forEach(c=>bySym[c.symbol]={symbol:c.symbol, price:c.price,
     funding_ann:c.funding_ann, funding_flag:c.funding_flag,
     open_interest:c.open_interest_usd, premium:c.premium,
     market_cap:c.market_cap, oi_cap:c.oi_cap, vol_cap:c.vol_cap});
+  Object.entries(scores).forEach(([s,v])=>{ const r=bySym[s]||(bySym[s]={symbol:s});
+    r.label=v.label; r.score=v.score; r.confidence=v.confidence; });
   decisions.forEach(d=>{ const r=bySym[d.symbol]||(bySym[d.symbol]={symbol:d.symbol});
     r.label=d.label; r.score=d.score; r.confidence=d.confidence; if(r.price==null)r.price=d.price; });
   MROWS=Object.values(bySym);

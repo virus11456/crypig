@@ -226,6 +226,15 @@ def macro() -> dict:
     return out
 
 
+@app.get("/scores")
+def scores() -> dict:
+    """全市場各幣輕量決策（聰明錢持倉 + 資金費率擁擠）。表為空時先跑一輪。"""
+    orc = orchestrator()
+    if not orc.all_scores and not orc.config.use_mock:
+        orc.run_cycle()
+    return {"scores": orc.all_scores}
+
+
 @app.get("/hl_market")
 def hl_market() -> dict:
     """Hyperliquid 全市場（全部永續幣）資金費率掃描 + 跨平台補市值/OI-Cap/Vol-Cap。
