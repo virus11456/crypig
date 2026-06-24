@@ -33,6 +33,9 @@ class MarketDataClient:
         self._deriv_ts: float = 0.0
         self._macro_cache: dict | None = None
         self._macro_ts: float = 0.0
+        self._coin_cache: dict | None = None
+        self._coin_key: str = ""
+        self._coin_ts: float = 0.0
 
     def aggregate_derivatives(self, ttl: float = 60.0) -> dict[str, dict]:
         """全市場合約持倉量：聚合 CoinGecko 各交易所衍生品（免金鑰）。
@@ -91,11 +94,10 @@ class MarketDataClient:
         cap = float(g["total_market_cap"]["usd"])
         vol = float(g["total_volume"]["usd"])
         oi = None
-        try:
-            deriv = self._client.get("https://api.coingecko.com/api/v3/derivatives").json()
-            if isinstance(deriv, list):
-                oi = sum(float(x["open_interest"]) for x in deriv
-                         if isinstance(x, dict) and x.get("open_interest"))
+        try:                                 # 用聚合衍生品(共用快取)算總 OI，省一次重複呼叫
+            deriv = self.aggregate_derivatives()
+            tot = sum(float(v.get("open_interest_usd") or 0.0) for v in deriv.values())
+            oi = tot or None
         except Exception:
             oi = None
         out = {
@@ -124,7 +126,11 @@ class MarketDataClient:
         return "normal"
 
     def coin_macro(self, symbols: list[str], ttl: float = 120.0) -> dict[str, dict]:
-        """各幣 OI/Cap、Vol/Cap、資金費率(年化)與異常分級。"""
+        """各幣 OI/Cap、Vol/Cap、資金費率(年化)與異常分級。快取以減少 CoinGecko 呼叫。"""
+        key = ",".join(symbols)
+        if (self._coin_cache is not None and self._coin_key == key
+                and time.time() - self._coin_ts < ttl):
+            return self._coin_cache
         ids = ",".join(self._CG_ID[s] for s in symbols if s in self._CG_ID)
         raw = self._client.get(
             "https://api.coingecko.com/api/v3/coins/markets",
@@ -151,6 +157,8 @@ class MarketDataClient:
                 "funding_ann": fund_ann,
                 "funding_flag": self._funding_flag(fund_ann),
             }
+        if out:                              # 只快取成功結果（空的就讓下次重試）
+            self._coin_cache, self._coin_key, self._coin_ts = out, key, time.time()
         return out
 
     def close(self) -> None:
