@@ -127,6 +127,52 @@ def backtest_report(horizon_hours: float | None = None,
     return backtest(orc.decisions, horizon_hours=h, price_fn=price_fn)
 
 
+_market: MarketDataClient | None = None
+
+
+def market() -> MarketDataClient:
+    global _market
+    if _market is None:
+        _market = MarketDataClient()
+    return _market
+
+
+def _mock_macro(syms: list[str]) -> dict:
+    import math
+    import time
+    t = time.time() / 3600
+    cap = 2.2e12 * (1 + 0.02 * math.sin(t))
+    vol = 7.0e10 * (1 + 0.10 * math.sin(t * 1.3))
+    oi = 1.5e11 * (1 + 0.05 * math.cos(t))
+    g = {"market_cap": cap, "volume_24h": vol, "open_interest": oi,
+         "oi_cap": oi / cap, "vol_cap": vol / cap,
+         "btc_dominance": 54.0 + 2 * math.sin(t)}
+    base = {"BTC": (1.30e12, 3.0e10, 3.1e10), "ETH": (4.0e11, 1.5e10, 1.2e10),
+            "SOL": (7.0e10, 4.0e9, 6.0e9)}
+    per: dict[str, dict] = {}
+    for s in syms:
+        c, v, o = base.get(s, (5.0e10, 2.0e9, 1.0e9))
+        c *= 1 + 0.02 * math.sin(t); v *= 1 + 0.10 * math.sin(t * 1.7)
+        o *= 1 + 0.05 * math.cos(t * 1.2)
+        per[s] = {"market_cap": c, "volume_24h": v, "open_interest": o,
+                  "oi_cap": o / c, "vol_cap": v / c}
+    return {"global": g, "per_symbol": per}
+
+
+@app.get("/macro")
+def macro() -> dict:
+    """全市場宏觀 + 各幣 OI/Cap、Vol/Cap。mock 模式回合成值。"""
+    orc = orchestrator()
+    syms = orc.config.symbols
+    if orc.config.use_mock:
+        return _mock_macro(syms)
+    m = market()
+    try:
+        return {"global": m.global_macro(), "per_symbol": m.coin_macro(syms)}
+    except Exception as e:                       # 外部 API 失敗時不讓看板崩
+        return {"error": str(e), "global": None, "per_symbol": {}}
+
+
 @app.post("/ask")
 def ask(body: AskBody) -> dict:
     return orchestrator().ask(body.question)

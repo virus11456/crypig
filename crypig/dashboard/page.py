@@ -69,6 +69,16 @@ INDEX_HTML = r"""<!doctype html>
   .sig .name{font-weight:600;color:var(--fg)}
   .chip{font-size:11px;padding:1px 8px;border-radius:999px;font-weight:700}
   .calc{color:var(--mut);font-size:11px;margin-top:2px}
+  .ratios{display:flex;gap:18px;font-size:13px;margin:6px 0 2px;color:var(--mut);flex-wrap:wrap}
+  .ratios b{font-size:15px}
+  .tbl{width:100%;border-collapse:collapse;font-size:13px}
+  .tbl th{text-align:right;color:var(--mut);font-weight:600;padding:8px 10px;cursor:pointer;
+          user-select:none;border-bottom:1px solid var(--line);white-space:nowrap}
+  .tbl th:first-child,.tbl td:first-child{text-align:left}
+  .tbl td{text-align:right;padding:8px 10px;border-bottom:1px solid #21262d;white-space:nowrap}
+  .tbl th:hover{color:var(--fg)}
+  .tbl tbody tr:hover{background:#1c2230}
+  .tbl .symc{font-weight:700;font-size:14px}
 </style>
 </head>
 <body>
@@ -78,6 +88,8 @@ INDEX_HTML = r"""<!doctype html>
   <span style="flex:1"></span>
   <button id="run" onclick="runCycle()">立即跑一輪</button>
 </header>
+<section id="macro" class="bt"><div class="empty">宏觀載入中…</div></section>
+<section id="list" class="bt"><div class="empty">列表載入中…</div></section>
 <section id="bt" class="bt"><div class="empty">回測載入中…</div></section>
 <main id="cards"><div class="empty">載入中…</div></main>
 <script>
@@ -146,10 +158,16 @@ function pspark(hist){
   return `<svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
     <polyline points="${poly}" fill="none" stroke="${up?C.bull:C.bear}" stroke-width="1.5"/></svg>`;
 }
-async function loadCard(d){
+async function loadCard(d, cm){
   let hist=[];
   try{hist=(await (await fetch(`/decisions/history?symbol=${d.symbol}&limit=50`)).json()).history;}catch(e){}
   const con=d.consensus||{}, ssp=spark(hist), psp=pspark(hist);
+  const ratios = cm ? `<div class="ratios">
+      <span>OI/Cap <b style="color:#58a6ff">${(cm.oi_cap*100).toFixed(2)}%</b></span>
+      <span>Vol/Cap <b style="color:#58a6ff">${(cm.vol_cap*100).toFixed(2)}%</b></span>
+      <span>OI ${bigMoney(cm.open_interest)}</span>
+      <span>市值 ${bigMoney(cm.market_cap)}</span>
+    </div>` : '';
   return `<div class="card">
     <div class="row"><span class="sym">${d.symbol}</span>
       <span class="badge" style="background:${LBLC(d.label)}22;color:${LBLC(d.label)}">${d.label}</span></div>
@@ -160,6 +178,7 @@ async function loadCard(d){
       <div class="stat"><div class="v">${(d.confidence*100).toFixed(0)}%</div><div class="k">信心度</div></div>
       <div class="stat"><div class="v">${money(d.price)}</div><div class="k">參考價</div></div>
     </div>
+    ${ratios}
     <div class="action" style="color:${LBLC(d.label)}">${d.action}</div>
     <div class="reason">${d.reason}</div>
     <div class="sec">多空共識（加權佔比）</div>
@@ -173,6 +192,33 @@ async function loadCard(d){
   </div>`;
 }
 function pct(x){return x==null?'—':(x*100).toFixed(1)+'%';}
+function bigMoney(x){
+  if(x==null) return '—';
+  const a=Math.abs(x);
+  if(a>=1e12) return '$'+(x/1e12).toFixed(2)+'T';
+  if(a>=1e9) return '$'+(x/1e9).toFixed(1)+'B';
+  if(a>=1e6) return '$'+(x/1e6).toFixed(1)+'M';
+  return '$'+Math.round(x);
+}
+async function loadMacro(){
+  try{
+    const m=await (await fetch('/macro')).json();
+    const g=m.global;
+    if(!g){document.getElementById('macro').innerHTML='<div class="box empty">宏觀資料暫無（外部 API 失敗）</div>';return {};}
+    document.getElementById('macro').innerHTML=`<div class="box">
+      <h2>🌐 全市場宏觀 <small>整體槓桿與換手環境（來源 CoinGecko 聚合）</small></h2>
+      <div class="kpis">
+        <div class="kpi"><div class="v">${bigMoney(g.market_cap)}</div><div class="k">總市值</div></div>
+        <div class="kpi"><div class="v">${bigMoney(g.volume_24h)}</div><div class="k">24h 成交量</div></div>
+        <div class="kpi"><div class="v">${bigMoney(g.open_interest)}</div><div class="k">全市場未平倉 OI</div></div>
+        <div class="kpi"><div class="v" style="color:#58a6ff">${(g.oi_cap*100).toFixed(2)}%</div><div class="k">OI/Cap 槓桿水位</div></div>
+        <div class="kpi"><div class="v" style="color:#58a6ff">${(g.vol_cap*100).toFixed(2)}%</div><div class="k">Vol/Cap 換手率</div></div>
+        <div class="kpi"><div class="v">${(g.btc_dominance||0).toFixed(1)}%</div><div class="k">BTC 市佔</div></div>
+      </div>
+    </div>`;
+    return m.per_symbol||{};
+  }catch(e){document.getElementById('macro').innerHTML='<div class="box empty">宏觀載入失敗：'+e+'</div>';return {};}
+}
 function eqspark(eq){
   if(!eq||eq.length<2) return '<span class="meta">交易筆數不足，無法畫曲線</span>';
   const W=600,H=60,n=eq.length,vs=eq.map(e=>e.equity),mn=Math.min(1,...vs),mx=Math.max(1,...vs),pad=(mx-mn)*0.1||0.01;
@@ -203,13 +249,47 @@ async function loadBacktest(){
     </div>`;
   }catch(e){document.getElementById('bt').innerHTML='<div class="box empty">回測載入失敗：'+e+'</div>';}
 }
+// ---- 可排序幣別列表 ----
+let LISTROWS=[], SORT={col:'score',dir:-1};
+const LCOLS=[
+  {k:'symbol',t:'幣別',  f:r=>`<span class="symc">${r.symbol}</span>`},
+  {k:'label', t:'判斷',  f:r=>`<span style="color:${LBLC(r.label)}">${r.label}</span>`},
+  {k:'score', t:'分數',  f:r=>r.score==null?'—':r.score.toFixed(3)},
+  {k:'confidence',t:'信心',f:r=>r.confidence==null?'—':(r.confidence*100).toFixed(0)+'%'},
+  {k:'price', t:'參考價',f:r=>money(r.price)},
+  {k:'oi_cap',t:'OI/Cap',f:r=>r.oi_cap==null?'—':(r.oi_cap*100).toFixed(2)+'%'},
+  {k:'vol_cap',t:'Vol/Cap',f:r=>r.vol_cap==null?'—':(r.vol_cap*100).toFixed(2)+'%'},
+  {k:'open_interest',t:'OI',f:r=>bigMoney(r.open_interest)},
+  {k:'market_cap',t:'市值',f:r=>bigMoney(r.market_cap)},
+];
+function sortList(col){ if(SORT.col===col) SORT.dir*=-1; else {SORT.col=col;SORT.dir=-1;} renderList(); }
+function renderList(){
+  if(!LISTROWS.length){document.getElementById('list').innerHTML='';return;}
+  const rows=[...LISTROWS].sort((a,b)=>{
+    let va=a[SORT.col], vb=b[SORT.col];
+    if(va==null) return 1; if(vb==null) return -1;
+    if(typeof va==='string') return SORT.dir*va.localeCompare(vb);
+    return SORT.dir*(va-vb);
+  });
+  const arrow=k=>SORT.col===k?(SORT.dir<0?' ▼':' ▲'):'';
+  const head=LCOLS.map(c=>`<th onclick="sortList('${c.k}')">${c.t}${arrow(c.k)}</th>`).join('');
+  const body=rows.map(r=>`<tr>${LCOLS.map(c=>`<td>${c.f(r)}</td>`).join('')}</tr>`).join('');
+  document.getElementById('list').innerHTML=`<div class="box">
+    <h2>📋 幣別列表 <small>點欄位標題排序（再點一次反向）</small></h2>
+    <table class="tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
 async function refresh(){
   loadBacktest();
+  const cmap=await loadMacro();
   try{
     const {decisions}=await (await fetch('/decisions')).json();
     document.getElementById('ts').textContent=decisions[0]?('更新：'+new Date(decisions[0].ts).toLocaleString()):'';
     if(!decisions.length){document.getElementById('cards').innerHTML='<div class="empty">尚無決策，點「立即跑一輪」。</div>';return;}
-    const html=await Promise.all(decisions.map(loadCard));
+    LISTROWS=decisions.map(d=>Object.assign(
+      {symbol:d.symbol,label:d.label,score:d.score,confidence:d.confidence,price:d.price},
+      cmap[d.symbol]||{}));
+    renderList();
+    const html=await Promise.all(decisions.map(d=>loadCard(d, cmap[d.symbol])));
     document.getElementById('cards').innerHTML=html.join('');
   }catch(e){document.getElementById('cards').innerHTML='<div class="empty">載入失敗：'+e+'</div>';}
 }

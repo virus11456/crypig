@@ -29,6 +29,8 @@ class MarketDataClient:
             timeout=timeout, headers={"User-Agent": "crypig/0.1"})
         self._deriv_cache: dict | None = None
         self._deriv_ts: float = 0.0
+        self._macro_cache: dict | None = None
+        self._macro_ts: float = 0.0
 
     def aggregate_derivatives(self, ttl: float = 60.0) -> dict[str, dict]:
         """全市場合約持倉量：聚合 CoinGecko 各交易所衍生品（免金鑰）。
@@ -61,6 +63,52 @@ class MarketDataClient:
             out[base] = a
         self._deriv_cache = out
         self._deriv_ts = time.time()
+        return out
+
+    # symbol -> CoinGecko coin id（取各幣市值/成交量用）
+    _CG_ID = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana",
+              "BNB": "binancecoin", "XRP": "ripple", "DOGE": "dogecoin"}
+
+    def global_macro(self, ttl: float = 120.0) -> dict:
+        """全市場宏觀：總市值、24h 量、全市場 OI，及 OI/Cap、Vol/Cap。"""
+        if self._macro_cache is not None and time.time() - self._macro_ts < ttl:
+            return self._macro_cache
+        g = self._client.get("https://api.coingecko.com/api/v3/global").json()["data"]
+        cap = float(g["total_market_cap"]["usd"])
+        vol = float(g["total_volume"]["usd"])
+        deriv = self._client.get("https://api.coingecko.com/api/v3/derivatives").json()
+        oi = sum(float(x["open_interest"]) for x in deriv if x.get("open_interest"))
+        out = {
+            "market_cap": cap, "volume_24h": vol, "open_interest": oi,
+            "oi_cap": oi / cap if cap else 0.0,
+            "vol_cap": vol / cap if cap else 0.0,
+            "btc_dominance": float(g.get("market_cap_percentage", {}).get("btc", 0.0)),
+        }
+        self._macro_cache, self._macro_ts = out, time.time()
+        return out
+
+    def coin_macro(self, symbols: list[str], ttl: float = 120.0) -> dict[str, dict]:
+        """各幣 OI/Cap、Vol/Cap：市值/量取自 CoinGecko，OI 取自聚合衍生品。"""
+        ids = ",".join(self._CG_ID[s] for s in symbols if s in self._CG_ID)
+        markets = self._client.get(
+            "https://api.coingecko.com/api/v3/coins/markets",
+            params={"vs_currency": "usd", "ids": ids}).json()
+        by_id = {m["id"]: m for m in markets}
+        deriv = self.aggregate_derivatives()
+        out: dict[str, dict] = {}
+        for s in symbols:
+            cid = self._CG_ID.get(s)
+            m = by_id.get(cid) if cid else None
+            if not m:
+                continue
+            cap = float(m.get("market_cap") or 0.0)
+            vol = float(m.get("total_volume") or 0.0)
+            oi = float(deriv.get(s, {}).get("open_interest_usd", 0.0))
+            out[s] = {
+                "market_cap": cap, "volume_24h": vol, "open_interest": oi,
+                "oi_cap": oi / cap if cap else 0.0,
+                "vol_cap": vol / cap if cap else 0.0,
+            }
         return out
 
     def close(self) -> None:
