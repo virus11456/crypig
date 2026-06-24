@@ -60,7 +60,7 @@ class LTHAgent(Agent):
         if supply is None:
             return Observation(
                 source=self.name, symbol=symbol, signal_type="lth_supply",
-                direction="neutral", magnitude=0.0,
+                direction="neutral", magnitude=0.0, status="no_data",
                 summary=f"{symbol} 長期持有者(≥{threshold}天)：{raw.get('note', '無資料')}。",
                 entities=[("cohort", "long_term_holders"), ("asset", symbol)],
                 relations=[], raw=raw,
@@ -71,6 +71,7 @@ class LTHAgent(Agent):
         self._store.record(self.name, symbol, "lth_supply", supply, ts)
 
         direction, magnitude, note = "neutral", 0.1, "（無前一輪快照，LTH 變化待累積）"
+        status = "ok" if prev else "warming"
         if prev:
             chg = (supply - prev[1]) / prev[1] if prev[1] else 0.0
             if chg > 0.002:
@@ -90,6 +91,7 @@ class LTHAgent(Agent):
             signal_type="lth_supply",
             direction=direction,
             magnitude=magnitude,
+            status=status,
             summary=summary,
             entities=[("cohort", "long_term_holders"), ("asset", symbol)],
             relations=[("long_term_holders", f"is_{direction}_on", symbol)]

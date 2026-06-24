@@ -95,7 +95,7 @@ class WhaleAgent(Agent):
         if whale_btc is None:                       # 限流無資料
             return Observation(
                 source=self.name, symbol=symbol, signal_type="whale_holdings",
-                direction="neutral", magnitude=0.0,
+                direction="neutral", magnitude=0.0, status="no_data",
                 summary=f"{symbol} 鯨魚持倉：{raw.get('note', '無資料')}。",
                 entities=[("cohort", "whales"), ("asset", symbol)], raw=raw)
 
@@ -104,6 +104,7 @@ class WhaleAgent(Agent):
         self._store.record(self.name, symbol, "whale_btc", whale_btc, ts)
 
         direction, magnitude, note = "neutral", 0.1, "（無前一輪快照，鯨魚持倉變化待累積）"
+        status = "ok" if prev else "warming"
         if prev:
             chg = (whale_btc - prev) / prev if prev else 0.0
             if chg > cfg.chg_threshold:
@@ -121,7 +122,7 @@ class WhaleAgent(Agent):
         summary = f"{symbol} 鯨魚持倉(≥100BTC大戶 共{held}{tail})：{note}。"
         return Observation(
             source=self.name, symbol=symbol, signal_type="whale_holdings",
-            direction=direction, magnitude=magnitude, summary=summary,
+            direction=direction, magnitude=magnitude, status=status, summary=summary,
             entities=[("cohort", "whales"), ("asset", symbol)],
             relations=[("whales", f"is_{direction}_on", symbol)] if direction != "neutral" else [],
             raw=raw)

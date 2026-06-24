@@ -27,6 +27,7 @@ class Observation:
     signal_type: str                  # 訊號種類，例如 "positioning" / "netflow" / "divergence"
     direction: str = "neutral"        # "bull" | "bear" | "neutral"
     magnitude: float = 0.0            # 0~1，訊號強度
+    status: str = "ok"                # "ok" | "no_data"(無資料/不適用) | "warming"(蒐集中/待跨日)
     summary: str = ""                 # 人類可讀摘要（也餵給 RAG 做檢索）
     entities: list[tuple[str, str]] = field(default_factory=list)   # (type, name)
     relations: list[Triple] = field(default_factory=list)          # KG 三元組

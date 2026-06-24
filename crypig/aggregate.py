@@ -72,6 +72,7 @@ def aggregate(observations: list[Observation], config: Config) -> dict:
             contribs.append({
                 "source": o.source,
                 "direction": o.direction,
+                "status": getattr(o, "status", "ok"),
                 "weight": round(w, 3),
                 "magnitude": round(o.magnitude, 3),
                 "contribution": round(w * sign * o.magnitude, 4),

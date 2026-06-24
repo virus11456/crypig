@@ -26,8 +26,9 @@ INDEX_HTML = r"""<!doctype html>
   button{background:var(--accent);color:#0d1117;border:0;border-radius:6px;
          padding:8px 14px;font-weight:600;cursor:pointer}
   button:disabled{opacity:.5;cursor:wait}
-  main{display:grid;grid-template-columns:1fr;
-       gap:16px;padding:24px;max-width:820px;margin:0 auto}
+  /* 電腦版寬、三欄並排（短）；窄螢幕自動堆疊成單欄 */
+  main{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));
+       gap:16px;padding:24px;max-width:1400px;margin:0 auto;align-items:start}
   .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
   .row{display:flex;justify-content:space-between;align-items:center}
   .sym{font-size:20px;font-weight:700}
@@ -38,14 +39,17 @@ INDEX_HTML = r"""<!doctype html>
   .meta{color:var(--mut);font-size:13px;margin:2px 0}
   .action{margin:8px 0;font-weight:600}
   .reason{color:var(--mut);font-size:13px;margin-bottom:10px}
-  .sig{margin:6px 0}
-  .sig .lbl{display:flex;justify-content:space-between;font-size:12px;color:var(--mut)}
-  .sig .bar{height:6px;background:#21262d;border-radius:999px;margin-top:3px;overflow:hidden}
+  .sig{margin:8px 0;padding:10px 12px;background:#0d1117;
+       border:1px solid var(--line);border-radius:8px}
+  .sig.nodata{opacity:.55;border-style:dashed}
+  .sigtitle{display:flex;justify-content:space-between;align-items:center;
+            font-size:15px;font-weight:700;color:var(--fg);margin-bottom:6px}
+  .sig .bar{height:6px;background:#21262d;border-radius:999px;margin-top:6px;overflow:hidden}
   .sig .bar i{display:block;height:6px;border-radius:999px}
   .alerts{margin-top:8px;font-size:12px;color:var(--bear)}
   .spark{margin-top:10px}
   .empty{color:var(--mut);padding:40px;text-align:center}
-  .bt{max-width:820px;margin:16px auto 0;padding:0 24px}
+  .bt{max-width:1400px;margin:16px auto 0;padding:0 24px}
   .bt .box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
   .bt h2{font-size:15px;margin:0 0 10px}
   .bt h2 small{color:var(--mut);font-weight:400}
@@ -87,8 +91,8 @@ function gauge(score){ // score -1..1
   return `<div class="gauge"><div class="mid"></div>
           <div class="fill" style="${style};background:${col}"></div></div>`;
 }
-const SRC={smart_money:'🧠 聰明錢',whale_flow:'🐋 鯨魚／持倉',
-           divergence:'📉 量價背離',lth_supply:'💎 長期持有者'};
+const SRC={smart_money:'🧠 聰明錢',whale_flow:'🐋 巨鯨持有者',
+           divergence:'📊 量價',lth_supply:'💎 長期持有者'};
 const DIRZH={bull:'偏多',bear:'偏空',neutral:'中性'};
 function money(x){
   if(x==null) return '—';
@@ -96,11 +100,21 @@ function money(x){
   return '$'+n.toLocaleString('en-US',{maximumFractionDigits:n<10?4:n<1000?2:0});
 }
 function sigbar(s){
-  const w=Math.min(Math.abs(s.contribution)*200,100), col=C[s.direction];
-  const sign=s.contribution>=0?'+':'';
+  const name=SRC[s.source]||s.source;
+  // 無資料／不適用：忠實標示，不假裝有分析
+  if(s.status==='no_data'){
+    return `<div class="sig nodata">
+      <div class="sigtitle"><span>${name}</span>
+        <span class="chip" style="background:#8b949e22;color:#8b949e">⛔ 無資料／不適用</span></div>
+      <div class="meta">${s.summary}</div></div>`;
+  }
+  const col=C[s.direction], sign=s.contribution>=0?'+':'';
+  const w=Math.min(Math.abs(s.contribution)*200,100);
+  const chip = s.status==='warming'
+    ? `<span class="chip" style="background:#d2992222;color:#d29922">⏳ 蒐集中</span>`
+    : `<span class="chip" style="background:${col}22;color:${col}">${DIRZH[s.direction]}</span>`;
   return `<div class="sig">
-    <div class="lbl"><span class="name">${SRC[s.source]||s.source}</span>
-      <span class="chip" style="background:${col}22;color:${col}">${DIRZH[s.direction]}</span></div>
+    <div class="sigtitle"><span>${name}</span>${chip}</div>
     <div class="calc">權重 ${s.weight} × 強度 ${s.magnitude} = 貢獻 <b style="color:${col}">${sign}${s.contribution}</b></div>
     <div class="bar"><i style="width:${Math.max(w,3)}%;background:${col}"></i></div>
     <div class="meta">${s.summary}</div></div>`;
