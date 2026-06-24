@@ -26,8 +26,8 @@ INDEX_HTML = r"""<!doctype html>
   button{background:var(--accent);color:#0d1117;border:0;border-radius:6px;
          padding:8px 14px;font-weight:600;cursor:pointer}
   button:disabled{opacity:.5;cursor:wait}
-  main{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));
-       gap:16px;padding:24px;max-width:1200px;margin:0 auto}
+  main{display:grid;grid-template-columns:1fr;
+       gap:16px;padding:24px;max-width:820px;margin:0 auto}
   .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
   .row{display:flex;justify-content:space-between;align-items:center}
   .sym{font-size:20px;font-weight:700}
@@ -45,7 +45,7 @@ INDEX_HTML = r"""<!doctype html>
   .alerts{margin-top:8px;font-size:12px;color:var(--bear)}
   .spark{margin-top:10px}
   .empty{color:var(--mut);padding:40px;text-align:center}
-  .bt{max-width:1200px;margin:16px auto 0;padding:0 24px}
+  .bt{max-width:820px;margin:16px auto 0;padding:0 24px}
   .bt .box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
   .bt h2{font-size:15px;margin:0 0 10px}
   .bt h2 small{color:var(--mut);font-weight:400}
@@ -53,6 +53,18 @@ INDEX_HTML = r"""<!doctype html>
   .kpi .v{font-size:24px;font-weight:700}
   .kpi .k{color:var(--mut);font-size:12px}
   .conf{display:flex;gap:16px;margin-top:10px;color:var(--mut);font-size:12px}
+  .price{font-size:12px;color:var(--mut);margin-top:2px}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 4px}
+  .stat{background:#0d1117;border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center}
+  .stat .v{font-size:16px;font-weight:700}
+  .stat .k{color:var(--mut);font-size:11px;margin-top:2px}
+  .sec{font-size:12px;color:var(--mut);font-weight:600;margin:14px 0 6px;
+       border-top:1px solid var(--line);padding-top:10px}
+  .cbar{display:flex;height:10px;border-radius:999px;overflow:hidden}
+  .cbar i{display:block;height:10px}
+  .sig .name{font-weight:600;color:var(--fg)}
+  .chip{font-size:11px;padding:1px 8px;border-radius:999px;font-weight:700}
+  .calc{color:var(--mut);font-size:11px;margin-top:2px}
 </style>
 </head>
 <body>
@@ -75,12 +87,30 @@ function gauge(score){ // score -1..1
   return `<div class="gauge"><div class="mid"></div>
           <div class="fill" style="${style};background:${col}"></div></div>`;
 }
+const SRC={smart_money:'🧠 聰明錢',whale_flow:'🐋 鯨魚／持倉',
+           divergence:'📉 量價背離',lth_supply:'💎 長期持有者'};
+const DIRZH={bull:'偏多',bear:'偏空',neutral:'中性'};
+function money(x){
+  if(x==null) return '—';
+  const n=Number(x);
+  return '$'+n.toLocaleString('en-US',{maximumFractionDigits:n<10?4:n<1000?2:0});
+}
 function sigbar(s){
-  const w=Math.min(Math.abs(s.contribution)*200,100);
-  return `<div class="sig"><div class="lbl"><span>${s.source}</span>
-    <span style="color:${C[s.direction]}">${s.direction} · 貢獻 ${s.contribution}</span></div>
-    <div class="bar"><i style="width:${Math.max(w,4)}%;background:${C[s.direction]}"></i></div>
+  const w=Math.min(Math.abs(s.contribution)*200,100), col=C[s.direction];
+  const sign=s.contribution>=0?'+':'';
+  return `<div class="sig">
+    <div class="lbl"><span class="name">${SRC[s.source]||s.source}</span>
+      <span class="chip" style="background:${col}22;color:${col}">${DIRZH[s.direction]}</span></div>
+    <div class="calc">權重 ${s.weight} × 強度 ${s.magnitude} = 貢獻 <b style="color:${col}">${sign}${s.contribution}</b></div>
+    <div class="bar"><i style="width:${Math.max(w,3)}%;background:${col}"></i></div>
     <div class="meta">${s.summary}</div></div>`;
+}
+function cbar(con){
+  const b=con.bull||0,s=con.bear||0,n=con.neutral||0,t=b+s+n||1;
+  return `<div class="cbar">
+    <i style="width:${b/t*100}%;background:${C.bull}"></i>
+    <i style="width:${s/t*100}%;background:${C.bear}"></i>
+    <i style="width:${n/t*100}%;background:${C.neutral}"></i></div>`;
 }
 function spark(hist){
   if(hist.length<2) return '';
@@ -91,21 +121,41 @@ function spark(hist){
     <line x1="0" y1="${H/2}" x2="${W}" y2="${H/2}" stroke="#30363d" stroke-width="1"/>
     <polyline points="${pts}" fill="none" stroke="#58a6ff" stroke-width="1.5"/></svg>`;
 }
+function pspark(hist){
+  const pts=hist.filter(h=>h.price!=null);
+  if(pts.length<2) return '';
+  const W=300,H=36,n=pts.length,vs=pts.map(h=>h.price);
+  const mn=Math.min(...vs),mx=Math.max(...vs),pad=(mx-mn)*0.1||1;
+  const xs=i=>i/(n-1)*W, ys=v=>H-(v-(mn-pad))/((mx+pad)-(mn-pad))*H;
+  const poly=vs.map((v,i)=>`${xs(i).toFixed(1)},${ys(v).toFixed(1)}`).join(' ');
+  const up=vs[vs.length-1]>=vs[0];
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <polyline points="${poly}" fill="none" stroke="${up?C.bull:C.bear}" stroke-width="1.5"/></svg>`;
+}
 async function loadCard(d){
   let hist=[];
   try{hist=(await (await fetch(`/decisions/history?symbol=${d.symbol}&limit=50`)).json()).history;}catch(e){}
-  const con=d.consensus||{};
+  const con=d.consensus||{}, ssp=spark(hist), psp=pspark(hist);
   return `<div class="card">
     <div class="row"><span class="sym">${d.symbol}</span>
       <span class="badge" style="background:${LBLC(d.label)}22;color:${LBLC(d.label)}">${d.label}</span></div>
+    <div class="price">參考價 ${money(d.price)} ｜ 更新 ${new Date(d.ts).toLocaleString()}</div>
     ${gauge(d.score)}
-    <div class="meta">分數 ${d.score} ｜ 信心度 ${(d.confidence*100).toFixed(0)}%
-      ｜ 共識 多${con.bull??0}/空${con.bear??0}/中${con.neutral??0}</div>
+    <div class="stats">
+      <div class="stat"><div class="v" style="color:${LBLC(d.label)}">${d.score}</div><div class="k">綜合分數 −1~+1</div></div>
+      <div class="stat"><div class="v">${(d.confidence*100).toFixed(0)}%</div><div class="k">信心度</div></div>
+      <div class="stat"><div class="v">${money(d.price)}</div><div class="k">參考價</div></div>
+    </div>
     <div class="action" style="color:${LBLC(d.label)}">${d.action}</div>
     <div class="reason">${d.reason}</div>
+    <div class="sec">多空共識（加權佔比）</div>
+    ${cbar(con)}
+    <div class="meta">多 ${con.bull??0} ｜ 空 ${con.bear??0} ｜ 中 ${con.neutral??0}</div>
+    <div class="sec">訊號明細（${(d.signals||[]).length} 項）</div>
     ${(d.signals||[]).map(sigbar).join('')}
     ${(d.alerts&&d.alerts.length)?`<div class="alerts">⚠ ${d.alerts.join('<br>⚠ ')}</div>`:''}
-    ${spark(hist)}
+    ${ssp?`<div class="sec">分數走勢</div>${ssp}`:''}
+    ${psp?`<div class="sec">參考價走勢</div>${psp}`:''}
   </div>`;
 }
 function pct(x){return x==null?'—':(x*100).toFixed(1)+'%';}
