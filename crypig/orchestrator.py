@@ -21,6 +21,7 @@ class Orchestrator:
         self.rag = SelfLearningRAG(self.config)
         self.decisions = DecisionStore(self.config.decisions_db)
         self.all_scores: dict[str, dict] = {}   # 全市場各幣輕量決策(聰明錢+資金費率)
+        self.radar: dict = {}                   # 分歧雷達：群眾(情緒/費率) vs 大戶(聰明錢/鯨魚)
         self._prev_pos: dict[str, dict] = {}    # 上一輪各幣 聰明錢/鯨魚 淨多空(算20分鐘變化)
         self.trader_summary: dict = {}          # 前N名交易者多空人數/比例/槓桿(看決心)
         # 以下 CoinGecko 資料只在每輪(背景)抓一次並快取，請求端只讀不打 API（避免被封）
@@ -60,6 +61,7 @@ class Orchestrator:
         saved = self.decisions.record_cycle(signals, ts, prices)
         self.all_scores = self._compute_all_scores()      # 全市場各幣輕量決策
         self._refresh_market_data()                       # 背景抓一次 CoinGecko 並快取
+        self.radar = self._divergence_radar()             # 群眾 vs 大戶 分歧雷達
         logger.info("知識圖譜新增 %d 條關係；決策落地 %d 筆；全市場評分 %d 幣；圖譜現況 %s",
                     added, saved, len(self.all_scores), self.rag.stats())
         return {"signals": signals, "kg": self.rag.stats(), "ingested": added,
@@ -146,10 +148,62 @@ class Orchestrator:
                 if r:
                     entry.update({"score": r["score"], "label": r["label"],
                                   "confidence": r["confidence"], "divergence": ddir})
+            if fa is not None:
+                entry["funding_ann"] = round(fa, 4)
             if entry:
                 out[coin] = entry
         self._prev_pos = new_pos
         return out
+
+    def _divergence_radar(self) -> dict:
+        """分歧雷達：群眾 vs 大戶反向 = alpha。
+
+        群眾(各幣)：資金費率→市場擁擠方向(正費率=群眾做多/擁擠多單)。
+        大戶(各幣)：聰明錢淨多空 sm_net。
+        市場層級：恐懼貪婪(群眾) vs 聰明錢整體淨多空。
+        反向且都有份量才算背離；依強度排序，列出 alpha 候選。
+        """
+        coins = []
+        for sym, sc in (self.all_scores or {}).items():
+            sm = sc.get("sm_net")
+            fa = sc.get("funding_ann")
+            if sm is None or fa is None:
+                continue
+            crowd = max(-1.0, min(1.0, fa / 0.5))         # 群眾(費率)多空
+            if crowd > 0.1 and sm < -0.1:                 # 群眾做多 vs 聰明錢做空
+                typ, bias, score = "頂部反指標", "看空", min(crowd, 1) + min(-sm, 1)
+            elif crowd < -0.1 and sm > 0.1:               # 群眾做空 vs 聰明錢做多
+                typ, bias, score = "底部機會", "看多", min(-crowd, 1) + min(sm, 1)
+            else:
+                continue
+            coins.append({"symbol": sym, "crowd": round(crowd, 3), "smart": round(sm, 3),
+                          "whale": sc.get("whale_net"), "funding_ann": fa,
+                          "type": typ, "bias": bias, "score": round(score, 3)})
+        coins.sort(key=lambda c: c["score"], reverse=True)
+
+        # 市場層級：恐懼貪婪(群眾) vs 聰明錢整體
+        sms = [s["sm_net"] for s in (self.all_scores or {}).values() if s.get("sm_net") is not None]
+        smart_avg = sum(sms) / len(sms) if sms else 0.0
+        fg = self.fear_greed or {}
+        fgv = fg.get("value")
+        crowd_m = (fgv - 50) / 50 if fgv is not None else 0.0   # 貪婪=+1群眾多 / 恐懼=-1群眾空
+        market = {"fear_greed": fgv, "fg_label": fg.get("label"),
+                  "fg_percentile": fg.get("percentile"),
+                  "smart_avg": round(smart_avg, 3),
+                  "crowd_dir": "貪婪偏多" if crowd_m > 0.1 else "恐懼偏空" if crowd_m < -0.1 else "中性",
+                  "smart_dir": "偏多" if smart_avg > 0.05 else "偏空" if smart_avg < -0.05 else "中性"}
+        if crowd_m > 0.1 and smart_avg < -0.05:
+            market["verdict"] = "🔺 群眾貪婪、聰明錢做空 → 頂部反指標，偏空"
+            market["diverging"] = True
+        elif crowd_m < -0.1 and smart_avg > 0.05:
+            market["verdict"] = "🔻 群眾恐懼、聰明錢做多 → 底部機會，偏多"
+            market["diverging"] = True
+        else:
+            align = "偏空" if smart_avg < 0 else "偏多"
+            market["verdict"] = (f"群眾與聰明錢同向（{market['crowd_dir']}＋聰明錢{market['smart_dir']}）"
+                                 f"→ 順勢{align}，尚無反轉背離（盯聰明錢何時翻向）")
+            market["diverging"] = False
+        return {"market": market, "coins": coins[:20]}
 
     def _refresh_market_data(self) -> None:
         """每輪(背景)抓一次 CoinGecko：全市場宏觀、各幣市值、跨所聚合 OI。

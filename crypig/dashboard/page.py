@@ -109,6 +109,7 @@ INDEX_HTML = r"""<!doctype html>
 </header>
 <div id="page-strategy" style="display:none"></div>
 <div id="page-market">
+<section id="radar" class="bt"><div class="empty">分歧雷達載入中…</div></section>
 <section id="macro" class="bt"><div class="empty">宏觀載入中…</div></section>
 <section id="defi" class="bt"><div class="empty">資金動向載入中…</div></section>
 <section id="pos" class="bt"><div class="empty">大玩家決心載入中…</div></section>
@@ -266,6 +267,27 @@ function posRow(name, g, color){
     ｜ 表態傾向 ${lean}
     ｜ 槓桿 中位 <b>${g.lev_median??'—'}x</b>（最高 ${g.lev_max??'—'}x）</div>`;
 }
+async function loadRadar(){
+  try{
+    const r=await (await fetch('/radar')).json();
+    const m=r.market||{}, coins=r.coins||[];
+    const vcol=m.diverging?(m.verdict.includes('看多')||m.verdict.includes('底部')?'#3fb950':'#f85149'):'#d29922';
+    const rows=coins.map(c=>{
+      const bcol=c.bias==='看多'?'#3fb950':'#f85149';
+      return `<div class="sig"><div class="sigtitle"><span class="symc">${c.symbol}</span>
+        <span class="chip" style="background:${bcol}22;color:${bcol}">${c.type}·${c.bias}</span></div>
+        <div class="calc">群眾(費率) <b style="color:${c.crowd>0?'#3fb950':'#f85149'}">${(c.crowd*100).toFixed(0)}%</b>
+          ⟷ 聰明錢 <b style="color:${c.smart>0?'#3fb950':'#f85149'}">${(c.smart*100).toFixed(0)}%</b>
+          ${c.whale!=null?`｜鯨魚 ${(c.whale*100).toFixed(0)}%`:''} ｜ 分歧強度 ${c.score}</div></div>`;
+    }).join('') || '<div class="meta">目前沒有明顯的群眾 vs 大戶背離（多數同向）。</div>';
+    document.getElementById('radar').innerHTML=`<div class="box" style="border-color:${vcol}">
+      <h2>🎯 分歧雷達 <small>群眾(情緒·資金費率) vs 大戶(聰明錢·鯨魚) 反向＝alpha</small></h2>
+      <div style="font-size:16px;font-weight:700;color:${vcol};margin:4px 0 8px">${m.verdict||'—'}</div>
+      <div class="meta">市場層級：恐懼貪婪 <b>${m.fear_greed??'—'}</b>（${m.fg_label||''}，歷史第 ${m.fg_percentile??'—'} 百分位）= 群眾<b>${m.crowd_dir||''}</b>　⟷　聰明錢整體 <b>${m.smart_avg!=null?(m.smart_avg*100).toFixed(0)+'%':'—'}</b>（${m.smart_dir||''}）</div>
+      <div class="sec">背離最大的幣（alpha 候選）</div>
+      ${rows}</div>`;
+  }catch(e){document.getElementById('radar').innerHTML='<div class="box empty">分歧雷達載入失敗：'+e+'</div>';}
+}
 async function loadDefi(){
   try{
     const d=await (await fetch('/defi')).json();
@@ -329,7 +351,7 @@ async function loadWhaleChart(){
   }catch(e){document.getElementById('whalechart').innerHTML='<div class="box empty">鯨魚圖載入失敗：'+e+'</div>';}
 }
 async function refresh(){
-  loadBacktest(); loadDefi(); loadPositioning(); loadWhaleChart();
+  loadBacktest(); loadRadar(); loadDefi(); loadPositioning(); loadWhaleChart();
   await loadMacro();
   let decisions=[], hlcoins=[], scores={};
   try{ decisions=(await (await fetch('/decisions')).json()).decisions||[]; }catch(e){}

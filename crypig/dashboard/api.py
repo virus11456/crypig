@@ -313,6 +313,21 @@ def vault_zip():
         headers={"Content-Disposition": "attachment; filename=crypig-vault.zip"})
 
 
+@app.get("/radar")
+def radar() -> dict:
+    """分歧雷達：群眾(情緒/費率) vs 大戶(聰明錢/鯨魚) 反向 = alpha。"""
+    orc = orchestrator()
+    if orc.config.use_mock:
+        return {"market": {"fear_greed": 30, "fg_label": "Fear", "fg_percentile": 20,
+                           "smart_avg": -0.3, "crowd_dir": "恐懼偏空", "smart_dir": "偏空",
+                           "verdict": "群眾與聰明錢同向（恐懼偏空＋聰明錢偏空）→ 順勢偏空", "diverging": False},
+                "coins": [{"symbol": "DEMO", "crowd": 0.6, "smart": -0.4, "whale": -0.3,
+                           "funding_ann": 0.3, "type": "頂部反指標", "bias": "看空", "score": 1.0}]}
+    if not orc.radar:
+        orc.run_cycle()
+    return orc.radar
+
+
 @app.get("/social")
 def social() -> dict:
     """社群/市場情緒：恐懼貪婪指數(免費) + LunarCrush 各幣情緒(需付費金鑰)。"""
