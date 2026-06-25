@@ -293,18 +293,22 @@ async function loadRadar(){
     }).join('') || '<div class="meta">目前沒有明顯的群眾 vs 大戶背離（多數同向）。</div>';
     // 時間軸：背離量 gap 逐輪變化，趨 0=收斂=反轉接近
     let tl='';
-    if(hist.length>=2){
-      const pts=hist.map(h=>({t:Date.parse(h.ts)/1000, v:h.gap}));
-      const k=Math.min(5,hist.length), recent=hist.slice(-k), prev=hist.slice(-2*k,-k);
+    const cut=Date.now()/1000-24*3600;
+    const h24=hist.filter(h=>Date.parse(h.ts)/1000>=cut);
+    const use=h24.length>=2?h24:hist;          // 近 24 小時(不足則顯示已累積)
+    if(use.length>=2){
+      const pts=use.map(h=>({t:Date.parse(h.ts)/1000, v:h.gap}));
+      const k=Math.min(5,use.length), recent=use.slice(-k), prev=use.slice(-2*k,-k);
       const am=a=>a.length?a.reduce((s,x)=>s+Math.abs(x.gap),0)/a.length:0;
       const rA=am(recent), pA=am(prev||[]);
       const conv = prev.length? (rA<pA-0.03?{t:'背離收斂中 → 群眾正在向聰明錢靠攏，接近反轉/進場時機',c:'#3fb950'}
                     : rA>pA+0.03?{t:'背離擴大中 → 分歧加劇，反轉時機未到，續觀望',c:'#d29922'}
                     : {t:'背離持平 → 僵持，等收斂訊號',c:'#8b949e'}) : null;
-      const lastN=hist[hist.length-1];
-      tl=`<div class="sec">背離時間軸 <small>gap=群眾−聰明錢；線趨近 0 虛線＝收斂＝反轉接近</small></div>
+      const lastN=use[use.length-1];
+      const span=h24.length>=2?'近 24 小時':'已累積 '+use.length+' 筆';
+      tl=`<div class="sec">背離時間軸 <small>${span}｜gap=群眾−聰明錢；線趨近 0 ＝收斂＝反轉接近</small></div>
         <div class="meta">最新背離量 <b>${(lastN.gap>=0?'+':'')+lastN.gap}</b>｜背離幣數 <b>${lastN.n_div}</b>（頂 ${lastN.n_top}／底 ${lastN.n_bottom}）${conv?`<br><b style="color:${conv.c}">${conv.t}</b>`:''}</div>
-        ${lineChart(pts,{color:'#d29922'})}`;
+        ${lineChart(pts,{color:'#d29922',includeZero:true})}`;
     } else {
       tl=`<div class="sec">背離時間軸</div><div class="meta">每 20 分鐘記一筆，目前 ${hist.length} 筆，2 筆以上開始畫線（看背離何時收斂＝進場時機）。</div>`;
     }
@@ -371,7 +375,8 @@ function lineChart(pts, opts){
   opts=opts||{};
   if(!pts||pts.length<2) return '<span class="meta">資料累積中…</span>';
   const W=1000,H=200,L=50,R=16,T=16,Bm=32,n=pts.length,vs=pts.map(p=>p.v);
-  const mn=Math.min(...vs),mx=Math.max(...vs);
+  let mn=Math.min(...vs),mx=Math.max(...vs);
+  if(opts.includeZero){ mn=Math.min(mn,0); mx=Math.max(mx,0); }   // 讓 0 一定在軸上(看收斂)
   // 縱軸：好看整數邊界＋格線間距（資料貼齊整數刻度＝更細）
   const step=niceStep((mx-mn)||Math.abs(mx)||1, 5);
   let lo=Math.floor(mn/step)*step, hi=Math.ceil(mx/step)*step;
@@ -382,9 +387,9 @@ function lineChart(pts, opts){
   const fa=v=>{const a=Math.abs(v);return a>=1e9?(v/1e9).toFixed(1)+'B':a>=1e6?(v/1e6).toFixed(2)+'M':a>=1e3?(v/1e3).toFixed(1)+'K':(a<10&&a>0?v.toFixed(1):''+Math.round(v));};
   // 縱軸格線（每個整數刻度一條，比之前 3 條更細）
   let grid='';
-  for(let g=lo; g<=hi+step*0.001; g+=step){ const y=ys(g);
+  for(let g=lo; g<=hi+step*0.001; g+=step){ const y=ys(g), gv=Math.abs(g)<step*1e-6?0:g;
     grid+=`<line x1="${L}" y1="${y.toFixed(1)}" x2="${W-R}" y2="${y.toFixed(1)}" stroke="#1e242c" stroke-width="1"/>`
-        +`<text x="${L-7}" y="${(y+4).toFixed(1)}" fill="#8b949e" font-size="12" text-anchor="end">${fa(g)}</text>`; }
+        +`<text x="${L-7}" y="${(y+4).toFixed(1)}" fill="#8b949e" font-size="12" text-anchor="end">${fa(gv)}</text>`; }
   // 零軸（淨多空翻轉分界）
   let zline='';
   if(lo<0 && hi>0){ const zy=ys(0);
@@ -477,7 +482,13 @@ function showPage(name){
   document.getElementById('page-strategy').style.display = name==='strategy'?'block':'none';
   document.getElementById('nav-market').className = name==='market'?'on':'';
   document.getElementById('nav-strategy').className = name==='strategy'?'on':'';
-  if(name==='strategy' && !STRATLOADED){ STRATLOADED=true; loadStrategy(); }
+  if(name==='strategy'){ if(!STRATLOADED){ STRATLOADED=true; loadStrategy(); } else { refreshStrategy(); } }
+}
+// 策略頁自動刷新：只在該頁可見時重抓各面板資料(不重建結構，保留問答框)
+function refreshStrategy(){
+  if(!STRATLOADED) return;
+  if(document.getElementById('page-strategy').style.display==='none') return;
+  loadNews(); loadSocial(); loadReddit(); loadBacktest();
 }
 async function askKB(){
   const q=document.getElementById('kbq').value.trim(); if(!q) return;
@@ -507,8 +518,9 @@ async function loadSocial(){
         <div class="meta">${pctNote}｜區間 ${fg.hist_min}–${fg.hist_max}。對照：極度恐懼+聰明錢仍做空→順勢偏空；聰明錢開始翻多→底部反向訊號。</div>
       </div>`;
     }
+    // LunarCrush 各幣社群情緒：只有付費金鑰有真實資料時才顯示（無資料不放空面板）
     const soc=r.social||{};
-    let lcHtml;
+    let lcHtml='';
     if(r.lunarcrush_enabled && Object.keys(soc).length){
       const rows=Object.entries(soc).filter(([s])=>['BTC','ETH','SOL','HYPE','DOGE','XRP','BNB'].includes(s))
         .map(([s,v])=>{const sen=v.sentiment,col=sen>=60?'#3fb950':sen>=45?'#d29922':'#f85149';
@@ -516,10 +528,6 @@ async function loadSocial(){
             <span style="color:${col}">情緒 ${sen??'—'}% ｜ Galaxy ${v.galaxy_score??'—'}</span></div>
             <div class="socbar"><i style="width:${sen||0}%;background:${col}"></i></div></div>`;}).join('');
       lcHtml=`<div class="box"><h2>💬 各幣社群情緒（LunarCrush）</h2>${rows}</div>`;
-    }else{
-      lcHtml=`<div class="box"><h2>💬 各幣社群情緒 / KOL（LunarCrush）</h2>
-        <div class="meta">需 LunarCrush 付費 Individual 方案（~$24/月）。升級後設 <b>LUNARCRUSH_API_KEY</b>，
-        各幣社群情緒、KOL 影響力會自動顯示並寫進 Obsidian。目前用免費的恐懼貪婪指數＋CoinGecko 社群投票替代。</div></div>`;
     }
     document.getElementById('social').innerHTML=fgHtml+lcHtml;
   }catch(e){document.getElementById('social').innerHTML='<div class="box empty">情緒載入失敗：'+e+'</div>';}
@@ -611,6 +619,7 @@ async function loadReddit(){
   }catch(e){document.getElementById('reddit').innerHTML='<div class="box empty">Reddit 載入失敗：'+e+'</div>';}
 }
 refresh(); setInterval(refresh,30000);
+setInterval(refreshStrategy,180000);   // 策略頁每 3 分鐘自動重抓(僅該頁可見時)
 </script>
 </body>
 </html>
