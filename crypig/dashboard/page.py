@@ -123,7 +123,6 @@ INDEX_HTML = r"""<!doctype html>
 <section id="pos" class="bt"><div class="empty">大玩家決心載入中…</div></section>
 <section id="whalechart" class="bt"><div class="empty">鯨魚每日變化載入中…</div></section>
 <section id="table" class="bt"><div class="empty">幣別總表載入中…</div></section>
-<section id="bt" class="bt"><div class="empty">回測載入中…</div></section>
 </div>
 <script>
 const C={bull:'#3fb950',bear:'#f85149',neutral:'#8b949e'};
@@ -446,7 +445,7 @@ async function loadWhaleChart(){
   }catch(e){document.getElementById('whalechart').innerHTML='<div class="box empty">鯨魚圖載入失敗：'+e+'</div>';}
 }
 async function refresh(){
-  loadBacktest(); loadRadar(); loadDefi(); loadPositioning(); loadWhaleChart();
+  loadRadar(); loadDefi(); loadPositioning(); loadWhaleChart();
   await loadMacro();
   let decisions=[], hlcoins=[], scores={};
   try{ decisions=(await (await fetch('/decisions')).json()).decisions||[]; }catch(e){}
@@ -544,11 +543,8 @@ function loadStrategy(){
       <button onclick="askKB()">問</button></div>
     <div id="kbout" class="meta"></div>
   </div></section>
-  <section class="bt"><div class="box">
-    <h2>📈 策略回測 <small>跟隨訊號方向的事後命中率</small></h2>
-    <div id="bt2"><div class="empty">同「市場看板」的回測面板</div></div>
-  </div></section>`;
-  loadNews(); loadSocial(); loadReddit();
+  <section class="bt" id="bt"><div class="empty">回測載入中…</div></section>`;
+  loadNews(); loadSocial(); loadReddit(); loadBacktest();
 }
 function ago(ts){ if(!ts) return ''; const m=Math.floor((Date.now()/1000-ts)/60);
   return m<60?m+'分前':m<1440?Math.floor(m/60)+'時前':Math.floor(m/1440)+'天前'; }
