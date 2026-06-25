@@ -371,6 +371,25 @@ def reddit_buzz() -> dict:
     return {"enabled": bool(orc.reddit), **(orc.reddit or {})}
 
 
+@app.get("/news")
+def news() -> dict:
+    """加密新聞分析：整體利多/利空、各幣新聞淨情緒、標題清單（含影響幣）。"""
+    orc = orchestrator()
+    if orc.config.use_mock:
+        return {"total": 5, "summary": {
+            "bull": 2, "bear": 1, "neutral": 2, "net": 1, "bias": "中性", "sources": 6,
+            "top_coins": [{"symbol": "BTC", "mentions": 3, "net": 1, "bull": 2, "bear": 1},
+                          {"symbol": "ETH", "mentions": 2, "net": -1, "bull": 0, "bear": 1}]},
+            "items": [
+                {"title": "Bitcoin ETF sees record inflows as institutions accumulate",
+                 "link": "#", "source": "Cointelegraph", "ts": None, "sentiment": "bull", "net": 2, "coins": ["BTC"]},
+                {"title": "SEC lawsuit pressures altcoins amid market fear",
+                 "link": "#", "source": "Decrypt", "ts": None, "sentiment": "bear", "net": -2, "coins": ["ETH"]}]}
+    if not orc.news:
+        orc.run_cycle()
+    return orc.news or {"total": 0, "summary": {}, "items": []}
+
+
 @app.get("/defi")
 def defi() -> dict:
     """DefiLlama 資金動向：DeFi 總 TVL、穩定幣總市值、各鏈 TVL（免費）。"""

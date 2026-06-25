@@ -302,6 +302,16 @@ class Orchestrator:
                     self.reddit = buzz
         except Exception:
             logger.warning("Reddit 討論熱度抓取失敗")
+        # 加密新聞分析（免費 RSS，利多/利空＋影響幣）
+        try:
+            if self._nc is None:
+                from .clients.news import NewsClient
+                self._nc = NewsClient()
+            nz = self._nc.analyze()
+            if nz and nz.get("total"):
+                self.news = nz
+        except Exception:
+            logger.warning("新聞分析抓取失敗")
         # LunarCrush 社群情緒（需付費金鑰；有才抓）
         try:
             if self._lc is None:

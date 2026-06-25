@@ -94,6 +94,14 @@ INDEX_HTML = r"""<!doctype html>
   .step{margin:6px 0;color:var(--mut);font-size:13px}
   .socbar{height:8px;background:#21262d;border-radius:999px;overflow:hidden;margin-top:4px}
   .socbar i{display:block;height:8px}
+  .newschips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+  .newschip{background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:6px 10px;font-size:13px}
+  .newslist{max-height:420px;overflow:auto;border-top:1px solid #21262d;margin-top:6px}
+  .newsrow{padding:9px 2px;border-bottom:1px solid #161b22}
+  .newsrow a{color:#c9d1d9;text-decoration:none}
+  .newsrow a:hover{color:#58a6ff;text-decoration:underline}
+  .newsbadge{display:inline-block;font-size:11px;padding:1px 7px;border-radius:6px;border:1px solid;margin-right:8px;vertical-align:middle}
+  .newscoin{display:inline-block;font-size:11px;background:#1f2937;color:#9ecbff;border-radius:5px;padding:1px 6px;margin-right:4px}
 </style>
 </head>
 <body>
@@ -507,6 +515,7 @@ function loadStrategy(){
     <div class="step">3. 內含 Coins/(40幣)、Journal/(每日快照)、KOL/、Strategies/(寫假設掛回測)</div>
     <div class="step">4. 在 Strategies 寫你的策略假設，對照 Journal 複盤、找 edge</div>
   </div></section>
+  <section class="bt" id="news"><div class="empty">新聞分析載入中…</div></section>
   <section class="bt" id="social"><div class="empty">社群情緒載入中…</div></section>
   <section class="bt" id="reddit"><div class="empty">Reddit 討論熱度載入中…</div></section>
   <section class="bt"><div class="box">
@@ -519,7 +528,50 @@ function loadStrategy(){
     <h2>📈 策略回測 <small>跟隨訊號方向的事後命中率</small></h2>
     <div id="bt2"><div class="empty">同「市場看板」的回測面板</div></div>
   </div></section>`;
-  loadSocial(); loadReddit();
+  loadNews(); loadSocial(); loadReddit();
+}
+function ago(ts){ if(!ts) return ''; const m=Math.floor((Date.now()/1000-ts)/60);
+  return m<60?m+'分前':m<1440?Math.floor(m/60)+'時前':Math.floor(m/1440)+'天前'; }
+async function loadNews(){
+  try{
+    const [r,sc]=await Promise.all([
+      (await fetch('/news')).json(),
+      fetch('/scores').then(x=>x.json()).then(x=>x.scores||{}).catch(()=>({}))]);
+    const s=r.summary||{}, items=r.items||[];
+    if(!items.length){document.getElementById('news').innerHTML='<div class="box empty">新聞暫無</div>';return;}
+    const biasCol=s.net>2?'#3fb950':s.net<-2?'#f85149':'#8b949e';
+    // 最受關注幣：新聞淨情緒 vs 聰明錢淨多空（分歧＝潛在反指標）
+    const chips=(s.top_coins||[]).map(c=>{
+      const nb=c.net>0?'#3fb950':c.net<0?'#f85149':'#8b949e';
+      const smn=sc[c.symbol]&&sc[c.symbol].sm_net;
+      let div='';
+      if(smn!=null){ const newsBull=c.net>0, smBull=smn>0.1, smBear=smn<-0.1;
+        if(newsBull&&smBear) div=' <span style="color:#d29922">⚠新聞多·聰明錢空</span>';
+        else if(!newsBull&&c.net<0&&smBull) div=' <span style="color:#d29922">⚠新聞空·聰明錢多</span>'; }
+      return `<span class="newschip"><b>${c.symbol}</b> <span style="color:${nb}">${c.net>0?'利多':c.net<0?'利空':'中性'} ${c.bull}/${c.bear}</span><span class="meta"> ·${c.mentions}則</span>${div}</span>`;
+    }).join('');
+    const rows=items.slice(0,24).map(i=>{
+      const b=i.sentiment, bc=b==='bull'?'#3fb950':b==='bear'?'#f85149':'#6e7681',
+            bl=b==='bull'?'利多':b==='bear'?'利空':'中性';
+      const coins=(i.coins||[]).map(s=>`<span class="newscoin">${s}</span>`).join('');
+      return `<div class="newsrow">
+        <span class="newsbadge" style="background:${bc}22;color:${bc};border-color:${bc}55">${bl}</span>
+        <a href="${i.link}" target="_blank" rel="noopener">${i.title}</a>
+        <div class="meta">${coins} <span style="opacity:.7">${i.source} · ${ago(i.ts)}</span></div></div>`;
+    }).join('');
+    document.getElementById('news').innerHTML=`<div class="box">
+      <h2>📰 新聞分析 <small>${s.sources||''} 家媒體 · ${r.total} 則 · 關鍵字利多/利空＋影響幣（呈現結論非生標題）</small></h2>
+      <div class="kpis">
+        <div class="kpi"><div class="v" style="color:${biasCol};font-size:30px">${s.bias||'—'}</div><div class="k">整體新聞情緒</div></div>
+        <div class="kpi"><div class="v" style="color:#3fb950">${s.bull||0}</div><div class="k">利多則數</div></div>
+        <div class="kpi"><div class="v" style="color:#f85149">${s.bear||0}</div><div class="k">利空則數</div></div>
+        <div class="kpi"><div class="v" style="color:#8b949e">${s.neutral||0}</div><div class="k">中性</div></div>
+      </div>
+      <div class="meta" style="margin:6px 0 4px">最受關注幣（新聞淨情緒，⚠＝與聰明錢分歧＝潛在反指標）：</div>
+      <div class="newschips">${chips||'<span class="meta">本輪新聞未明確點名單一幣</span>'}</div>
+      <div class="newslist">${rows}</div>
+    </div>`;
+  }catch(e){document.getElementById('news').innerHTML='<div class="box empty">新聞載入失敗：'+e+'</div>';}
 }
 async function loadReddit(){
   try{
