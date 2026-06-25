@@ -352,7 +352,7 @@ async function loadRadar(){
                     : rA>pA+0.03?{t:'背離擴大中 → 分歧加劇，反轉時機未到，續觀望',c:'#d29922'}
                     : {t:'背離持平 → 僵持，等收斂訊號',c:'#8b949e'}) : null;
       const lastN=use[use.length-1];
-      const span=h24.length>=2?'近 24 小時':'已累積 '+use.length+' 筆';
+      const span=spanLabel(Date.parse(use[0].ts)/1000, Date.parse(lastN.ts)/1000);
       tl=`<div class="sec">背離時間軸 <small>${span}｜gap=群眾−聰明錢；線趨近 0 ＝收斂＝反轉接近</small></div>
         <div class="meta">最新背離量 <b>${(lastN.gap>=0?'+':'')+lastN.gap}</b>｜背離幣數 <b>${lastN.n_div}</b>（頂 ${lastN.n_top}／底 ${lastN.n_bottom}）${conv?`<br><b style="color:${conv.c}">${conv.t}</b>`:''}</div>
         ${lineChart(pts,{color:'#d29922',includeZero:true})}`;
@@ -416,6 +416,13 @@ function smoothPath(P){
     d+=`C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
   }
   return d;
+}
+// 時間軸實際跨度標籤（誠實顯示「近 X 小時/分鐘」，資料未滿 24h 就不謊稱近 24 小時）
+function spanLabel(firstT, lastT){
+  const h=(Number(lastT)-Number(firstT))/3600;
+  if(h>=23.5) return '近 24 小時';
+  if(h>=1.5) return '近 '+Math.round(h)+' 小時';
+  return '近 '+Math.max(1,Math.round(h*60))+' 分鐘';
 }
 let _gid=0;
 function lineChart(pts, opts){
@@ -489,7 +496,7 @@ async function loadWhaleChart(){
     // 是否在這段期間翻轉
     const firstNet=h[0].net_usd;
     const flip = firstNet<0&&net>=0?'　🔄 期間翻多（轉折）':firstNet>=0&&net<0?'　🔄 期間翻空（轉折）':'';
-    const span=h24.length>=2?'近 24 小時':'已累積 '+h.length+' 筆';
+    const span=spanLabel(pts[0].t, pts[pts.length-1].t);
     document.getElementById('whalechart').innerHTML=`<div class="box">
       <h2>🐋 HL 巨鯨 BTC 合約淨持倉 <small>淨值前N大戶，每 20 分鐘一筆，${span}</small></h2>
       <div class="meta">最新 <b style="color:${col}">${bias} $${(Math.abs(net)/1e6).toFixed(1)}M</b>
