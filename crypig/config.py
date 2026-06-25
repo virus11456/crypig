@@ -24,8 +24,9 @@ class SmartMoneyConfig(BaseModel):
     # 聰明錢＝近 N 筆平倉「勝率＋獲利」最佳者（需打 userFills 算，故用候選池+長快取）
     rank_by_fills: bool = True       # True=近期勝率/獲利選聰明錢；False=退回 allTime PnL 榜
     candidate_window: str = "month"  # 候選池用的時間窗（近期活躍賺錢者）
-    candidate_pool: int = 300        # 候選池：過濾做市商後實得約 48（健康檢查改走「/」，
-    #                                  暖機時間不再影響部署，故可回到 300）
+    candidate_pool: int = 150        # 候選池：Railway 共享 IP 被 HL 限流，300 會把額度燒在
+    #                                  抓成交上、聰明錢持倉抓取失敗→0；150 可穩定填滿(實得約16-22)。
+    #                                  專屬 IP 的 VPS 可開回 300(實得約48)。可用 CRYPIG_POOL 覆寫。
     fills_lookback: int = 100        # 近 N 筆平倉算勝率/獲利
     fills_min_trades: int = 30       # 至少 N 筆平倉才納入（避免少量全勝假象）
     fills_min_span_hours: float = 24 # 近 N 筆需跨 ≥此時數（剔除幾小時內刷單的做市/高頻）
@@ -116,6 +117,11 @@ def _apply_env(cfg: Config) -> Config:
     """
     if (v := os.getenv("USE_MOCK")) is not None:
         cfg.use_mock = v.lower() not in ("0", "false", "no", "")
+    if (v := os.getenv("CRYPIG_POOL")) is not None:   # 聰明錢候選池(VPS 專屬 IP 可設 300)
+        try:
+            cfg.agents.smart_money.candidate_pool = int(v)
+        except ValueError:
+            pass
     data_dir = os.getenv("CRYPIG_DATA_DIR")
     if data_dir:
         d = Path(data_dir)
