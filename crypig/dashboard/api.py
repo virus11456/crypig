@@ -217,11 +217,11 @@ def positioning() -> dict:
     orc = orchestrator()
     if orc.config.use_mock:
         return {"overlap": 0,
-                "smart": {"total": 18, "long": 7, "short": 4, "flat": 7,
-                          "short_pct": 0.36, "long_pct": 0.64, "winrate_median": 72.0,
+                "smart": {"total": 48, "long": 18, "short": 12, "flat": 18,
+                          "short_pct": 0.40, "long_pct": 0.60, "winrate_median": 76.0,
                           "lev_median": 3.2, "lev_avg": 3.5, "lev_max": 9.0},
-                "whale": {"total": 30, "long": 11, "short": 8, "flat": 11,
-                          "short_pct": 0.42, "long_pct": 0.58, "winrate_median": None,
+                "whale": {"total": 100, "long": 22, "short": 18, "flat": 60,
+                          "short_pct": 0.45, "long_pct": 0.55, "winrate_median": None,
                           "lev_median": 2.8, "lev_avg": 3.0, "lev_max": 7.0}}
     if not orc.trader_summary:
         orc.run_cycle()

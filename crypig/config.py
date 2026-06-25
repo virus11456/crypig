@@ -18,13 +18,13 @@ class SmartMoneyConfig(BaseModel):
     # Hyperliquid 無「一年」時間窗；allTime / month 為最接近代理
     window: str = "allTime"          # day | week | month | allTime
     max_traders: int = 100           # 取前 N 名合格交易者統計持倉
-    whale_top_n: int = 30            # 鯨魚＝全市場淨值前 N 名（錢很多的人，與獲利無關）
+    whale_top_n: int = 100           # 鯨魚＝全市場淨值前 N 名（錢很多的人，與獲利無關）
     whale_full_market: bool = True   # True=全市場淨值前N(獨立於聰明錢)；False=舊版(聰明錢內淨值前N)
     whale_av_cap_usd: float = 1_500_000_000  # 排除淨值超此的非個人帳號(HLP/做市金庫等)
     # 聰明錢＝近 N 筆平倉「勝率＋獲利」最佳者（需打 userFills 算，故用候選池+長快取）
     rank_by_fills: bool = True       # True=近期勝率/獲利選聰明錢；False=退回 allTime PnL 榜
     candidate_window: str = "month"  # 候選池用的時間窗（近期活躍賺錢者）
-    candidate_pool: int = 150        # 候選池大小（只對這些人抓 fills；多數 PnL 榜是做市商）
+    candidate_pool: int = 300        # 候選池大小（只對這些人抓 fills；過濾做市商後實得約 48）
     fills_lookback: int = 100        # 近 N 筆平倉算勝率/獲利
     fills_min_trades: int = 30       # 至少 N 筆平倉才納入（避免少量全勝假象）
     fills_min_span_hours: float = 24 # 近 N 筆需跨 ≥此時數（剔除幾小時內刷單的做市/高頻）
