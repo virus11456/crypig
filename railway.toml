@@ -4,7 +4,10 @@ builder = "nixpacks"
 [deploy]
 # 綁 Railway 提供的 $PORT，對外開放看板與 API
 startCommand = "uvicorn crypig.dashboard.api:app --host 0.0.0.0 --port $PORT"
-healthcheckPath = "/decisions"
-healthcheckTimeout = 120
+# 健康檢查走靜態的「/」(秒回 200)，不要打 /decisions——它在快取空時會同步跑
+# 一整輪(抓成交/評分230幣/巨鯨100)，巨鯨改 100 後超過 120s→健康檢查逾時→部署
+# FAILED。資料改由背景暖機補上，健康檢查只確認 app 有起來。
+healthcheckPath = "/"
+healthcheckTimeout = 300
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3

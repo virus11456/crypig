@@ -24,8 +24,8 @@ class SmartMoneyConfig(BaseModel):
     # 聰明錢＝近 N 筆平倉「勝率＋獲利」最佳者（需打 userFills 算，故用候選池+長快取）
     rank_by_fills: bool = True       # True=近期勝率/獲利選聰明錢；False=退回 allTime PnL 榜
     candidate_window: str = "month"  # 候選池用的時間窗（近期活躍賺錢者）
-    candidate_pool: int = 150        # 候選池：首輪同步暖機要在 Railway 啟動窗內跑完，
-    #                                  150 抓成交約 70s(已驗證可部署)；過濾做市後實得約 16-22
+    candidate_pool: int = 300        # 候選池：過濾做市商後實得約 48（健康檢查改走「/」，
+    #                                  暖機時間不再影響部署，故可回到 300）
     fills_lookback: int = 100        # 近 N 筆平倉算勝率/獲利
     fills_min_trades: int = 30       # 至少 N 筆平倉才納入（避免少量全勝假象）
     fills_min_span_hours: float = 24 # 近 N 筆需跨 ≥此時數（剔除幾小時內刷單的做市/高頻）
