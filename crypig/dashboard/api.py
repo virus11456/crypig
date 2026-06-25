@@ -228,29 +228,34 @@ def positioning() -> dict:
 
 
 @app.get("/whale_history")
-def whale_history(days: int = 60) -> dict:
-    """鏈上 BTC 鯨魚(≥100BTC大戶=駝背鯨+巨鯨)每日持倉，畫變化圖。"""
-    if orchestrator().config.use_mock:
-        import math
-        import time
-        t0 = time.time()
-        out = []
-        for i in range(30):
-            d = 7.2e6 + 3e4 * math.sin(i / 4) + i * 1500
-            out.append({"date": f"D-{29 - i}", "whale_btc": d})
-        return {"history": out}
+def whale_history(symbol: str = "BTC", cohort: str = "whale", limit: int = 400) -> dict:
+    """HL 巨鯨(淨值前N)對某幣的合約淨持倉時間序列——逐輪累積，看部位翻轉=進場時機。"""
     orc = orchestrator()
-    # 背景輪已快取（每小時 10 次額度，故只在背景抓一次）；快取空才即時補抓一次。
-    cached = (orc.whale_chain or {}).get("history") or []
-    if not cached:
+    if orc.config.use_mock:
+        import math
+        from datetime import datetime, timedelta, timezone
+        base = datetime.now(timezone.utc) - timedelta(minutes=20 * 40)
+        out = []
+        for i in range(40):
+            lo = 6e6 + 1.5e6 * math.sin(i / 6)
+            sh = 4e6 + 1e6 * math.cos(i / 5)
+            out.append({"ts": (base + timedelta(minutes=20 * i)).isoformat(),
+                        "long_usd": lo, "short_usd": sh,
+                        "net_usd": lo - sh, "net": (lo - sh) / (lo + sh), "count": 12})
+        return {"symbol": symbol, "cohort": cohort, "history": out}
+    series = orc.pos_series.history(cohort, symbol, limit=limit)
+    if not series:
+        # 第一輪還沒落地任何點：立即跑一輪把當下這筆寫進去（之後逐輪累積）
         try:
-            orc._refresh_market_data()
-            cached = (orc.whale_chain or {}).get("history") or []
+            if not orc.all_scores:
+                orc.run_cycle()
+            else:
+                from datetime import datetime, timezone
+                orc._record_positioning(datetime.now(timezone.utc).isoformat())
+            series = orc.pos_series.history(cohort, symbol, limit=limit)
         except Exception as e:
-            return {"error": str(e), "history": []}
-    if not cached:
-        return {"error": "bitcoin-data.com 額度暫時用完，下一輪自動補上", "history": []}
-    return {"history": cached[-days:]}
+            return {"symbol": symbol, "cohort": cohort, "error": str(e), "history": []}
+    return {"symbol": symbol, "cohort": cohort, "history": series}
 
 
 def _build_vault_data(orc) -> dict:
@@ -274,10 +279,14 @@ def _build_vault_data(orc) -> dict:
 
     overall = {}
     try:
-        wh = whale_history(days=60).get("history", [])
+        wh = orc.pos_series.history("whale", "BTC", limit=400)
         if len(wh) >= 2:
-            chg = (wh[-1]["whale_btc"] - wh[0]["whale_btc"]) / wh[0]["whale_btc"]
-            overall["whale_chain"] = f"{chg*100:+.2f}%（近 {len(wh)} 天，{'累積' if chg>=0 else '出貨'}）"
+            first, last = wh[0]["net_usd"], wh[-1]["net_usd"]
+            flip = "翻多" if first < 0 <= last else "翻空" if first >= 0 > last else None
+            bias = "淨多" if last >= 0 else "淨空"
+            note = f"BTC 巨鯨合約{bias} ${abs(last)/1e6:.1f}M（近 {len(wh)} 輪"
+            note += f"，{flip}）" if flip else "）"
+            overall["whale_chain"] = note
     except Exception:
         pass
 

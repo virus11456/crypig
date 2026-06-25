@@ -90,6 +90,7 @@ class Config(BaseModel):
     symbols: list[str] = Field(default_factory=lambda: ["BTC", "ETH", "SOL"])
     snapshot_db: str = "snapshots.db"
     decisions_db: str = "decisions.db"   # 決策層每輪輸出持久化
+    posseries_db: str = "posseries.db"   # 大戶持倉時間序列(鯨魚/聰明錢逐輪累積)
     backtest_horizon_hours: float = 24.0  # 回測持有期（小時）
     agents: AgentsConfig = AgentsConfig()
     kg: KGConfig = KGConfig()
@@ -110,6 +111,7 @@ def _apply_env(cfg: Config) -> Config:
         d.mkdir(parents=True, exist_ok=True)
         cfg.snapshot_db = str(d / Path(cfg.snapshot_db).name)
         cfg.decisions_db = str(d / Path(cfg.decisions_db).name)
+        cfg.posseries_db = str(d / Path(cfg.posseries_db).name)
         cfg.kg.path = str(d / Path(cfg.kg.path).name)
     return cfg
 

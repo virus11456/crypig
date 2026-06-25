@@ -336,33 +336,46 @@ function lineChart(pts, opts){
   for(let k=0;k<=2;k++){ const val=hi-(hi-lo)*k/2, y=(T+(H-T-Bm)*k/2);
     grid+=`<line x1="${L}" y1="${y.toFixed(1)}" x2="${W-R}" y2="${y.toFixed(1)}" stroke="#21262d" stroke-width="1"/>`
         +`<text x="${L-7}" y="${(y+4).toFixed(1)}" fill="#8b949e" font-size="12" text-anchor="end">${fa(val)}</text>`; }
-  // x 軸：偵測時間跨度——逾 400 天顯示年份(年/月)，否則顯示月/日（避免 8 年圖看起來像 5 個月）
+  // 零軸參考線（淨多空翻轉時看得出 long/short 分界）
+  let zline='';
+  if(lo<0 && hi>0){ const zy=ys(0);
+    zline=`<line x1="${L}" y1="${zy.toFixed(1)}" x2="${W-R}" y2="${zy.toFixed(1)}" stroke="#6e7681" stroke-width="1" stroke-dasharray="4 3"/>`; }
+  // x 軸：依時間跨度自動選刻度——<2天顯示 時:分；<400天月/日；逾 400 天年/月
   const hasT = pts[0].t!=null && pts[n-1].t!=null;
-  const yearMode = hasT && (Number(pts[n-1].t)-Number(pts[0].t))/86400 > 400;
+  const spanD = hasT ? (Number(pts[n-1].t)-Number(pts[0].t))/86400 : 0;
   const tickLabel=i=>{ const p=pts[i];
     if(p.t!=null){ const d=new Date(Number(p.t)*1000);
-      return yearMode ? (d.getFullYear()+'/'+(d.getMonth()+1)) : ((d.getMonth()+1)+'/'+d.getDate()); }
+      if(spanD>400) return d.getFullYear()+'/'+(d.getMonth()+1);
+      if(spanD<2) return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+      return (d.getMonth()+1)+'/'+d.getDate(); }
     return p.d||''; };
   const idxs=[0,Math.round(n/3),Math.round(2*n/3),n-1].filter((v,i,a)=>a.indexOf(v)===i);
   const ticks=idxs.map(i=>{ const tx=Math.max(L+14,Math.min(W-R-14,xs(i)));
     return `<text x="${tx}" y="${H-8}" fill="#8b949e" font-size="12" text-anchor="middle">${tickLabel(i)}</text>`; }).join('');
   const yl=opts.ylabel?`<text x="13" y="${T+(H-T-Bm)/2}" fill="#6e7681" font-size="11" transform="rotate(-90 13 ${T+(H-T-Bm)/2})" text-anchor="middle">${opts.ylabel}</text>`:'';
   return `<svg width="100%" viewBox="0 0 ${W} ${H}">
-    ${grid}<polyline points="${poly}" fill="none" stroke="${up?'#3fb950':'#f85149'}" stroke-width="2"/>
+    ${grid}${zline}<polyline points="${poly}" fill="none" stroke="${up?'#3fb950':'#f85149'}" stroke-width="2"/>
     ${ticks}${yl}</svg>`;
 }
 async function loadWhaleChart(){
   try{
-    const r=await (await fetch('/whale_history')).json();
+    const r=await (await fetch('/whale_history?symbol=BTC&cohort=whale')).json();
     const h=r.history||[];
-    if(!h.length){document.getElementById('whalechart').innerHTML='<div class="box empty">鯨魚歷史暫無</div>';return;}
-    const pts=h.map(x=>({d:(x.date||'').slice(5), v:x.whale_btc}));
-    const first=h[0].whale_btc, last=h[h.length-1].whale_btc, chg=(last-first)/first;
-    const col=chg>=0?'#3fb950':'#f85149';
+    if(h.length<2){document.getElementById('whalechart').innerHTML=
+      '<div class="box"><h2>🐋 HL 巨鯨 BTC 合約淨持倉 <small>逐輪累積中</small></h2>'
+      +'<div class="meta">每 20 分鐘記一筆，目前 '+h.length+' 筆，2 筆以上即開始畫線（看大戶部位何時翻多/翻空＝進場時機）。</div></div>';return;}
+    const pts=h.map(x=>({t:Date.parse(x.ts)/1000, v:x.net_usd}));
+    const last=h[h.length-1], lo=last.long_usd, sh=last.short_usd;
+    const net=last.net_usd, bias=net>=0?'淨多':'淨空', col=net>=0?'#3fb950':'#f85149';
+    // 是否在這段期間翻轉
+    const firstNet=h[0].net_usd;
+    const flip = firstNet<0&&net>=0?'　🔄 期間翻多（轉折）':firstNet>=0&&net<0?'　🔄 期間翻空（轉折）':'';
     document.getElementById('whalechart').innerHTML=`<div class="box">
-      <h2>🐋 鏈上 BTC 鯨魚每日持倉 <small>≥100 BTC 大戶(駝背鯨+巨鯨)，近 ${h.length} 天</small></h2>
-      <div class="meta">期間變化 <b style="color:${col}">${(chg*100).toFixed(2)}%</b>
-        ｜ 最新 <b>${(last/1e6).toFixed(3)}M BTC</b>（${chg>=0?'累積':'分配/出貨'}）</div>
+      <h2>🐋 HL 巨鯨 BTC 合約淨持倉 <small>淨值前N大戶，每 20 分鐘一筆，近 ${h.length} 筆</small></h2>
+      <div class="meta">最新 <b style="color:${col}">${bias} $${(Math.abs(net)/1e6).toFixed(1)}M</b>
+        （多 $${(lo/1e6).toFixed(1)}M／空 $${(sh/1e6).toFixed(1)}M，${last.count} 個帳號）
+        <b style="color:#d29922">${flip}</b>
+        ｜ 線在零軸上＝大戶偏多、下＝偏空，穿越零軸＝部位翻轉</div>
       ${lineChart(pts)}
     </div>`;
   }catch(e){document.getElementById('whalechart').innerHTML='<div class="box empty">鯨魚圖載入失敗：'+e+'</div>';}

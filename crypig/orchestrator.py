@@ -11,6 +11,7 @@ from .aggregate import aggregate
 from .kg import SelfLearningRAG
 from .storage.models import Observation
 from .storage.decisions import DecisionStore
+from .storage.pos_series import PosSeriesStore
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ class Orchestrator:
         self.config = config or get_config()
         self.rag = SelfLearningRAG(self.config)
         self.decisions = DecisionStore(self.config.decisions_db)
+        self.pos_series = PosSeriesStore(self.config.posseries_db)
         self.all_scores: dict[str, dict] = {}   # 全市場各幣輕量決策(聰明錢+資金費率)
         self.radar: dict = {}                   # 分歧雷達：群眾(情緒/費率) vs 大戶(聰明錢/鯨魚)
         self._prev_pos: dict[str, dict] = {}    # 上一輪各幣 聰明錢/鯨魚 淨多空(算20分鐘變化)
@@ -32,12 +34,10 @@ class Orchestrator:
         self.fear_greed: dict = {}              # 全市場恐懼貪婪指數(免費 alternative.me)
         self.defi: dict = {}                    # DefiLlama 資金動向(TVL/穩定幣/各鏈，免費)
         self.reddit: dict = {}                  # Reddit 散戶討論熱度/情緒(需 app 憑證)
-        self.whale_chain: dict = {}             # 鏈上 BTC 鯨魚每日持倉(bitcoin-data，背景快取省額度)
         self._md: MarketDataClient | None = None
         self._lc = None
         self._dl = None
         self._rd = None
-        self._bd = None
         self.agents = []
         a = self.config.agents
         if a.smart_money.enabled:
@@ -62,6 +62,7 @@ class Orchestrator:
         ts = datetime.now(timezone.utc).isoformat()
         saved = self.decisions.record_cycle(signals, ts, prices)
         self.all_scores = self._compute_all_scores()      # 全市場各幣輕量決策
+        self._record_positioning(ts)                       # 大戶持倉逐輪落地成時間軸
         self._refresh_market_data()                       # 背景抓一次 CoinGecko 並快取
         self.radar = self._divergence_radar()             # 群眾 vs 大戶 分歧雷達
         logger.info("知識圖譜新增 %d 條關係；決策落地 %d 筆；全市場評分 %d 幣；圖譜現況 %s",
@@ -156,6 +157,35 @@ class Orchestrator:
                 out[coin] = entry
         self._prev_pos = new_pos
         return out
+
+    def _record_positioning(self, ts: str) -> None:
+        """把鯨魚(淨值前N)/聰明錢對主要幣的合約多空名目落地一筆，逐輪累積成時間軸。
+
+        Hyperliquid 無持倉歷史，靠我們每輪記一筆往前長。鯨魚=淨值前N(錢很多的人)，
+        記其 BTC 等主要幣的合約淨持倉，看大戶部位隨時間翻轉/加減碼=進場時機。
+        """
+        sm = next((a for a in self.agents if isinstance(a, SmartMoneyAgent)), None)
+        if sm is None:
+            return
+        try:
+            agg = sm._coin_aggregates()            # 本輪已算，走 90s 快取不重打
+        except Exception as e:
+            logger.warning("持倉時間序列：取聚合失敗 %s", e)
+            return
+        targets = set(self.config.symbols) | {"BTC", "ETH", "SOL", "HYPE"}
+        for sym in targets:
+            b = agg.get(sym)
+            if not b:
+                continue
+            try:
+                self.pos_series.record(ts, "whale", sym,
+                                       b.get("whale_long", 0.0), b.get("whale_short", 0.0),
+                                       int(b.get("whale_count", 0)))
+                self.pos_series.record(ts, "smart", sym,
+                                       b.get("long", 0.0), b.get("short", 0.0),
+                                       int(b.get("count", 0)))
+            except Exception as e:
+                logger.warning("持倉時間序列：寫入 %s 失敗 %s", sym, e)
 
     def _divergence_radar(self) -> dict:
         """分歧雷達：群眾 vs 大戶反向 = alpha。
@@ -266,22 +296,6 @@ class Orchestrator:
                     self.reddit = buzz
         except Exception:
             logger.warning("Reddit 討論熱度抓取失敗")
-        # 鏈上 BTC 鯨魚每日持倉（bitcoin-data，每小時僅 10 次額度→只在背景輪抓一次並快取）
-        try:
-            if self._bd is None:
-                from .clients.bitcoin_data import BitcoinDataClient
-                self._bd = BitcoinDataClient()
-            rows = self._bd.fetch_history("wallet-bands")   # 內建 6h 快取，client 持久化才有效
-            hist = []
-            for r in rows[-90:]:
-                hb = float(r.get("humpbackBtc") or 0)
-                mw = float(r.get("megaWhaleBtc") or 0)
-                hist.append({"date": r.get("theDate"), "whale_btc": hb + mw,
-                             "humpback": hb, "mega_whale": mw})
-            if hist:
-                self.whale_chain = {"history": hist}
-        except Exception as e:
-            logger.warning("鏈上鯨魚持倉抓取失敗：%s", e)
         # LunarCrush 社群情緒（需付費金鑰；有才抓）
         try:
             if self._lc is None:
