@@ -153,6 +153,48 @@ class HyperliquidClient:
                     out[addr] = state
         return out
 
+    def slim_account(self, address: str) -> dict:
+        """抓帳號持倉、『即時抽出精簡欄位就丟掉原始 state』（避免大戶 state JSON
+        累積吃爆記憶體）。回 {av, lev, net, pos:[(coin, side, notional)]}。"""
+        state = self._post_info({"type": "clearinghouseState", "user": address})
+        ms = state.get("marginSummary") or {}
+        try:
+            av = float(ms.get("accountValue", 0.0) or 0.0)
+            ntl = float(ms.get("totalNtlPos", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            av = ntl = 0.0
+        net = 0.0
+        pos: list[tuple] = []
+        for ap in state.get("assetPositions", []):
+            p = ap.get("position", {})
+            coin = p.get("coin")
+            if not coin:
+                continue
+            try:
+                szi = float(p.get("szi", 0.0))
+                nv = abs(float(p.get("positionValue", 0.0)))
+            except (TypeError, ValueError):
+                continue
+            side = 1 if szi > 0 else -1 if szi < 0 else 0
+            if side:
+                net += nv * side
+                pos.append((coin, side, nv))
+        return {"av": av, "lev": ntl / av if av > 0 else 0.0, "net": net, "pos": pos}
+
+    def slim_accounts_bulk(self, addresses: list[str], workers: int = 6) -> dict[str, dict]:
+        """並發取精簡帳號（不保留原始 state；同時最多 workers 份原始 JSON 在記憶體）。"""
+        def fetch(addr: str):
+            try:
+                return addr, self.slim_account(addr)
+            except Exception:
+                return addr, None
+        out: dict[str, dict] = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+            for addr, a in ex.map(fetch, addresses):
+                if a is not None:
+                    out[addr] = a
+        return out
+
     # ---- 成交紀錄（算近期勝率/獲利）----
     def user_fills(self, address: str) -> list[dict]:
         """單帳號最近成交（最多 2000 筆，含每筆平倉 closedPnl）。不快取原始成交

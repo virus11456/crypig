@@ -51,15 +51,15 @@ async def lifespan(app: FastAPI):
     global _sched
     if os.getenv("CRYPIG_SCHEDULER", "1").lower() not in ("0", "false", "no", ""):
         from apscheduler.schedulers.background import BackgroundScheduler
-        from datetime import datetime
         interval = float(os.getenv("CRYPIG_INTERVAL_MIN", "15"))
+        # 首輪「同步」跑完才接流量：Railway 啟動期會等(>70s 也可)，且讓繁重的
+        # 暖機(抓成交/評分230幣)在接受連線前做完——否則放背景跑會卡住 GIL、
+        # Railway 就緒探測逾時→SIGTERM→部署 FAILED。pool 要小到能在啟動窗內跑完。
+        _safe_cycle()
         _sched = BackgroundScheduler(daemon=True)
-        # 首輪不阻塞啟動：排成背景立刻跑一次（否則同步跑滿一輪會超過 Railway
-        # 啟動健康檢查時限→部署 FAILED，尤其聰明錢首輪要抓數百筆成交）
-        _sched.add_job(_safe_cycle, id="warmup", next_run_time=datetime.now())
         _sched.add_job(_safe_cycle, "interval", minutes=interval, id="cycle")
         _sched.start()
-        logger.info("背景排程啟動，每 %s 分鐘跑一輪（首輪背景暖機）", interval)
+        logger.info("背景排程啟動，每 %s 分鐘跑一輪（首輪同步暖機）", interval)
     yield
     if _sched:
         _sched.shutdown(wait=False)
