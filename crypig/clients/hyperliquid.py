@@ -203,13 +203,26 @@ class HyperliquidClient:
         return data if isinstance(data, list) else []
 
     def winrate_bulk(self, addresses: list[str], lookback: int = 100,
-                     workers: int = 4) -> dict[str, dict]:
+                     workers: int = 4, rate_per_min: float = 0.0) -> dict[str, dict]:
         """並發抓各帳號成交、『即時算完勝率就丟掉原始成交』，只回小量統計。
 
         記憶體安全：同時最多 workers 份原始成交在記憶體（非全部 N×2000）。
+        rate_per_min>0 時全域節流 dispatch 速率（userFills 權重高，避免觸發 HL 限流）。
         回 {address: {trades, win_rate, recent_pnl, span_hours}}。
         """
+        import threading
+        interval = 60.0 / rate_per_min if rate_per_min and rate_per_min > 0 else 0.0
+        lock = threading.Lock()
+        state = {"next": 0.0}
+
         def fetch(addr: str):
+            if interval:                       # 節流：dispatch 間隔 ≥ interval（在鎖外 sleep 才能重疊 I/O）
+                with lock:
+                    now = time.time()
+                    wait = max(0.0, state["next"] - now)
+                    state["next"] = max(now, state["next"]) + interval
+                if wait:
+                    time.sleep(wait)
             try:
                 return addr, self.fills_winrate(self.user_fills(addr), lookback)
             except Exception:

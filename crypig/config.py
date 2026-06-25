@@ -21,16 +21,17 @@ class SmartMoneyConfig(BaseModel):
     whale_top_n: int = 100           # 鯨魚＝全市場淨值前 N 名（錢很多的人，與獲利無關）
     whale_full_market: bool = True   # True=全市場淨值前N(獨立於聰明錢)；False=舊版(聰明錢內淨值前N)
     whale_av_cap_usd: float = 1_500_000_000  # 排除淨值超此的非個人帳號(HLP/做市金庫等)
-    # 聰明錢＝近 N 筆平倉「勝率＋獲利」最佳者（需打 userFills 算，故用候選池+長快取）
+    # 聰明錢＝近 N 筆平倉「勝率＋獲利」最佳者。改用「跨輪累積」：每輪只抓一小批成交
+    # (節流不被限流)，存活者存進 smart_pool 累加，幾輪後自然滾到 max_traders。
     rank_by_fills: bool = True       # True=近期勝率/獲利選聰明錢；False=退回 allTime PnL 榜
     candidate_window: str = "month"  # 候選池用的時間窗（近期活躍賺錢者）
-    candidate_pool: int = 150        # 候選池：Railway 共享 IP 被 HL 限流，300 會把額度燒在
-    #                                  抓成交上、聰明錢持倉抓取失敗→0；150 可穩定填滿(實得約16-22)。
-    #                                  專屬 IP 的 VPS 可開回 300(實得約48)。可用 CRYPIG_POOL 覆寫。
+    candidate_pool: int = 600        # 候選輪轉母體（不是一次全抓；每輪只取 fills_batch 一段）
     fills_lookback: int = 100        # 近 N 筆平倉算勝率/獲利
     fills_min_trades: int = 30       # 至少 N 筆平倉才納入（避免少量全勝假象）
     fills_min_span_hours: float = 24 # 近 N 筆需跨 ≥此時數（剔除幾小時內刷單的做市/高頻）
-    fills_refresh_min: int = 360     # fills 重算間隔（分鐘）；持倉仍每輪更新
+    fills_batch: int = 80            # 每輪抓多少帳號的成交（小批，節流不被限流）
+    fills_rate_per_min: float = 50   # 抓成交全域節流速率(req/分)；userFills 權重高，壓在 HL 限額下
+    smart_pool_ttl_hours: float = 8  # 累積池條目存活時數(超過汰舊，靠輪轉重新驗證刷新)
 
 
 class WhalesConfig(BaseModel):

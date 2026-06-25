@@ -33,8 +33,10 @@ class SmartMoneyAgent(Agent):
         self._trader_count: int = 0
         self._whale_count: int = 0
         self._trader_summary: dict = {}
-        self._smart_sel: list[dict] | None = None   # 聰明錢選池(近期勝率/獲利)，長快取
-        self._smart_sel_ts: float = 0.0
+        self._smart_sel: list[dict] | None = None   # 本輪取出的聰明錢(前 max_traders)
+        self._smart_pool: dict | None = None         # 跨輪累積的合格帳號池(持久化)
+        self._smart_offset: int = 0                  # 候選輪轉位移(每輪抓不同一段)
+        self._store = None                           # PosSeriesStore(累積池持久化)
 
     @staticmethod
     def _summarize_traders(smart_accounts: list[dict], whale_accounts: list[dict]) -> dict:
@@ -60,19 +62,19 @@ class SmartMoneyAgent(Agent):
             }
         return {"smart": grp(smart_accounts), "whale": grp(whale_accounts)}
 
+    def _pool_store(self):
+        if self._store is None:
+            from ..storage.pos_series import PosSeriesStore
+            self._store = PosSeriesStore(self.config.posseries_db)
+        return self._store
+
     def _select_smart_money(self, cfg) -> list[dict]:
-        """聰明錢＝近 N 筆平倉「勝率＋獲利」最佳者。
+        """聰明錢＝近 N 筆平倉「勝率＋獲利」最佳者，採『跨輪累積』避免被限流。
 
-        候選池取近月獲利前 candidate_pool 名，對其抓 userFills 算近 fills_lookback 筆
-        平倉勝率與獲利，勝率/獲利各正規化取平均分排序，取前 max_traders。
-        fills 每 fills_refresh_min 分鐘重算一次並長快取（勝率短期穩定），其餘輪沿用。
-        失敗或關閉時退回 allTime PnL 榜。
+        每輪只抓 fills_batch 個帳號的成交（節流 fills_rate_per_min），存活者(剔除做市)
+        併進持久化的累積池 smart_pool；候選母體輪轉，幾輪後自然滾到 max_traders。
+        池內條目超過 smart_pool_ttl_hours 汰舊（靠輪轉回頭重新驗證刷新），故會持續更新。
         """
-        fresh = (self._smart_sel is not None
-                 and time.time() - self._smart_sel_ts < cfg.fills_refresh_min * 60)
-        if fresh:
-            return self._smart_sel
-
         def fallback() -> list[dict]:
             traders = self._client.top_traders(
                 window=cfg.window, pnl_threshold=cfg.pnl_threshold_usd, limit=cfg.max_traders)
@@ -80,38 +82,71 @@ class SmartMoneyAgent(Agent):
                     for a, p in traders]
 
         if not getattr(cfg, "rank_by_fills", True):
-            self._smart_sel, self._smart_sel_ts = fallback(), time.time()
-            return self._smart_sel
+            return fallback()
 
-        cands = self._client.top_traders(
-            window=cfg.candidate_window, pnl_threshold=0.0, limit=cfg.candidate_pool)
-        # 記憶體安全：抓成交即時算勝率就丟，不保留 N×2000 筆原始成交（避免 OOM）
-        wr_by_addr = self._client.winrate_bulk([a for a, _ in cands], cfg.fills_lookback)
-        min_span = getattr(cfg, "fills_min_span_hours", 24)
-        scored = []
-        for addr, _pnl in cands:
-            wr = wr_by_addr.get(addr)
-            if (wr and wr["trades"] >= cfg.fills_min_trades and wr["recent_pnl"] > 0
-                    and wr.get("span_hours", 0) >= min_span):   # 剔除做市/高頻
-                scored.append({"addr": addr, **wr})
-        if not scored:                       # fills 全失敗/不足→退回 PnL 榜
-            logger.warning("聰明錢 fills 選池無結果，退回 allTime PnL 榜")
-            self._smart_sel, self._smart_sel_ts = fallback(), time.time()
-            return self._smart_sel
-        wrs = [s["win_rate"] for s in scored]
-        pls = [s["recent_pnl"] for s in scored]
-        wmin, wmax = min(wrs), max(wrs)
-        pmin, pmax = min(pls), max(pls)
-        nrm = lambda v, lo, hi: (v - lo) / (hi - lo) if hi > lo else 0.5
-        for s in scored:
-            s["score"] = round(0.5 * nrm(s["win_rate"], wmin, wmax)
-                               + 0.5 * nrm(s["recent_pnl"], pmin, pmax), 4)
-        scored.sort(key=lambda s: s["score"], reverse=True)
-        self._smart_sel = scored[:cfg.max_traders]
-        self._smart_sel_ts = time.time()
-        logger.info("聰明錢選池更新：候選 %d→合格 %d→取前 %d（中位勝率 %.0f%%）",
-                    len(cands), len(scored), len(self._smart_sel),
-                    100 * sorted(wrs)[len(wrs) // 2])
+        now = time.time()
+        ttl = getattr(cfg, "smart_pool_ttl_hours", 8) * 3600
+        store = self._pool_store()
+        if self._smart_pool is None:               # 首次：從磁碟載入累積池(跨重啟保留)
+            self._smart_pool = store.load_smart_pool(ttl, now)
+
+        # 候選母體輪轉：每輪抓不同一段 fills_batch
+        cands = [a for a, _ in self._client.top_traders(
+            window=cfg.candidate_window, pnl_threshold=0.0, limit=cfg.candidate_pool)]
+        if cands:
+            batch = getattr(cfg, "fills_batch", 80)
+            off = self._smart_offset % len(cands)
+            window = cands[off:off + batch]
+            if len(window) < batch:                # 繞回頭
+                window += cands[:batch - len(window)]
+            self._smart_offset = (off + batch) % len(cands)
+            wr_by = self._client.winrate_bulk(
+                window, cfg.fills_lookback, workers=3,
+                rate_per_min=getattr(cfg, "fills_rate_per_min", 50))
+            min_span = getattr(cfg, "fills_min_span_hours", 24)
+            fresh = {}
+            for addr, wr in wr_by.items():
+                if (wr and wr["trades"] >= cfg.fills_min_trades and wr["recent_pnl"] > 0
+                        and wr.get("span_hours", 0) >= min_span):   # 剔除做市/高頻
+                    self._smart_pool[addr] = {**wr, "ts": now}
+                    fresh[addr] = self._smart_pool[addr]
+            if fresh:
+                store.upsert_smart_pool(fresh)
+
+        # 汰除過舊（記憶體＋磁碟），保持新鮮
+        self._smart_pool = {a: v for a, v in self._smart_pool.items() if now - v["ts"] < ttl}
+        store.prune_smart_pool(ttl, now)
+
+        # 累積池(已驗證的方向贏家)排序取前 max_traders
+        items = list(self._smart_pool.items())
+        result: list[dict] = []
+        if items:
+            wrs = [v["win_rate"] for _, v in items]
+            pls = [v["recent_pnl"] for _, v in items]
+            wmin, wmax = min(wrs), max(wrs)
+            pmin, pmax = min(pls), max(pls)
+            nrm = lambda v, lo, hi: (v - lo) / (hi - lo) if hi > lo else 0.5
+            scored = [{"addr": a, **v,
+                       "score": round(0.5 * nrm(v["win_rate"], wmin, wmax)
+                                      + 0.5 * nrm(v["recent_pnl"], pmin, pmax), 4)}
+                      for a, v in items]
+            scored.sort(key=lambda s: s["score"], reverse=True)
+            result = scored[:cfg.max_traders]
+        # 暖機期池未滿→用 allTime PnL 榜補足到 max_traders（win_rate 暫無，隨累積被驗證帳號取代）
+        # ——讓面板從一開始就是滿的、不會 100→5 暴跌，已驗證佔比隨時間升高。
+        if len(result) < cfg.max_traders:
+            have = {s["addr"] for s in result}
+            for a, p in self._client.top_traders(
+                    window=cfg.window, pnl_threshold=cfg.pnl_threshold_usd,
+                    limit=cfg.max_traders * 2):
+                if a not in have:
+                    result.append({"addr": a, "win_rate": None, "recent_pnl": p, "trades": None})
+                    have.add(a)
+                    if len(result) >= cfg.max_traders:
+                        break
+        self._smart_sel = result
+        logger.info("聰明錢累積池 %d 人(已驗證)→面板 %d(其餘 PnL 榜暫補)",
+                    len(items), len(result))
         return self._smart_sel
 
     def _coin_aggregates(self) -> dict[str, dict]:
