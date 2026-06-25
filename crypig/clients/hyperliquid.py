@@ -154,32 +154,29 @@ class HyperliquidClient:
         return out
 
     # ---- 成交紀錄（算近期勝率/獲利）----
-    def user_fills(self, address: str, ttl: float = 21600.0) -> list[dict]:
-        """單帳號最近成交（最多 2000 筆，含每筆平倉 closedPnl）。預設快取 6 小時。"""
-        now = time.time()
-        cache = getattr(self, "_fills_cache", {})
-        hit = cache.get(address)
-        if hit and now - hit[0] < ttl:
-            return hit[1]
+    def user_fills(self, address: str) -> list[dict]:
+        """單帳號最近成交（最多 2000 筆，含每筆平倉 closedPnl）。不快取原始成交
+        （數百帳號×2000 筆會吃爆記憶體導致容器 OOM；勝率結果由上層快取）。"""
         data = self._post_info({"type": "userFills", "user": address})
-        rows = data if isinstance(data, list) else []
-        cache[address] = (now, rows)
-        self._fills_cache = cache
-        return rows
+        return data if isinstance(data, list) else []
 
-    def fills_bulk(self, addresses: list[str], workers: int = 4,
-                   ttl: float = 21600.0) -> dict[str, list]:
-        """並發抓多帳號成交（節流避免速率限制；各自走快取）。回 {address: fills}。"""
+    def winrate_bulk(self, addresses: list[str], lookback: int = 100,
+                     workers: int = 4) -> dict[str, dict]:
+        """並發抓各帳號成交、『即時算完勝率就丟掉原始成交』，只回小量統計。
+
+        記憶體安全：同時最多 workers 份原始成交在記憶體（非全部 N×2000）。
+        回 {address: {trades, win_rate, recent_pnl, span_hours}}。
+        """
         def fetch(addr: str):
             try:
-                return addr, self.user_fills(addr, ttl=ttl)
+                return addr, self.fills_winrate(self.user_fills(addr), lookback)
             except Exception:
                 return addr, None
-        out: dict[str, list] = {}
+        out: dict[str, dict] = {}
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
-            for addr, fills in ex.map(fetch, addresses):
-                if fills is not None:
-                    out[addr] = fills
+            for addr, wr in ex.map(fetch, addresses):
+                if wr is not None:
+                    out[addr] = wr
         return out
 
     @staticmethod

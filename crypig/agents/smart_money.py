@@ -85,12 +85,12 @@ class SmartMoneyAgent(Agent):
 
         cands = self._client.top_traders(
             window=cfg.candidate_window, pnl_threshold=0.0, limit=cfg.candidate_pool)
-        fills = self._client.fills_bulk([a for a, _ in cands],
-                                        ttl=cfg.fills_refresh_min * 60)
+        # 記憶體安全：抓成交即時算勝率就丟，不保留 N×2000 筆原始成交（避免 OOM）
+        wr_by_addr = self._client.winrate_bulk([a for a, _ in cands], cfg.fills_lookback)
         min_span = getattr(cfg, "fills_min_span_hours", 24)
         scored = []
         for addr, _pnl in cands:
-            wr = HyperliquidClient.fills_winrate(fills.get(addr) or [], cfg.fills_lookback)
+            wr = wr_by_addr.get(addr)
             if (wr and wr["trades"] >= cfg.fills_min_trades and wr["recent_pnl"] > 0
                     and wr.get("span_hours", 0) >= min_span):   # 剔除做市/高頻
                 scored.append({"addr": addr, **wr})
