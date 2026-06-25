@@ -101,10 +101,31 @@ def _write_journal(root: Path, data: dict) -> None:
              "## 🧭 大玩家決心",
              f"- 🧠 聰明錢：{conv(sm)}",
              f"- 🐋 巨鯨：{conv(wh)}", ""]
+    # 🎯 分歧雷達結論（群眾 vs 大戶背離＋收斂判讀＋alpha 候選幣）
+    radar = data.get("radar") or {}
+    rm = radar.get("market") or {}
+    if rm:
+        lines += ["## 🎯 分歧雷達結論",
+                  f"- 市場判讀：**{rm.get('verdict', '—')}**",
+                  f"- 群眾(恐懼貪婪 {rm.get('fear_greed', '—')}/{rm.get('fg_label', '')}) "
+                  f"⟷ 聰明錢整體 {('%+.0f%%' % (rm['smart_avg']*100)) if rm.get('smart_avg') is not None else '—'}"
+                  f"｜背離量 gap {('%+.2f' % rm['gap']) if rm.get('gap') is not None else '—'}"
+                  f"（背離幣 {rm.get('n_div', 0)}：頂 {rm.get('n_top', 0)}／底 {rm.get('n_bottom', 0)}）"]
+        if data.get("radar_conv"):
+            lines.append(f"- ⏱ 時間軸：**{data['radar_conv']}**")
+        rc = radar.get("coins") or []
+        if rc:
+            lines.append("- Alpha 候選（背離最大）：")
+            for c in rc[:8]:
+                lines.append(f"    - [[Coins/{c['symbol']}]] {c.get('type', '')}·{c.get('bias', '')}"
+                             f"（群眾 {('%+.0f%%' % (c['crowd']*100)) if c.get('crowd') is not None else '—'}"
+                             f" ⟷ 聰明錢 {('%+.0f%%' % (c['smart']*100)) if c.get('smart') is not None else '—'}"
+                             f"，強度 {c.get('score')}）")
+        lines.append("")
     if ov:
         lines += ["## 全市場傾向",
                   f"- 聰明錢整體淨多空：{ov.get('sm_net_pct', '—')}",
-                  f"- 鯨魚鏈上(BTC ≥100)：{ov.get('whale_chain', '—')}", ""]
+                  f"- BTC 巨鯨合約(HL 淨值前N)：{ov.get('whale_chain', '—')}", ""]
     lines += ["## 重點幣（依部位/OI）"]
     for c in top:
         div = {"bull": "底背離", "bear": "頂背離"}.get(c.get("divergence"), "")

@@ -290,11 +290,29 @@ def _build_vault_data(orc) -> dict:
     except Exception:
         pass
 
+    # 分歧雷達結論＋收斂判讀（寫進 Journal）
+    radar = orc.radar or {}
+    sa = (radar.get("market") or {}).get("smart_avg")
+    if sa is not None:
+        overall["sm_net_pct"] = f"{sa*100:+.0f}%"
+    radar_conv = None
+    try:
+        rh = orc.pos_series.radar_history(limit=400)
+        if len(rh) >= 4:
+            k = min(5, len(rh) // 2)
+            am = lambda a: (sum(abs(x["gap"] or 0) for x in a) / len(a)) if a else 0
+            rA, pA = am(rh[-k:]), am(rh[-2 * k:-k])
+            radar_conv = ("背離收斂中 → 群眾向聰明錢靠攏，接近反轉/進場時機" if rA < pA - 0.03
+                          else "背離擴大中 → 分歧加劇，反轉時機未到" if rA > pA + 0.03
+                          else "背離持平 → 僵持，等收斂訊號")
+    except Exception:
+        pass
+
     ts = orc.all_scores and now.isoformat(timespec="minutes") or now.isoformat(timespec="minutes")
     summ = orc.trader_summary or {}
     return {"coins": coins, "ts": ts, "date": now.strftime("%Y-%m-%d"),
             "smart_summary": summ.get("smart"), "whale_summary": summ.get("whale"),
-            "overall": overall}
+            "overall": overall, "radar": radar, "radar_conv": radar_conv}
 
 
 @app.get("/vault.zip")
