@@ -247,11 +247,13 @@ function renderTable(){
   if(!MROWS.length){document.getElementById('table').innerHTML='<div class="box empty">幣別資料暫無</div>';return;}
   const arrow=k=>MSORT.col===k?(MSORT.dir<0?' ▼':' ▲'):'';
   const head=MCOLS.map(c=>`<th onclick="mSort('${c.k}')">${c.t}${arrow(c.k)}</th>`).join('');
+  const withCap=MROWS.filter(r=>r.market_cap!=null).length;
   document.getElementById('table').innerHTML=`<div class="box">
     <div class="row" style="margin-bottom:10px;gap:12px">
       <h2 style="margin:0">📋 幣別總表 <small>共 ${MROWS.length} 幣 · BTC/ETH/SOL 完整4訊號決策、其餘為聰明錢+資金費率輕量評分 · 點標題排序</small></h2>
       <input class="filt" placeholder="搜尋幣別…" oninput="MFILT=this.value.trim().toUpperCase();renderMBody()" value="${MFILT}">
     </div>
+    <div class="meta" style="margin:-4px 0 8px">ℹ️ <b>標記價／OI／溢價</b>來自 Hyperliquid，全幣皆有。<b>市值／OI&#8202;Cap／Vol&#8202;Cap</b>來自 CoinGecko，僅 ${withCap}/${MROWS.length} 幣對得上——冷門幣顯示「—」代表 <b>CoinGecko 無此幣市值資料</b>，非系統錯誤。</div>
     <div class="scroll"><table class="tbl"><thead><tr>${head}</tr></thead><tbody id="mbody">${mBodyHTML()}</tbody></table></div></div>`;
 }
 function posRow(name, g, color){
