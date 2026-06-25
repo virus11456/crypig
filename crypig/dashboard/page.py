@@ -11,16 +11,25 @@ INDEX_HTML = r"""<!doctype html>
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Crypig 決策看板</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Crypig 量化交易分析中台</title>
+<link rel="manifest" href="/manifest.webmanifest"/>
+<meta name="theme-color" content="#0d1117"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Crypig"/>
+<link rel="apple-touch-icon" href="/static/icon-192.png"/>
+<link rel="icon" type="image/png" href="/static/icon-192.png"/>
 <style>
   :root{--bg:#0d1117;--card:#161b22;--line:#30363d;--fg:#e6edf3;--mut:#8b949e;
         --bull:#3fb950;--bear:#f85149;--neu:#8b949e;--accent:#58a6ff}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--fg);
        font-family:-apple-system,Segoe UI,Roboto,"Noto Sans TC",sans-serif}
-  header{display:flex;align-items:center;gap:16px;padding:16px 24px;
-         border-bottom:1px solid var(--line)}
+  header{display:flex;align-items:center;flex-wrap:wrap;gap:12px 16px;padding:16px 24px;
+         border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5;
+         background:var(--bg);padding-top:max(16px,env(safe-area-inset-top))}
   header h1{font-size:18px;margin:0}
   header .ts{color:var(--mut);font-size:13px}
   button{background:var(--accent);color:#0d1117;border:0;border-radius:6px;
@@ -102,6 +111,33 @@ INDEX_HTML = r"""<!doctype html>
   .newsrow a:hover{color:#58a6ff;text-decoration:underline}
   .newsbadge{display:inline-block;font-size:11px;padding:1px 7px;border-radius:6px;border:1px solid;margin-right:8px;vertical-align:middle}
   .newscoin{display:inline-block;font-size:11px;background:#1f2937;color:#9ecbff;border-radius:5px;padding:1px 6px;margin-right:4px}
+  /* ---- RWD：平板/手機 ---- */
+  @media (max-width:820px){
+    main{grid-template-columns:1fr;padding:14px;gap:14px}
+    .bt{padding:0 14px;margin-top:14px}
+  }
+  @media (max-width:560px){
+    header{padding:12px 14px;gap:8px 10px}
+    header h1{font-size:16px;width:100%}
+    header .nav{margin-left:0}
+    header .ts{font-size:11px;order:3;width:100%}
+    header #run{margin-left:auto;padding:7px 11px;font-size:13px}
+    .nav button{padding:7px 10px;font-size:13px}
+    main{padding:10px;gap:10px}
+    .bt{padding:0 10px;margin-top:10px}
+    .bt .box{padding:13px}
+    .bt h2{font-size:14px}
+    .kpis{gap:12px 16px}
+    .kpi .v{font-size:20px}
+    .ratios{gap:10px 14px}
+    .ask{flex-wrap:wrap}
+    .ask input{min-width:0}
+    .tbl{font-size:12px}
+    .tbl th,.tbl td{padding:6px 7px}
+    .scroll{max-height:62vh}
+    .newslist{max-height:60vh}
+  }
+  @media (max-width:380px){ .kpi .v{font-size:18px} .tbl{font-size:11px} }
 </style>
 </head>
 <body>
@@ -620,6 +656,8 @@ async function loadReddit(){
 }
 refresh(); setInterval(refresh,30000);
 setInterval(refreshStrategy,180000);   // 策略頁每 3 分鐘自動重抓(僅該頁可見時)
+// PWA：註冊 service worker（可安裝、離線載入 App 殼）
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}
 </script>
 </body>
 </html>

@@ -64,6 +64,58 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Crypig", version="0.1.0", lifespan=lifespan)
 
+# PWA 靜態資源（圖示）
+from pathlib import Path as _Path
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse, Response
+_STATIC = _Path(__file__).parent / "static"
+if _STATIC.is_dir():
+    app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
+
+_MANIFEST = {
+    "name": "Crypig 量化交易分析中台",
+    "short_name": "Crypig",
+    "description": "個人加密量化分析中台：市場看板＋策略/Obsidian",
+    "start_url": "/", "scope": "/", "display": "standalone",
+    "orientation": "any", "background_color": "#0d1117", "theme_color": "#0d1117",
+    "icons": [
+        {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png",
+         "purpose": "any maskable"},
+        {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png",
+         "purpose": "any maskable"},
+    ],
+}
+
+_SW_JS = """
+const C='crypig-v1';
+const SHELL=['/','/static/icon-192.png','/static/icon-512.png','/manifest.webmanifest'];
+self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()));});
+self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
+self.addEventListener('fetch',e=>{
+  const req=e.request; if(req.method!=='GET') return;
+  const url=new URL(req.url);
+  if(req.mode==='navigate'){
+    e.respondWith(fetch(req).then(r=>{const cp=r.clone();caches.open(C).then(c=>c.put('/',cp));return r;}).catch(()=>caches.match('/')));
+    return;
+  }
+  if(url.pathname.startsWith('/static/')||url.pathname==='/manifest.webmanifest'){
+    e.respondWith(caches.match(req).then(r=>r||fetch(req)));
+  }
+  // 其餘(API 即時資料)走網路、不快取
+});
+"""
+
+
+@app.get("/manifest.webmanifest")
+def manifest() -> JSONResponse:
+    return JSONResponse(_MANIFEST, media_type="application/manifest+json")
+
+
+@app.get("/sw.js")
+def service_worker() -> Response:
+    return Response(_SW_JS, media_type="application/javascript",
+                    headers={"Cache-Control": "no-cache"})
+
 
 class AskBody(BaseModel):
     question: str
