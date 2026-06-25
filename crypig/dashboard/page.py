@@ -306,7 +306,7 @@ async function loadDefi(){
         <div class="kpi"><div class="v">${chg(sc.chg_30d)}</div><div class="k">穩定幣 30天</div></div>
       </div>
       <div class="meta" style="margin-top:8px">前 6 大鏈 TVL：${chainHtml}</div>
-      <div class="meta">${lineChart((tvl.history||[]).map(h=>({d:fmtD(h.t),v:h.v})))}</div>
+      <div class="meta">${lineChart((tvl.history||[]).map(h=>({t:h.t,v:h.v})), {color:'#58a6ff'})}</div>
     </div>`;
   }catch(e){document.getElementById('defi').innerHTML='<div class="box empty">資金動向載入失敗：'+e+'</div>';}
 }
@@ -322,41 +322,76 @@ async function loadPositioning(){
   }catch(e){document.getElementById('pos').innerHTML='<div class="box empty">決心面板載入失敗：'+e+'</div>';}
 }
 function fmtD(t){ if(!t) return ''; const d=new Date(t*1000); return (d.getMonth()+1)+'/'+d.getDate(); }
+// 數值軸「好看」刻度間距（讓格線落在整數）
+function niceStep(range, target){
+  const raw=range/Math.max(1,target), mag=Math.pow(10,Math.floor(Math.log10(raw)||0));
+  const norm=raw/mag; const s=norm<1.5?1:norm<3?2:norm<7?5:10; return s*mag;
+}
+// Catmull-Rom → 三次貝茲，畫平滑曲線
+function smoothPath(P){
+  if(P.length<2) return '';
+  let d=`M${P[0][0].toFixed(1)},${P[0][1].toFixed(1)}`;
+  for(let i=0;i<P.length-1;i++){
+    const p0=P[i-1]||P[i], p1=P[i], p2=P[i+1], p3=P[i+2]||P[i+1];
+    const c1x=p1[0]+(p2[0]-p0[0])/6, c1y=p1[1]+(p2[1]-p0[1])/6;
+    const c2x=p2[0]-(p3[0]-p1[0])/6, c2y=p2[1]-(p3[1]-p1[1])/6;
+    d+=`C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+let _gid=0;
 function lineChart(pts, opts){
   opts=opts||{};
   if(!pts||pts.length<2) return '<span class="meta">資料累積中…</span>';
-  // 邊距：左留 y 軸數值、下留時間軸、上下留頭尾
-  const W=900,H=160,L=54,R=14,T=14,Bm=30,n=pts.length,vs=pts.map(p=>p.v);
-  const mn=Math.min(...vs),mx=Math.max(...vs),pad=(mx-mn)*0.08||Math.abs(mx)*0.05||1;
-  const lo=mn-pad, hi=mx+pad;
+  const W=1000,H=200,L=50,R=16,T=16,Bm=32,n=pts.length,vs=pts.map(p=>p.v);
+  const mn=Math.min(...vs),mx=Math.max(...vs);
+  // 縱軸：好看整數邊界＋格線間距（資料貼齊整數刻度＝更細）
+  const step=niceStep((mx-mn)||Math.abs(mx)||1, 5);
+  let lo=Math.floor(mn/step)*step, hi=Math.ceil(mx/step)*step;
+  if(lo===hi) hi=lo+step;
+  if(opts.zeroFloor && lo>0) lo=0;
   const xs=i=>L+i/(n-1)*(W-L-R), ys=v=>T+(1-(v-lo)/(hi-lo))*(H-T-Bm);
-  const poly=vs.map((v,i)=>`${xs(i).toFixed(1)},${ys(v).toFixed(1)}`).join(' ');
-  const up=vs[n-1]>=vs[0];
-  const fa=v=>{const a=Math.abs(v);return a>=1e9?(v/1e9).toFixed(1)+'B':a>=1e6?(v/1e6).toFixed(2)+'M':a>=1e3?(v/1e3).toFixed(1)+'K':(a<10?v.toFixed(1):''+Math.round(v));};
-  // y 軸：上/中/下三條水平格線＋對應數值（縱軸刻度清楚）
+  const col=opts.color || (vs[n-1]>=vs[0]?'#3fb950':'#f85149');
+  const fa=v=>{const a=Math.abs(v);return a>=1e9?(v/1e9).toFixed(1)+'B':a>=1e6?(v/1e6).toFixed(2)+'M':a>=1e3?(v/1e3).toFixed(1)+'K':(a<10&&a>0?v.toFixed(1):''+Math.round(v));};
+  // 縱軸格線（每個整數刻度一條，比之前 3 條更細）
   let grid='';
-  for(let k=0;k<=2;k++){ const val=hi-(hi-lo)*k/2, y=(T+(H-T-Bm)*k/2);
-    grid+=`<line x1="${L}" y1="${y.toFixed(1)}" x2="${W-R}" y2="${y.toFixed(1)}" stroke="#21262d" stroke-width="1"/>`
-        +`<text x="${L-7}" y="${(y+4).toFixed(1)}" fill="#8b949e" font-size="12" text-anchor="end">${fa(val)}</text>`; }
-  // 零軸參考線（淨多空翻轉時看得出 long/short 分界）
+  for(let g=lo; g<=hi+step*0.001; g+=step){ const y=ys(g);
+    grid+=`<line x1="${L}" y1="${y.toFixed(1)}" x2="${W-R}" y2="${y.toFixed(1)}" stroke="#1e242c" stroke-width="1"/>`
+        +`<text x="${L-7}" y="${(y+4).toFixed(1)}" fill="#8b949e" font-size="12" text-anchor="end">${fa(g)}</text>`; }
+  // 零軸（淨多空翻轉分界）
   let zline='';
   if(lo<0 && hi>0){ const zy=ys(0);
-    zline=`<line x1="${L}" y1="${zy.toFixed(1)}" x2="${W-R}" y2="${zy.toFixed(1)}" stroke="#6e7681" stroke-width="1" stroke-dasharray="4 3"/>`; }
-  // x 軸：依時間跨度自動選刻度——<2天顯示 時:分；<400天月/日；逾 400 天年/月
+    zline=`<line x1="${L}" y1="${zy.toFixed(1)}" x2="${W-R}" y2="${zy.toFixed(1)}" stroke="#6e7681" stroke-width="1.2" stroke-dasharray="5 3"/>`; }
+  // 時間軸：依跨度自動格式，刻度較多＝更細
   const hasT = pts[0].t!=null && pts[n-1].t!=null;
   const spanD = hasT ? (Number(pts[n-1].t)-Number(pts[0].t))/86400 : 0;
+  const pad2=x=>('0'+x).slice(-2);
   const tickLabel=i=>{ const p=pts[i];
     if(p.t!=null){ const d=new Date(Number(p.t)*1000);
-      if(spanD>400) return d.getFullYear()+'/'+(d.getMonth()+1);
-      if(spanD<2) return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
-      return (d.getMonth()+1)+'/'+d.getDate(); }
+      if(spanD<2) return pad2(d.getHours())+':'+pad2(d.getMinutes());
+      if(spanD<=160) return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
+      if(spanD<=900) return d.getFullYear()+'-'+pad2(d.getMonth()+1);
+      return ''+d.getFullYear(); }
     return p.d||''; };
-  const idxs=[0,Math.round(n/3),Math.round(2*n/3),n-1].filter((v,i,a)=>a.indexOf(v)===i);
-  const ticks=idxs.map(i=>{ const tx=Math.max(L+14,Math.min(W-R-14,xs(i)));
-    return `<text x="${tx}" y="${H-8}" fill="#8b949e" font-size="12" text-anchor="middle">${tickLabel(i)}</text>`; }).join('');
+  const nT=Math.min(8, n);
+  const idxs=[...new Set(Array.from({length:nT},(_,k)=>Math.round(k*(n-1)/(nT-1))))];
+  const ticks=idxs.map(i=>{ const tx=Math.max(L+18,Math.min(W-R-18,xs(i)));
+    return `<text x="${tx.toFixed(1)}" y="${H-9}" fill="#8b949e" font-size="12" text-anchor="middle">${tickLabel(i)}</text>`; }).join('');
+  // 平滑曲線＋漸層面積＋末點圓點
+  const P=vs.map((v,i)=>[xs(i),ys(v)]);
+  const line=smoothPath(P);
+  const area=line+` L${xs(n-1).toFixed(1)},${(H-Bm).toFixed(1)} L${xs(0).toFixed(1)},${(H-Bm).toFixed(1)} Z`;
+  const ex=xs(n-1), ey=ys(vs[n-1]);
+  const gid='grad'+(_gid++);
   const yl=opts.ylabel?`<text x="13" y="${T+(H-T-Bm)/2}" fill="#6e7681" font-size="11" transform="rotate(-90 13 ${T+(H-T-Bm)/2})" text-anchor="middle">${opts.ylabel}</text>`:'';
   return `<svg width="100%" viewBox="0 0 ${W} ${H}">
-    ${grid}${zline}<polyline points="${poly}" fill="none" stroke="${up?'#3fb950':'#f85149'}" stroke-width="2"/>
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${col}" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
+    ${grid}${zline}
+    <path d="${area}" fill="url(#${gid})" stroke="none"/>
+    <path d="${line}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round"/>
+    <circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="3.5" fill="${col}"/>
     ${ticks}${yl}</svg>`;
 }
 async function loadWhaleChart(){
@@ -432,7 +467,7 @@ async function loadSocial(){
     let fgHtml='';
     if(fg.value!=null){
       const col=fgColor(fg.value);
-      const spark=lineChart((fg.history||[]).map(h=>({d:fmtD(h.t),v:h.v})));
+      const spark=lineChart((fg.history||[]).map(h=>({t:+h.t,v:h.v})), {color:'#58a6ff', zeroFloor:true});
       const pctNote = fg.percentile!=null
         ? `歷史第 <b style="color:${col}">${fg.percentile}</b> 百分位${fg.percentile<=10?'（極罕見，越低越接近大底）':fg.percentile>=90?'（極度貪婪，留意風險）':''}`
         : '';

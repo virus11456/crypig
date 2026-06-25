@@ -35,10 +35,12 @@ class Orchestrator:
         self.defi: dict = {}                    # DefiLlama 資金動向(TVL/穩定幣/各鏈，免費)
         self.reddit: dict = {}                  # Reddit 散戶討論熱度/情緒(需 app 憑證)
         self.hl_scan: list = []                 # HL 全市場資金費率掃描(背景每輪快取，扛瞬斷)
+        self.news: dict = {}                    # 加密新聞分析(利多/利空＋影響幣，免費 RSS)
         self._md: MarketDataClient | None = None
         self._lc = None
         self._dl = None
         self._rd = None
+        self._nc = None
         self.agents = []
         a = self.config.agents
         if a.smart_money.enabled:
