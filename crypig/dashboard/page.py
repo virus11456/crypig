@@ -111,6 +111,10 @@ INDEX_HTML = r"""<!doctype html>
   .newsrow a:hover{color:#58a6ff;text-decoration:underline}
   .newsbadge{display:inline-block;font-size:11px;padding:1px 7px;border-radius:6px;border:1px solid;margin-right:8px;vertical-align:middle}
   .newscoin{display:inline-block;font-size:11px;background:#1f2937;color:#9ecbff;border-radius:5px;padding:1px 6px;margin-right:4px}
+  .posrow{margin:10px 0;padding:10px 12px;background:#0d1117;border:1px solid var(--line);border-radius:8px}
+  .posname{font-size:15px;margin-bottom:7px}
+  .posstats{display:flex;flex-wrap:wrap;gap:6px 8px;font-size:13px}
+  .pchip{background:#161b22;border:1px solid #21262d;border-radius:6px;padding:3px 9px;white-space:nowrap}
   /* ---- RWD：平板/手機 ---- */
   @media (max-width:820px){
     main{grid-template-columns:1fr;padding:14px;gap:14px}
@@ -127,8 +131,13 @@ INDEX_HTML = r"""<!doctype html>
     .bt{padding:0 10px;margin-top:10px}
     .bt .box{padding:13px}
     .bt h2{font-size:14px}
-    .kpis{gap:12px 16px}
-    .kpi .v{font-size:20px}
+    .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 8px}
+    .kpis>div[style*="flex:1"]{grid-column:1/-1}   /* 圖表那格獨佔整列 */
+    .kpi .v{font-size:18px}
+    .kpi .k{font-size:11px}
+    .posrow{padding:9px 10px}
+    .posstats{font-size:12px;gap:5px 6px}
+    .pchip{padding:3px 7px}
     .ratios{gap:10px 14px}
     .ask{flex-wrap:wrap}
     .ask input{min-width:0}
@@ -299,18 +308,20 @@ function renderTable(){
     <div class="meta" style="margin:-4px 0 8px">ℹ️ <b>標記價／OI／溢價</b>來自 Hyperliquid，全幣皆有。<b>市值／OI&#8202;Cap／Vol&#8202;Cap</b>來自 CoinGecko，僅 ${withCap}/${MROWS.length} 幣對得上——冷門幣顯示「—」代表 <b>CoinGecko 無此幣市值資料</b>，非系統錯誤。</div>
     <div class="scroll"><table class="tbl"><thead><tr>${head}</tr></thead><tbody id="mbody">${mBodyHTML()}</tbody></table></div></div>`;
 }
-function posRow(name, g, color){
-  if(!g||!g.total) return `<div class="meta">${name}：無資料</div>`;
+function posRow(name, sub, g, color){
+  if(!g||!g.total) return `<div class="posrow"><div class="posname"><b style="color:${color}">${name}</b> <span class="meta">${sub}</span></div><div class="meta">無資料</div></div>`;
   const sp=g.short_pct, lp=g.long_pct;
-  const lean = sp==null?'—':sp>lp?`<b style="color:#f85149">空方 ${(sp*100).toFixed(0)}%</b>`
-                                  :`<b style="color:#3fb950">多方 ${(lp*100).toFixed(0)}%</b>`;
-  return `<div style="margin:8px 0">
-    <span style="font-weight:700;color:${color}">${name}</span>（前 ${g.total} 名）：
-    <span style="color:#3fb950">多 ${g.long}</span> ／
-    <span style="color:#f85149">空 ${g.short}</span> ／
-    <span style="color:#8b949e">觀望 ${g.flat}</span>
-    ｜ 表態傾向 ${lean}
-    ｜ 槓桿 中位 <b>${g.lev_median??'—'}x</b>（最高 ${g.lev_max??'—'}x）${g.winrate_median!=null?`｜近100筆勝率 中位 <b>${g.winrate_median}%</b>`:''}</div>`;
+  const lean = sp==null?'—':sp>lp?`<b style="color:#f85149">空 ${(sp*100).toFixed(0)}%</b>`
+                                  :`<b style="color:#3fb950">多 ${(lp*100).toFixed(0)}%</b>`;
+  return `<div class="posrow">
+    <div class="posname"><b style="color:${color}">${name}</b> <span class="meta">${sub}・前 ${g.total} 名</span></div>
+    <div class="posstats">
+      <span class="pchip"><span style="color:#3fb950">多 ${g.long}</span> · <span style="color:#f85149">空 ${g.short}</span> · <span style="color:#8b949e">觀 ${g.flat}</span></span>
+      <span class="pchip">傾向 ${lean}</span>
+      <span class="pchip">槓桿 <b>${g.lev_median??'—'}x</b></span>
+      ${g.winrate_median!=null?`<span class="pchip">勝率 <b>${g.winrate_median}%</b></span>`:''}
+    </div>
+  </div>`;
 }
 async function loadRadar(){
   try{
@@ -382,8 +393,8 @@ async function loadPositioning(){
     const p=await (await fetch('/positioning')).json();
     document.getElementById('pos').innerHTML=`<div class="box">
       <h2>🧭 大玩家決心 <small>多空人數＋槓桿（人數=表態強度，槓桿=決心）</small></h2>
-      ${posRow('🧠 聰明錢(近100筆勝率+獲利前N)', p.smart, '#58a6ff')}
-      ${posRow('🐋 巨鯨(全市場淨值前N)', p.whale, '#d29922')}
+      ${posRow('🧠 聰明錢', '近100筆勝率+獲利', p.smart, '#58a6ff')}
+      ${posRow('🐋 巨鯨', '全市場淨值前N', p.whale, '#d29922')}
       <div class="meta">註：兩群為獨立母體——聰明錢=近期方向贏家、巨鯨=全市場最有錢者${p.overlap!=null?`（目前重疊 <b>${p.overlap}</b> 人）`:''}；已排除 HLP/做市金庫。觀望=無持倉；表態傾向只計有開倉者。<br>👉 聰明錢與巨鯨方向相反時＝值得注意的分歧訊號。</div>
     </div>`;
   }catch(e){document.getElementById('pos').innerHTML='<div class="box empty">決心面板載入失敗：'+e+'</div>';}
@@ -437,11 +448,11 @@ function lineChart(pts, opts){
   const tickLabel=i=>{ const p=pts[i];
     if(p.t!=null){ const d=new Date(Number(p.t)*1000);
       if(spanD<2) return pad2(d.getHours())+':'+pad2(d.getMinutes());
-      if(spanD<=160) return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
+      if(spanD<=160) return (d.getMonth()+1)+'/'+d.getDate();
       if(spanD<=900) return d.getFullYear()+'-'+pad2(d.getMonth()+1);
       return ''+d.getFullYear(); }
     return p.d||''; };
-  const nT=Math.min(8, n);
+  const nT=Math.min(6, n);
   const idxs=[...new Set(Array.from({length:nT},(_,k)=>Math.round(k*(n-1)/(nT-1))))];
   const ticks=idxs.map(i=>{ const tx=Math.max(L+18,Math.min(W-R-18,xs(i)));
     return `<text x="${tx.toFixed(1)}" y="${H-9}" fill="#8b949e" font-size="12" text-anchor="middle">${tickLabel(i)}</text>`; }).join('');
