@@ -34,6 +34,7 @@ class Orchestrator:
         self.fear_greed: dict = {}              # 全市場恐懼貪婪指數(免費 alternative.me)
         self.defi: dict = {}                    # DefiLlama 資金動向(TVL/穩定幣/各鏈，免費)
         self.reddit: dict = {}                  # Reddit 散戶討論熱度/情緒(需 app 憑證)
+        self.hl_scan: list = []                 # HL 全市場資金費率掃描(背景每輪快取，扛瞬斷)
         self._md: MarketDataClient | None = None
         self._lc = None
         self._dl = None
@@ -90,7 +91,10 @@ class Orchestrator:
         hlc = sm._client or HyperliquidClient()
         funding: dict[str, float] = {}
         try:
-            funding = {r["symbol"]: r["funding_ann"] for r in hlc.funding_scan()}
+            scan = hlc.funding_scan()
+            if scan:
+                self.hl_scan = scan                    # 快取整份掃描，請求端 /hl_market 讀它(扛 HL 瞬斷)
+            funding = {r["symbol"]: r["funding_ann"] for r in scan}
         except Exception:
             funding = {}
 

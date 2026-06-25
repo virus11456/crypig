@@ -410,12 +410,16 @@ def hl_market() -> dict:
     if orc.config.use_mock:
         coins = _mock_hl_scan()
         return {"count": len(coins), "coins": coins}
-    try:
-        coins = hl().funding_scan()
-    except Exception as e:
-        return {"error": str(e), "count": 0, "coins": []}
-    if not orc.market_caps:                 # 首次：先讓背景把市值/OI 快取算好
+    if not orc.hl_scan and not orc.all_scores:   # 首次：先跑一輪把掃描/市值快取算好
         orc.run_cycle()
+    # 優先用背景每輪快取的掃描（扛 HL 瞬斷不讓整表變空）；真的沒有才即時打一次
+    import copy
+    coins = copy.deepcopy(orc.hl_scan) if orc.hl_scan else None
+    if coins is None:
+        try:
+            coins = hl().funding_scan()
+        except Exception as e:
+            return {"error": str(e), "count": 0, "coins": []}
     tm = orc.market_caps                     # 讀每輪背景快取，不打 CoinGecko
     deriv = orc.deriv_agg
     for c in coins:
