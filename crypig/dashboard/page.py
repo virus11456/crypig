@@ -476,18 +476,22 @@ function lineChart(pts, opts){
 async function loadWhaleChart(){
   try{
     const r=await (await fetch('/whale_history?symbol=BTC&cohort=whale')).json();
-    const h=r.history||[];
+    const all=r.history||[];
+    const cut=Date.now()/1000-24*3600;
+    const h24=all.filter(x=>Date.parse(x.ts)/1000>=cut);
+    const h=h24.length>=2?h24:all;            // 近 24 小時(不足則顯示已累積)
     if(h.length<2){document.getElementById('whalechart').innerHTML=
       '<div class="box"><h2>🐋 HL 巨鯨 BTC 合約淨持倉 <small>逐輪累積中</small></h2>'
-      +'<div class="meta">每 20 分鐘記一筆，目前 '+h.length+' 筆，2 筆以上即開始畫線（看大戶部位何時翻多/翻空＝進場時機）。</div></div>';return;}
+      +'<div class="meta">每 20 分鐘記一筆，目前 '+all.length+' 筆，2 筆以上即開始畫線（看大戶部位何時翻多/翻空＝進場時機）。</div></div>';return;}
     const pts=h.map(x=>({t:Date.parse(x.ts)/1000, v:x.net_usd}));
     const last=h[h.length-1], lo=last.long_usd, sh=last.short_usd;
     const net=last.net_usd, bias=net>=0?'淨多':'淨空', col=net>=0?'#3fb950':'#f85149';
     // 是否在這段期間翻轉
     const firstNet=h[0].net_usd;
     const flip = firstNet<0&&net>=0?'　🔄 期間翻多（轉折）':firstNet>=0&&net<0?'　🔄 期間翻空（轉折）':'';
+    const span=h24.length>=2?'近 24 小時':'已累積 '+h.length+' 筆';
     document.getElementById('whalechart').innerHTML=`<div class="box">
-      <h2>🐋 HL 巨鯨 BTC 合約淨持倉 <small>淨值前N大戶，每 20 分鐘一筆，近 ${h.length} 筆</small></h2>
+      <h2>🐋 HL 巨鯨 BTC 合約淨持倉 <small>淨值前N大戶，每 20 分鐘一筆，${span}</small></h2>
       <div class="meta">最新 <b style="color:${col}">${bias} $${(Math.abs(net)/1e6).toFixed(1)}M</b>
         （多 $${(lo/1e6).toFixed(1)}M／空 $${(sh/1e6).toFixed(1)}M，${last.count} 個帳號）
         <b style="color:#d29922">${flip}</b>
