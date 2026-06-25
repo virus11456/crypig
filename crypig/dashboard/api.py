@@ -51,15 +51,19 @@ async def lifespan(app: FastAPI):
     global _sched
     if os.getenv("CRYPIG_SCHEDULER", "1").lower() not in ("0", "false", "no", ""):
         from apscheduler.schedulers.background import BackgroundScheduler
+        from datetime import datetime, timedelta
         interval = float(os.getenv("CRYPIG_INTERVAL_MIN", "15"))
-        # 首輪「同步」跑完才接流量：Railway 啟動期會等(>70s 也可)，且讓繁重的
-        # 暖機(抓成交/評分230幣)在接受連線前做完——否則放背景跑會卡住 GIL、
-        # Railway 就緒探測逾時→SIGTERM→部署 FAILED。pool 要小到能在啟動窗內跑完。
-        _safe_cycle()
+        warmup_delay = float(os.getenv("CRYPIG_WARMUP_DELAY", "30"))
+        # 部署關鍵：lifespan 立刻 yield→app 秒綁 PORT、先閒置 warmup_delay 秒讓
+        # Railway 首次就緒探測通過(SUCCESS)；之後首輪暖機才跑——此時暖機卡 GIL 約
+        # 70s 已被 Railway 容忍(同 ef0c266 的週期輪)。同步暖機(接受連線前)或無延遲
+        # 背景暖機都會讓首次探測逾時→SIGTERM→FAILED，故必須「先閒置再暖機」。
         _sched = BackgroundScheduler(daemon=True)
+        _sched.add_job(_safe_cycle, id="warmup",
+                       next_run_time=datetime.now() + timedelta(seconds=warmup_delay))
         _sched.add_job(_safe_cycle, "interval", minutes=interval, id="cycle")
         _sched.start()
-        logger.info("背景排程啟動，每 %s 分鐘跑一輪（首輪同步暖機）", interval)
+        logger.info("背景排程啟動，每 %s 分鐘跑一輪（首輪延遲 %ss 暖機）", interval, warmup_delay)
     yield
     if _sched:
         _sched.shutdown(wait=False)
