@@ -64,13 +64,20 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Crypig", version="0.1.0", lifespan=lifespan)
 
-# PWA 靜態資源（圖示）
+# PWA 靜態資源（圖示）—— 直接讀檔回傳，不依賴 StaticFiles/aiofiles，部署最穩
 from pathlib import Path as _Path
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, Response
 _STATIC = _Path(__file__).parent / "static"
-if _STATIC.is_dir():
-    app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
+
+
+@app.get("/static/{name}")
+def static_asset(name: str) -> Response:
+    f = _STATIC / name
+    if not f.is_file() or "/" in name or ".." in name:
+        return Response(status_code=404)
+    media = "image/png" if name.endswith(".png") else "application/octet-stream"
+    return Response(f.read_bytes(), media_type=media,
+                    headers={"Cache-Control": "public, max-age=604800"})
 
 _MANIFEST = {
     "name": "Crypig 量化交易分析中台",
