@@ -239,18 +239,18 @@ def whale_history(days: int = 60) -> dict:
             d = 7.2e6 + 3e4 * math.sin(i / 4) + i * 1500
             out.append({"date": f"D-{29 - i}", "whale_btc": d})
         return {"history": out}
-    from ..clients.bitcoin_data import BitcoinDataClient, RateLimited
-    try:
-        rows = BitcoinDataClient().fetch_history("wallet-bands")
-    except (RateLimited, Exception) as e:
-        return {"error": str(e), "history": []}
-    out = []
-    for r in rows[-days:]:
-        hb = float(r.get("humpbackBtc") or 0)
-        mw = float(r.get("megaWhaleBtc") or 0)
-        out.append({"date": r.get("theDate"), "whale_btc": hb + mw,
-                    "humpback": hb, "mega_whale": mw})
-    return {"history": out}
+    orc = orchestrator()
+    # 背景輪已快取（每小時 10 次額度，故只在背景抓一次）；快取空才即時補抓一次。
+    cached = (orc.whale_chain or {}).get("history") or []
+    if not cached:
+        try:
+            orc._refresh_market_data()
+            cached = (orc.whale_chain or {}).get("history") or []
+        except Exception as e:
+            return {"error": str(e), "history": []}
+    if not cached:
+        return {"error": "bitcoin-data.com 額度暫時用完，下一輪自動補上", "history": []}
+    return {"history": cached[-days:]}
 
 
 def _build_vault_data(orc) -> dict:

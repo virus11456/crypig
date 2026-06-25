@@ -320,19 +320,36 @@ async function loadPositioning(){
   }catch(e){document.getElementById('pos').innerHTML='<div class="box empty">決心面板載入失敗：'+e+'</div>';}
 }
 function fmtD(t){ if(!t) return ''; const d=new Date(t*1000); return (d.getMonth()+1)+'/'+d.getDate(); }
-function lineChart(pts, label){
+function lineChart(pts, opts){
+  opts=opts||{};
   if(!pts||pts.length<2) return '<span class="meta">資料累積中…</span>';
-  const W=900,H=120,n=pts.length,vs=pts.map(p=>p.v);
-  const mn=Math.min(...vs),mx=Math.max(...vs),pad=(mx-mn)*0.1||1;
-  const xs=i=>40+i/(n-1)*(W-50), ys=v=>H-20-(v-(mn-pad))/((mx+pad)-(mn-pad))*(H-35);
+  // 邊距：左留 y 軸數值、下留時間軸、上下留頭尾
+  const W=900,H=160,L=54,R=14,T=14,Bm=30,n=pts.length,vs=pts.map(p=>p.v);
+  const mn=Math.min(...vs),mx=Math.max(...vs),pad=(mx-mn)*0.08||Math.abs(mx)*0.05||1;
+  const lo=mn-pad, hi=mx+pad;
+  const xs=i=>L+i/(n-1)*(W-L-R), ys=v=>T+(1-(v-lo)/(hi-lo))*(H-T-Bm);
   const poly=vs.map((v,i)=>`${xs(i).toFixed(1)},${ys(v).toFixed(1)}`).join(' ');
   const up=vs[n-1]>=vs[0];
-  const ticks=[0,Math.floor(n/2),n-1].map(i=>`<text x="${xs(i)}" y="${H-4}" fill="#8b949e" font-size="11" text-anchor="middle">${pts[i].d}</text>`).join('');
-  const fa=v=>{const a=Math.abs(v);return a>=1e9?(v/1e9).toFixed(1)+'B':a>=1e6?(v/1e6).toFixed(2)+'M':a>=1e3?(v/1e3).toFixed(1)+'K':(''+Math.round(v));};
-  const ylab=`<text x="4" y="14" fill="#8b949e" font-size="11">${fa(mx)}</text><text x="4" y="${H-22}" fill="#8b949e" font-size="11">${fa(mn)}</text>`;
-  return `<svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-    <polyline points="${poly}" fill="none" stroke="${up?'#3fb950':'#f85149'}" stroke-width="2"/>
-    ${ticks}${ylab}</svg>`;
+  const fa=v=>{const a=Math.abs(v);return a>=1e9?(v/1e9).toFixed(1)+'B':a>=1e6?(v/1e6).toFixed(2)+'M':a>=1e3?(v/1e3).toFixed(1)+'K':(a<10?v.toFixed(1):''+Math.round(v));};
+  // y 軸：上/中/下三條水平格線＋對應數值（縱軸刻度清楚）
+  let grid='';
+  for(let k=0;k<=2;k++){ const val=hi-(hi-lo)*k/2, y=(T+(H-T-Bm)*k/2);
+    grid+=`<line x1="${L}" y1="${y.toFixed(1)}" x2="${W-R}" y2="${y.toFixed(1)}" stroke="#21262d" stroke-width="1"/>`
+        +`<text x="${L-7}" y="${(y+4).toFixed(1)}" fill="#8b949e" font-size="12" text-anchor="end">${fa(val)}</text>`; }
+  // x 軸：偵測時間跨度——逾 400 天顯示年份(年/月)，否則顯示月/日（避免 8 年圖看起來像 5 個月）
+  const hasT = pts[0].t!=null && pts[n-1].t!=null;
+  const yearMode = hasT && (Number(pts[n-1].t)-Number(pts[0].t))/86400 > 400;
+  const tickLabel=i=>{ const p=pts[i];
+    if(p.t!=null){ const d=new Date(Number(p.t)*1000);
+      return yearMode ? (d.getFullYear()+'/'+(d.getMonth()+1)) : ((d.getMonth()+1)+'/'+d.getDate()); }
+    return p.d||''; };
+  const idxs=[0,Math.round(n/3),Math.round(2*n/3),n-1].filter((v,i,a)=>a.indexOf(v)===i);
+  const ticks=idxs.map(i=>{ const tx=Math.max(L+14,Math.min(W-R-14,xs(i)));
+    return `<text x="${tx}" y="${H-8}" fill="#8b949e" font-size="12" text-anchor="middle">${tickLabel(i)}</text>`; }).join('');
+  const yl=opts.ylabel?`<text x="13" y="${T+(H-T-Bm)/2}" fill="#6e7681" font-size="11" transform="rotate(-90 13 ${T+(H-T-Bm)/2})" text-anchor="middle">${opts.ylabel}</text>`:'';
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}">
+    ${grid}<polyline points="${poly}" fill="none" stroke="${up?'#3fb950':'#f85149'}" stroke-width="2"/>
+    ${ticks}${yl}</svg>`;
 }
 async function loadWhaleChart(){
   try{

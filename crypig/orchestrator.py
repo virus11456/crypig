@@ -32,10 +32,12 @@ class Orchestrator:
         self.fear_greed: dict = {}              # 全市場恐懼貪婪指數(免費 alternative.me)
         self.defi: dict = {}                    # DefiLlama 資金動向(TVL/穩定幣/各鏈，免費)
         self.reddit: dict = {}                  # Reddit 散戶討論熱度/情緒(需 app 憑證)
+        self.whale_chain: dict = {}             # 鏈上 BTC 鯨魚每日持倉(bitcoin-data，背景快取省額度)
         self._md: MarketDataClient | None = None
         self._lc = None
         self._dl = None
         self._rd = None
+        self._bd = None
         self.agents = []
         a = self.config.agents
         if a.smart_money.enabled:
@@ -264,6 +266,22 @@ class Orchestrator:
                     self.reddit = buzz
         except Exception:
             logger.warning("Reddit 討論熱度抓取失敗")
+        # 鏈上 BTC 鯨魚每日持倉（bitcoin-data，每小時僅 10 次額度→只在背景輪抓一次並快取）
+        try:
+            if self._bd is None:
+                from .clients.bitcoin_data import BitcoinDataClient
+                self._bd = BitcoinDataClient()
+            rows = self._bd.fetch_history("wallet-bands")   # 內建 6h 快取，client 持久化才有效
+            hist = []
+            for r in rows[-90:]:
+                hb = float(r.get("humpbackBtc") or 0)
+                mw = float(r.get("megaWhaleBtc") or 0)
+                hist.append({"date": r.get("theDate"), "whale_btc": hb + mw,
+                             "humpback": hb, "mega_whale": mw})
+            if hist:
+                self.whale_chain = {"history": hist}
+        except Exception as e:
+            logger.warning("鏈上鯨魚持倉抓取失敗：%s", e)
         # LunarCrush 社群情緒（需付費金鑰；有才抓）
         try:
             if self._lc is None:
