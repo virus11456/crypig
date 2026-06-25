@@ -113,16 +113,28 @@ class HyperliquidClient:
         out.sort(key=lambda x: x[1], reverse=True)
         return out[:limit]
 
+    def _post_info(self, payload: dict, retries: int = 4) -> Any:
+        """POST /info，遇 429/5xx 退避重試（雲端 IP 大量並發抓取易被限流）。"""
+        delay = 0.5
+        for attempt in range(retries):
+            resp = self._client.post(INFO_URL, json=payload)
+            if resp.status_code == 429 or resp.status_code >= 500:
+                if attempt < retries - 1:
+                    time.sleep(delay)
+                    delay = min(delay * 2, 8.0)
+                    continue
+            resp.raise_for_status()
+            return resp.json()
+        resp.raise_for_status()
+        return resp.json()
+
     # ---- 持倉 ----
     def clearinghouse_state(self, address: str) -> dict[str, Any]:
         now = time.time()
         cached = self._state_cache.get(address)
         if cached and now - cached[0] < self._state_ttl:
             return cached[1]
-        resp = self._client.post(INFO_URL,
-                                json={"type": "clearinghouseState", "user": address})
-        resp.raise_for_status()
-        data = resp.json()
+        data = self._post_info({"type": "clearinghouseState", "user": address})
         self._state_cache[address] = (now, data)
         return data
 
@@ -149,15 +161,13 @@ class HyperliquidClient:
         hit = cache.get(address)
         if hit and now - hit[0] < ttl:
             return hit[1]
-        resp = self._client.post(INFO_URL, json={"type": "userFills", "user": address})
-        resp.raise_for_status()
-        data = resp.json()
+        data = self._post_info({"type": "userFills", "user": address})
         rows = data if isinstance(data, list) else []
         cache[address] = (now, rows)
         self._fills_cache = cache
         return rows
 
-    def fills_bulk(self, addresses: list[str], workers: int = 5,
+    def fills_bulk(self, addresses: list[str], workers: int = 4,
                    ttl: float = 21600.0) -> dict[str, list]:
         """並發抓多帳號成交（節流避免速率限制；各自走快取）。回 {address: fills}。"""
         def fetch(addr: str):
