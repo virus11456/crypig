@@ -279,7 +279,9 @@ function posRow(name, g, color){
 }
 async function loadRadar(){
   try{
-    const r=await (await fetch('/radar')).json();
+    const [r,hist]=await Promise.all([
+      (await fetch('/radar')).json(),
+      fetch('/radar_history').then(x=>x.json()).then(x=>x.history||[]).catch(()=>[])]);
     const m=r.market||{}, coins=r.coins||[];
     const vcol=m.diverging?(m.verdict.includes('看多')||m.verdict.includes('底部')?'#3fb950':'#f85149'):'#d29922';
     const rows=coins.map(c=>{
@@ -290,10 +292,28 @@ async function loadRadar(){
           ⟷ 聰明錢 <b style="color:${c.smart>0?'#3fb950':'#f85149'}">${(c.smart*100).toFixed(0)}%</b>
           ${c.whale!=null?`｜鯨魚 ${(c.whale*100).toFixed(0)}%`:''} ｜ 分歧強度 ${c.score}</div></div>`;
     }).join('') || '<div class="meta">目前沒有明顯的群眾 vs 大戶背離（多數同向）。</div>';
+    // 時間軸：背離量 gap 逐輪變化，趨 0=收斂=反轉接近
+    let tl='';
+    if(hist.length>=2){
+      const pts=hist.map(h=>({t:Date.parse(h.ts)/1000, v:h.gap}));
+      const k=Math.min(5,hist.length), recent=hist.slice(-k), prev=hist.slice(-2*k,-k);
+      const am=a=>a.length?a.reduce((s,x)=>s+Math.abs(x.gap),0)/a.length:0;
+      const rA=am(recent), pA=am(prev||[]);
+      const conv = prev.length? (rA<pA-0.03?{t:'背離收斂中 → 群眾正在向聰明錢靠攏，接近反轉/進場時機',c:'#3fb950'}
+                    : rA>pA+0.03?{t:'背離擴大中 → 分歧加劇，反轉時機未到，續觀望',c:'#d29922'}
+                    : {t:'背離持平 → 僵持，等收斂訊號',c:'#8b949e'}) : null;
+      const lastN=hist[hist.length-1];
+      tl=`<div class="sec">背離時間軸 <small>gap=群眾−聰明錢；線趨近 0 虛線＝收斂＝反轉接近</small></div>
+        <div class="meta">最新背離量 <b>${(lastN.gap>=0?'+':'')+lastN.gap}</b>｜背離幣數 <b>${lastN.n_div}</b>（頂 ${lastN.n_top}／底 ${lastN.n_bottom}）${conv?`<br><b style="color:${conv.c}">${conv.t}</b>`:''}</div>
+        ${lineChart(pts,{color:'#d29922'})}`;
+    } else {
+      tl=`<div class="sec">背離時間軸</div><div class="meta">每 20 分鐘記一筆，目前 ${hist.length} 筆，2 筆以上開始畫線（看背離何時收斂＝進場時機）。</div>`;
+    }
     document.getElementById('radar').innerHTML=`<div class="box" style="border-color:${vcol}">
       <h2>🎯 分歧雷達 <small>群眾(情緒·資金費率) vs 大戶(聰明錢·鯨魚) 反向＝alpha</small></h2>
       <div style="font-size:16px;font-weight:700;color:${vcol};margin:4px 0 8px">${m.verdict||'—'}</div>
       <div class="meta">市場層級：恐懼貪婪 <b>${m.fear_greed??'—'}</b>（${m.fg_label||''}，歷史第 ${m.fg_percentile??'—'} 百分位）= 群眾<b>${m.crowd_dir||''}</b>　⟷　聰明錢整體 <b>${m.smart_avg!=null?(m.smart_avg*100).toFixed(0)+'%':'—'}</b>（${m.smart_dir||''}）</div>
+      ${tl}
       <div class="sec">背離最大的幣（alpha 候選）</div>
       ${rows}</div>`;
   }catch(e){document.getElementById('radar').innerHTML='<div class="box empty">分歧雷達載入失敗：'+e+'</div>';}

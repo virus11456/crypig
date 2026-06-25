@@ -68,6 +68,10 @@ class Orchestrator:
         self._record_positioning(ts)                       # 大戶持倉逐輪落地成時間軸
         self._refresh_market_data()                       # 背景抓一次 CoinGecko 並快取
         self.radar = self._divergence_radar()             # 群眾 vs 大戶 分歧雷達
+        try:                                               # 背離逐輪落地成時間軸(看何時收斂=進場時機)
+            self.pos_series.record_radar(ts, self.radar.get("market", {}))
+        except Exception as e:
+            logger.warning("雷達時間序列寫入失敗：%s", e)
         logger.info("知識圖譜新增 %d 條關係；決策落地 %d 筆；全市場評分 %d 幣；圖譜現況 %s",
                     added, saved, len(self.all_scores), self.rag.stats())
         return {"signals": signals, "kg": self.rag.stats(), "ingested": added,
@@ -225,9 +229,13 @@ class Orchestrator:
         fg = self.fear_greed or {}
         fgv = fg.get("value")
         crowd_m = (fgv - 50) / 50 if fgv is not None else 0.0   # 貪婪=+1群眾多 / 恐懼=-1群眾空
+        gap = crowd_m - smart_avg                                # 群眾 vs 聰明錢 背離量(收斂趨 0=反轉接近)
+        n_top = sum(1 for c in coins if c["type"] == "頂部反指標")
+        n_bottom = sum(1 for c in coins if c["type"] == "底部機會")
         market = {"fear_greed": fgv, "fg_label": fg.get("label"),
                   "fg_percentile": fg.get("percentile"),
-                  "smart_avg": round(smart_avg, 3),
+                  "smart_avg": round(smart_avg, 3), "crowd_m": round(crowd_m, 3),
+                  "gap": round(gap, 3), "n_div": len(coins), "n_top": n_top, "n_bottom": n_bottom,
                   "crowd_dir": "貪婪偏多" if crowd_m > 0.1 else "恐懼偏空" if crowd_m < -0.1 else "中性",
                   "smart_dir": "偏多" if smart_avg > 0.05 else "偏空" if smart_avg < -0.05 else "中性"}
         if crowd_m > 0.1 and smart_avg < -0.05:

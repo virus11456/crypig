@@ -337,6 +337,38 @@ def radar() -> dict:
     return orc.radar
 
 
+@app.get("/radar_history")
+def radar_history(limit: int = 400) -> dict:
+    """市場背離時間軸：群眾 vs 聰明錢的背離量逐輪累積，趨 0=收斂=反轉接近。"""
+    orc = orchestrator()
+    if orc.config.use_mock:
+        import math
+        from datetime import datetime, timedelta, timezone
+        base = datetime.now(timezone.utc) - timedelta(minutes=20 * 40)
+        h = []
+        for i in range(40):
+            gap = 0.6 * math.cos(i / 14) * (1 - i / 60)        # 背離漸收斂
+            h.append({"ts": (base + timedelta(minutes=20 * i)).isoformat(),
+                      "gap": round(gap, 3), "crowd_m": round(gap / 2, 3),
+                      "smart_avg": round(-gap / 2, 3), "n_div": 20 - i // 3,
+                      "n_top": max(0, 12 - i // 4), "n_bottom": i // 5,
+                      "diverging": abs(gap) > 0.2})
+        return {"history": h}
+    h = orc.pos_series.radar_history(limit=limit)
+    if not h:
+        try:
+            if not orc.radar:
+                orc.run_cycle()
+            else:
+                from datetime import datetime, timezone
+                orc.pos_series.record_radar(datetime.now(timezone.utc).isoformat(),
+                                            orc.radar.get("market", {}))
+            h = orc.pos_series.radar_history(limit=limit)
+        except Exception as e:
+            return {"error": str(e), "history": []}
+    return {"history": h}
+
+
 @app.get("/social")
 def social() -> dict:
     """社群/市場情緒：恐懼貪婪指數(免費) + LunarCrush 各幣情緒(需付費金鑰)。"""
