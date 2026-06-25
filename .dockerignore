@@ -1,0 +1,14 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+*.db
+*.sqlite
+.env
+node_modules
+*.md
+scratchpad
+.DS_Store

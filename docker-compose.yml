@@ -1,0 +1,23 @@
+# Crypig on VPS：docker compose up -d --build
+services:
+  crypig:
+    build: .
+    image: crypig:latest
+    container_name: crypig
+    restart: unless-stopped
+    ports:
+      - "8000:8000"          # 對外 8000（前面可再掛 Caddy/nginx 上 HTTPS）
+    env_file:
+      - .env                 # 金鑰放這（見 .env.example）
+    environment:
+      USE_MOCK: "false"
+      CRYPIG_DATA_DIR: /data
+      CRYPIG_POOL: "300"     # 專屬 IP 不被 HL 限流→聰明錢實得約 48
+      CRYPIG_INTERVAL_MIN: "20"
+      CRYPIG_SCHEDULER: "1"
+      PORT: "8000"
+    volumes:
+      - crypig-data:/data    # sqlite/決策/持倉時間序列/知識圖譜持久化
+
+volumes:
+  crypig-data:
