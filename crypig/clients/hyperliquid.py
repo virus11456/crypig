@@ -119,6 +119,59 @@ class HyperliquidClient:
                     out[addr] = state
         return out
 
+    # ---- 成交紀錄（算近期勝率/獲利）----
+    def user_fills(self, address: str, ttl: float = 21600.0) -> list[dict]:
+        """單帳號最近成交（最多 2000 筆，含每筆平倉 closedPnl）。預設快取 6 小時。"""
+        now = time.time()
+        cache = getattr(self, "_fills_cache", {})
+        hit = cache.get(address)
+        if hit and now - hit[0] < ttl:
+            return hit[1]
+        resp = self._client.post(INFO_URL, json={"type": "userFills", "user": address})
+        resp.raise_for_status()
+        data = resp.json()
+        rows = data if isinstance(data, list) else []
+        cache[address] = (now, rows)
+        self._fills_cache = cache
+        return rows
+
+    def fills_bulk(self, addresses: list[str], workers: int = 5,
+                   ttl: float = 21600.0) -> dict[str, list]:
+        """並發抓多帳號成交（節流避免速率限制；各自走快取）。回 {address: fills}。"""
+        def fetch(addr: str):
+            try:
+                return addr, self.user_fills(addr, ttl=ttl)
+            except Exception:
+                return addr, None
+        out: dict[str, list] = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+            for addr, fills in ex.map(fetch, addresses):
+                if fills is not None:
+                    out[addr] = fills
+        return out
+
+    @staticmethod
+    def fills_winrate(fills: list[dict], lookback: int = 100) -> dict | None:
+        """從成交算近 lookback 筆平倉的勝率、獲利、時間跨度。無足夠平倉回 None。
+
+        span_hours：近 lookback 筆平倉橫跨幾小時——用來剔除『幾小時內刷完上百筆』
+        的高頻/做市商（他們多空中性，方向訊號無意義）。fills 為新到舊排列。
+        """
+        closes = [x for x in fills if (x.get("closedPnl") not in (None, "0", "0.0")
+                                       and float(x.get("closedPnl") or 0) != 0.0)]
+        closes = closes[:lookback]
+        if not closes:
+            return None
+        pnls = [float(x.get("closedPnl") or 0) for x in closes]
+        wins = sum(1 for p in pnls if p > 0)
+        try:
+            span_hours = (int(closes[0]["time"]) - int(closes[-1]["time"])) / 3_600_000
+        except Exception:
+            span_hours = 0.0
+        return {"trades": len(closes), "win_rate": wins / len(closes),
+                "recent_pnl": sum(pnls), "span_hours": round(span_hours, 1)}
+
+
     # ---- 全市場脈絡（持倉量 / 資金費率）----
     def market_contexts(self) -> dict[str, dict]:
         """回傳每個幣的 {funding, open_interest, mark_px, premium}（全市場，含快取）。

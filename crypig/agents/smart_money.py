@@ -33,6 +33,8 @@ class SmartMoneyAgent(Agent):
         self._trader_count: int = 0
         self._whale_count: int = 0
         self._trader_summary: dict = {}
+        self._smart_sel: list[dict] | None = None   # 聰明錢選池(近期勝率/獲利)，長快取
+        self._smart_sel_ts: float = 0.0
 
     @staticmethod
     def _summarize_traders(accounts: list[dict], whale_addrs: set) -> dict:
@@ -44,6 +46,7 @@ class SmartMoneyAgent(Agent):
             shorts = [a for a in accs if a["net"] < 0]
             flat = [a for a in accs if a["net"] == 0]
             levs = [a["lev"] for a in accs if a["lev"] > 0]
+            wrs = [a["win_rate"] for a in accs if a.get("win_rate") is not None]
             directional = len(longs) + len(shorts)
             return {
                 "total": len(accs), "long": len(longs), "short": len(shorts),
@@ -53,12 +56,67 @@ class SmartMoneyAgent(Agent):
                 "lev_median": round(statistics.median(levs), 2) if levs else None,
                 "lev_avg": round(statistics.mean(levs), 2) if levs else None,
                 "lev_max": round(max(levs), 2) if levs else None,
+                "winrate_median": round(statistics.median(wrs) * 100, 1) if wrs else None,
             }
         whales = [a for a in accounts if a["addr"] in whale_addrs]
         return {"smart": grp(accounts), "whale": grp(whales)}
 
+    def _select_smart_money(self, cfg) -> list[dict]:
+        """聰明錢＝近 N 筆平倉「勝率＋獲利」最佳者。
+
+        候選池取近月獲利前 candidate_pool 名，對其抓 userFills 算近 fills_lookback 筆
+        平倉勝率與獲利，勝率/獲利各正規化取平均分排序，取前 max_traders。
+        fills 每 fills_refresh_min 分鐘重算一次並長快取（勝率短期穩定），其餘輪沿用。
+        失敗或關閉時退回 allTime PnL 榜。
+        """
+        fresh = (self._smart_sel is not None
+                 and time.time() - self._smart_sel_ts < cfg.fills_refresh_min * 60)
+        if fresh:
+            return self._smart_sel
+
+        def fallback() -> list[dict]:
+            traders = self._client.top_traders(
+                window=cfg.window, pnl_threshold=cfg.pnl_threshold_usd, limit=cfg.max_traders)
+            return [{"addr": a, "win_rate": None, "recent_pnl": p, "trades": None}
+                    for a, p in traders]
+
+        if not getattr(cfg, "rank_by_fills", True):
+            self._smart_sel, self._smart_sel_ts = fallback(), time.time()
+            return self._smart_sel
+
+        cands = self._client.top_traders(
+            window=cfg.candidate_window, pnl_threshold=0.0, limit=cfg.candidate_pool)
+        fills = self._client.fills_bulk([a for a, _ in cands],
+                                        ttl=cfg.fills_refresh_min * 60)
+        min_span = getattr(cfg, "fills_min_span_hours", 24)
+        scored = []
+        for addr, _pnl in cands:
+            wr = HyperliquidClient.fills_winrate(fills.get(addr) or [], cfg.fills_lookback)
+            if (wr and wr["trades"] >= cfg.fills_min_trades and wr["recent_pnl"] > 0
+                    and wr.get("span_hours", 0) >= min_span):   # 剔除做市/高頻
+                scored.append({"addr": addr, **wr})
+        if not scored:                       # fills 全失敗/不足→退回 PnL 榜
+            logger.warning("聰明錢 fills 選池無結果，退回 allTime PnL 榜")
+            self._smart_sel, self._smart_sel_ts = fallback(), time.time()
+            return self._smart_sel
+        wrs = [s["win_rate"] for s in scored]
+        pls = [s["recent_pnl"] for s in scored]
+        wmin, wmax = min(wrs), max(wrs)
+        pmin, pmax = min(pls), max(pls)
+        nrm = lambda v, lo, hi: (v - lo) / (hi - lo) if hi > lo else 0.5
+        for s in scored:
+            s["score"] = round(0.5 * nrm(s["win_rate"], wmin, wmax)
+                               + 0.5 * nrm(s["recent_pnl"], pmin, pmax), 4)
+        scored.sort(key=lambda s: s["score"], reverse=True)
+        self._smart_sel = scored[:cfg.max_traders]
+        self._smart_sel_ts = time.time()
+        logger.info("聰明錢選池更新：候選 %d→合格 %d→取前 %d（中位勝率 %.0f%%）",
+                    len(cands), len(scored), len(self._smart_sel),
+                    100 * sorted(wrs)[len(wrs) // 2])
+        return self._smart_sel
+
     def _coin_aggregates(self) -> dict[str, dict]:
-        """從 Hyperliquid 取前 N 名合格交易者的持倉，聚合成 coin -> 多空名目。"""
+        """從 Hyperliquid 取聰明錢(近期勝率/獲利最佳)的持倉，聚合成 coin -> 多空名目。"""
         cfg = self.config.agents.smart_money
         # 90 秒內重用，足夠涵蓋一輪多標的
         if self._agg is not None and time.time() - self._agg_ts < 90:
@@ -67,11 +125,9 @@ class SmartMoneyAgent(Agent):
         if self._client is None:
             self._client = HyperliquidClient()
 
-        traders = self._client.top_traders(
-            window=cfg.window,
-            pnl_threshold=cfg.pnl_threshold_usd,
-            limit=cfg.max_traders,
-        )
+        sel = self._select_smart_money(cfg)
+        wr_map = {s["addr"]: s for s in sel}
+        traders = [(s["addr"], s.get("recent_pnl") or 0) for s in sel]
         states = self._client.states_bulk([addr for addr, _ in traders])  # 並發抓持倉
 
         # 每個帳號：淨值(accountValue)、總名目(totalNtlPos→槓桿)、淨多空、持倉
@@ -95,8 +151,10 @@ class SmartMoneyAgent(Agent):
                     net += float(pos.get("positionValue", 0.0)) * (1 if szi > 0 else -1)
                 except (TypeError, ValueError):
                     continue
+            wr = wr_map.get(addr) or {}
             accounts.append({"addr": addr, "av": av, "lev": ntl / av if av > 0 else 0.0,
-                             "net": net, "positions": positions})
+                             "net": net, "positions": positions,
+                             "win_rate": wr.get("win_rate"), "recent_pnl": wr.get("recent_pnl")})
 
         whale_addrs = {a["addr"] for a in
                        sorted(accounts, key=lambda x: x["av"], reverse=True)[:cfg.whale_top_n]}

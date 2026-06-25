@@ -274,7 +274,7 @@ function posRow(name, g, color){
     <span style="color:#f85149">空 ${g.short}</span> ／
     <span style="color:#8b949e">觀望 ${g.flat}</span>
     ｜ 表態傾向 ${lean}
-    ｜ 槓桿 中位 <b>${g.lev_median??'—'}x</b>（最高 ${g.lev_max??'—'}x）</div>`;
+    ｜ 槓桿 中位 <b>${g.lev_median??'—'}x</b>（最高 ${g.lev_max??'—'}x）${g.winrate_median!=null?`｜近100筆勝率 中位 <b>${g.winrate_median}%</b>`:''}</div>`;
 }
 async function loadRadar(){
   try{
@@ -346,7 +346,7 @@ async function loadPositioning(){
     const p=await (await fetch('/positioning')).json();
     document.getElementById('pos').innerHTML=`<div class="box">
       <h2>🧭 大玩家決心 <small>多空人數＋槓桿（人數=表態強度，槓桿=決心）</small></h2>
-      ${posRow('🧠 聰明錢(獲利前N)', p.smart, '#58a6ff')}
+      ${posRow('🧠 聰明錢(近100筆勝率+獲利前N)', p.smart, '#58a6ff')}
       ${posRow('🐋 巨鯨(淨值前N)', p.whale, '#d29922')}
       <div class="meta">註：觀望=目前無持倉；表態傾向只計有開倉者。</div>
     </div>`;
