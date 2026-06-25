@@ -91,6 +91,28 @@ class HyperliquidClient:
         qualified.sort(key=lambda x: x[1], reverse=True)
         return qualified[:limit]
 
+    def top_by_account_value(self, limit: int = 30, av_cap: float | None = None,
+                             av_floor: float = 0.0) -> list[tuple[str, float]]:
+        """全市場帳號依淨值(accountValue)由大到小取前 limit 名（與獲利無關＝真鯨魚）。
+
+        av_cap：排除淨值超過此值的超大非個人帳號（HLP/做市金庫等，會汙染方向訊號）。
+        回 (address, accountValue)。
+        """
+        out: list[tuple[str, float]] = []
+        for row in self.fetch_leaderboard():
+            addr = row.get("ethAddress", "")
+            if not addr:
+                continue
+            try:
+                av = float(row.get("accountValue", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                continue
+            if av <= av_floor or (av_cap is not None and av > av_cap):
+                continue
+            out.append((addr, av))
+        out.sort(key=lambda x: x[1], reverse=True)
+        return out[:limit]
+
     # ---- 持倉 ----
     def clearinghouse_state(self, address: str) -> dict[str, Any]:
         now = time.time()

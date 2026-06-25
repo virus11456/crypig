@@ -347,8 +347,8 @@ async function loadPositioning(){
     document.getElementById('pos').innerHTML=`<div class="box">
       <h2>🧭 大玩家決心 <small>多空人數＋槓桿（人數=表態強度，槓桿=決心）</small></h2>
       ${posRow('🧠 聰明錢(近100筆勝率+獲利前N)', p.smart, '#58a6ff')}
-      ${posRow('🐋 巨鯨(淨值前N)', p.whale, '#d29922')}
-      <div class="meta">註：觀望=目前無持倉；表態傾向只計有開倉者。</div>
+      ${posRow('🐋 巨鯨(全市場淨值前N)', p.whale, '#d29922')}
+      <div class="meta">註：兩群為獨立母體——聰明錢=近期方向贏家、巨鯨=全市場最有錢者${p.overlap!=null?`（目前重疊 <b>${p.overlap}</b> 人）`:''}；已排除 HLP/做市金庫。觀望=無持倉；表態傾向只計有開倉者。<br>👉 聰明錢與巨鯨方向相反時＝值得注意的分歧訊號。</div>
     </div>`;
   }catch(e){document.getElementById('pos').innerHTML='<div class="box empty">決心面板載入失敗：'+e+'</div>';}
 }

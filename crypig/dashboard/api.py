@@ -216,11 +216,12 @@ def positioning() -> dict:
     """前N名交易者多空人數/比例/槓桿（看決心）。mock 回合成。"""
     orc = orchestrator()
     if orc.config.use_mock:
-        return {"smart": {"total": 100, "long": 38, "short": 22, "flat": 40,
-                          "short_pct": 0.37, "long_pct": 0.63,
+        return {"overlap": 0,
+                "smart": {"total": 18, "long": 7, "short": 4, "flat": 7,
+                          "short_pct": 0.36, "long_pct": 0.64, "winrate_median": 72.0,
                           "lev_median": 3.2, "lev_avg": 3.5, "lev_max": 9.0},
                 "whale": {"total": 30, "long": 11, "short": 8, "flat": 11,
-                          "short_pct": 0.42, "long_pct": 0.58,
+                          "short_pct": 0.42, "long_pct": 0.58, "winrate_median": None,
                           "lev_median": 2.8, "lev_avg": 3.0, "lev_max": 7.0}}
     if not orc.trader_summary:
         orc.run_cycle()

@@ -37,8 +37,8 @@ class SmartMoneyAgent(Agent):
         self._smart_sel_ts: float = 0.0
 
     @staticmethod
-    def _summarize_traders(accounts: list[dict], whale_addrs: set) -> dict:
-        """前 N 名交易者的多空人數、比例、槓桿（看『決心』）。smart=全部、whale=淨值前N。"""
+    def _summarize_traders(smart_accounts: list[dict], whale_accounts: list[dict]) -> dict:
+        """多空人數、比例、槓桿、勝率（看『決心』）。smart=方向贏家、whale=全市場淨值前N。"""
         import statistics
 
         def grp(accs):
@@ -58,8 +58,7 @@ class SmartMoneyAgent(Agent):
                 "lev_max": round(max(levs), 2) if levs else None,
                 "winrate_median": round(statistics.median(wrs) * 100, 1) if wrs else None,
             }
-        whales = [a for a in accounts if a["addr"] in whale_addrs]
-        return {"smart": grp(accounts), "whale": grp(whales)}
+        return {"smart": grp(smart_accounts), "whale": grp(whale_accounts)}
 
     def _select_smart_money(self, cfg) -> list[dict]:
         """聰明錢＝近 N 筆平倉「勝率＋獲利」最佳者。
@@ -127,16 +126,21 @@ class SmartMoneyAgent(Agent):
 
         sel = self._select_smart_money(cfg)
         wr_map = {s["addr"]: s for s in sel}
-        traders = [(s["addr"], s.get("recent_pnl") or 0) for s in sel]
-        states = self._client.states_bulk([addr for addr, _ in traders])  # 並發抓持倉
+        smart_addrs = [s["addr"] for s in sel]
+        # 鯨魚＝全市場淨值前 N（獨立於聰明錢，過濾 HLP/做市金庫等超大非個人帳號）
+        whale_pairs = []
+        if getattr(cfg, "whale_full_market", True):
+            whale_pairs = self._client.top_by_account_value(
+                limit=cfg.whale_top_n, av_cap=getattr(cfg, "whale_av_cap_usd", None))
+        whale_addrs_mkt = [a for a, _ in whale_pairs]
 
-        # 每個帳號：淨值(accountValue)、總名目(totalNtlPos→槓桿)、淨多空、持倉
-        # 鯨魚＝淨值最大的前 N 名（錢很多的人）
-        accounts = []
-        for addr, _pnl in traders:
+        # 聯集一次抓持倉（聰明錢與鯨魚可能交集，現在是「量測」而非「強制」相同）
+        states = self._client.states_bulk(list(dict.fromkeys(smart_addrs + whale_addrs_mkt)))
+
+        def build(addr: str) -> dict | None:
             state = states.get(addr)
             if state is None:
-                continue
+                return None
             ms = state.get("marginSummary") or {}
             try:
                 av = float(ms.get("accountValue", 0.0) or 0.0)
@@ -152,38 +156,47 @@ class SmartMoneyAgent(Agent):
                 except (TypeError, ValueError):
                     continue
             wr = wr_map.get(addr) or {}
-            accounts.append({"addr": addr, "av": av, "lev": ntl / av if av > 0 else 0.0,
-                             "net": net, "positions": positions,
-                             "win_rate": wr.get("win_rate"), "recent_pnl": wr.get("recent_pnl")})
+            return {"addr": addr, "av": av, "lev": ntl / av if av > 0 else 0.0,
+                    "net": net, "positions": positions,
+                    "win_rate": wr.get("win_rate"), "recent_pnl": wr.get("recent_pnl")}
 
-        whale_addrs = {a["addr"] for a in
-                       sorted(accounts, key=lambda x: x["av"], reverse=True)[:cfg.whale_top_n]}
+        smart_accounts = [a for a in (build(x) for x in smart_addrs) if a]
+        if whale_addrs_mkt:
+            whale_accounts = [a for a in (build(x) for x in whale_addrs_mkt) if a]
+        else:                              # 舊版：聰明錢內淨值前 N
+            whale_accounts = sorted(smart_accounts, key=lambda x: x["av"],
+                                    reverse=True)[:cfg.whale_top_n]
+        whale_set = {a["addr"] for a in whale_accounts}
+
+        def add(b: dict, pos: dict, prefix: str) -> None:
+            try:
+                szi = float(pos.get("szi", 0.0))
+                notional = abs(float(pos.get("positionValue", 0.0)))
+            except (TypeError, ValueError):
+                return
+            side = "long" if szi > 0 else "short" if szi < 0 else None
+            if side:
+                b[prefix + side] += notional
+                b[prefix + "count"] += 1
+
+        def blank() -> dict:
+            return {"long": 0.0, "short": 0.0, "count": 0,
+                    "whale_long": 0.0, "whale_short": 0.0, "whale_count": 0}
 
         agg: dict[str, dict] = {}
-        for a in accounts:
-            is_whale = a["addr"] in whale_addrs
+        for a in smart_accounts:           # 聰明錢多空（方向贏家）
             for pos in a["positions"]:
-                coin = pos["coin"]
-                try:
-                    szi = float(pos.get("szi", 0.0))
-                    notional = abs(float(pos.get("positionValue", 0.0)))
-                except (TypeError, ValueError):
-                    continue
-                b = agg.setdefault(coin, {"long": 0.0, "short": 0.0, "count": 0,
-                                          "whale_long": 0.0, "whale_short": 0.0, "whale_count": 0})
-                side = "long" if szi > 0 else "short" if szi < 0 else None
-                if side:
-                    b[side] += notional
-                    b["count"] += 1
-                    if is_whale:
-                        b["whale_" + side] += notional
-                        b["whale_count"] += 1
+                add(agg.setdefault(pos["coin"], blank()), pos, "")
+        for a in whale_accounts:           # 鯨魚多空（全市場淨值前N，獨立統計）
+            for pos in a["positions"]:
+                add(agg.setdefault(pos["coin"], blank()), pos, "whale_")
 
-        self._trader_summary = self._summarize_traders(accounts, whale_addrs)
+        self._trader_summary = self._summarize_traders(smart_accounts, whale_accounts)
+        self._trader_summary["overlap"] = len(set(smart_addrs) & whale_set)  # 兩群重疊人數
         self._agg = agg
         self._agg_ts = time.time()
-        self._trader_count = len(accounts)
-        self._whale_count = len(whale_addrs)
+        self._trader_count = len(smart_accounts)
+        self._whale_count = len(whale_accounts)
         return agg
 
     def fetch(self, symbol: str) -> dict:
