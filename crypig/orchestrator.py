@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import datetime, timezone
 
 from .config import Config, get_config
@@ -26,6 +27,7 @@ class Orchestrator:
         self.radar: dict = {}                   # 分歧雷達：群眾(情緒/費率) vs 大戶(聰明錢/鯨魚)
         self._prev_pos: dict[str, dict] = {}    # 上一輪各幣 聰明錢/鯨魚 淨多空(算20分鐘變化)
         self.trader_summary: dict = {}          # 前N名交易者多空人數/比例/槓桿(看決心)
+        self._cycle_lock = threading.Lock()     # 避免並發跑輪(請求端各自觸發會互相覆蓋+打爆 HL)
         # 以下 CoinGecko 資料只在每輪(背景)抓一次並快取，請求端只讀不打 API（避免被封）
         self.macro: dict | None = None          # 全市場宏觀
         self.market_caps: dict[str, dict] = {}  # SYMBOL -> {market_cap, volume_24h}
@@ -53,6 +55,16 @@ class Orchestrator:
             self.agents.append(LTHAgent(self.config))
 
     def run_cycle(self) -> dict:
+        # 非重入：已有一輪在跑就直接回（請求端不再各自啟動並發輪→不互相覆蓋、不打爆 HL）
+        if not self._cycle_lock.acquire(blocking=False):
+            logger.info("已有一輪在跑，略過本次觸發")
+            return {"skipped": True}
+        try:
+            return self._run_cycle_locked()
+        finally:
+            self._cycle_lock.release()
+
+    def _run_cycle_locked(self) -> dict:
         observations: list[Observation] = []
         for agent in self.agents:
             obs = agent.run()
