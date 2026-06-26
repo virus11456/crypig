@@ -220,7 +220,7 @@ INDEX_HTML = r"""<!doctype html>
     <div id="pos"><div class="box empty">大玩家決心載入中…</div></div>
   </details>
 
-  <details class="ccard">
+  <details class="ccard" open>
     <summary><span class="ctitle">📋 幣別總表</span><span class="csum" id="sum-table">載入中…</span><span class="chev">▾</span></summary>
     <div id="table"><div class="box empty">幣別總表載入中…</div></div>
   </details>
