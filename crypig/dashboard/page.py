@@ -170,6 +170,24 @@ INDEX_HTML = r"""<!doctype html>
   .vsbar{flex:1;height:7px;background:#21262d;border-radius:999px;position:relative;overflow:hidden}
   .vsbar i{position:absolute;top:0;height:7px;border-radius:999px}
   .vsbar .mid{position:absolute;left:50%;top:-2px;width:1px;height:11px;background:#3a4250}
+  /* 訊號驗證：白話結論＋視覺 edge 長條 */
+  .vsig{border-top:1px solid var(--line);padding-top:12px;margin-top:14px}
+  .vsig:first-of-type{border-top:0;padding-top:0;margin-top:0}
+  .vhead{font-weight:700;font-size:14px;margin-bottom:4px}
+  .vsub{color:var(--mut);font-weight:400;font-size:12px}
+  .vverdict{font-size:13px;margin:6px 0 10px;padding:8px 11px;border-radius:8px;
+            background:#0d1117;border-left:3px solid var(--accent);line-height:1.5}
+  .ebars{display:flex;flex-direction:column;gap:5px}
+  .ebar{display:flex;align-items:center;gap:8px;font-size:12px}
+  .eblab{width:150px;flex:none;color:#c9d1d9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .etrack{flex:1;height:16px;background:#0d1117;border:1px solid var(--line);border-radius:4px;position:relative}
+  .etrack .mid{position:absolute;left:50%;top:-1px;bottom:-1px;width:1px;background:#3a4250}
+  .efill{position:absolute;top:2px;height:10px;border-radius:3px}
+  .eval{width:42px;flex:none;text-align:right;font-weight:700}
+  .en{width:46px;flex:none;text-align:right;color:var(--mut);font-size:11px}
+  .moredt{margin-top:8px}
+  .moredt>summary{cursor:pointer;color:var(--accent);font-size:12px;user-select:none}
+  @media (max-width:560px){ .eblab{width:104px;font-size:11px} .vsub{display:block;margin-top:2px} }
   /* 折疊卡：<details> 摘要＋點開細節 */
   details.ccard{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
   details.ccard>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;
@@ -770,27 +788,50 @@ async function loadValidate(){
         <table class="vt"><thead><tr><th>區間</th><th>樣本</th><th>勝率</th><th>平均報酬</th><th>vs基準</th></tr></thead><tbody>${rows}</tbody></table></div>`;
       }).join('');
     }
+    // 視覺化 edge 長條：每個桶一條，從中線往右(綠,贏基準)/左(紅,輸基準)，長度=|edge|
+    function edgeBars(blk){
+      const bs=(blk&&blk.buckets)||[];
+      const withN=bs.filter(b=>b.n>0);
+      if(!withN.length) return '<div class="meta" style="padding:4px 0">　└ 樣本累積中，暫無資料</div>';
+      const mx=Math.max(8,...bs.map(b=>Math.abs(b.edge||0)));
+      return '<div class="ebars">'+bs.map(b=>{
+        const e=b.edge, w=e==null?0:Math.min(50,Math.abs(e)/mx*50), c=e==null?'#8b949e':e>0?'#3fb950':'#f85149';
+        return `<div class="ebar"><span class="eblab">${b.bucket}</span>
+          <div class="etrack"><span class="mid"></span><i class="efill" style="${e>=0?'left:50%':'right:50%'};width:${w}%;background:${c}"></i></div>
+          <span class="eval" style="color:${c}">${e==null?'—':(e>0?'+':'')+e}</span>
+          <span class="en">${b.n||0}筆</span></div>`;
+      }).join('')+'</div>';
+    }
+    // 一句白話結論：取 |edge| 最大且樣本夠的桶
+    function verdict(study,hk,minN){
+      const blk=study&&study.horizons&&study.horizons[hk]; if(!blk) return null;
+      const cands=(blk.buckets||[]).filter(b=>b.n>=(minN||20)&&b.edge!=null);
+      if(!cands.length) return {t:'樣本還不足，統計力弱（累積中）',c:'#8b949e',weak:true};
+      let best=cands[0]; for(const b of cands) if(Math.abs(b.edge)>Math.abs(best.edge)) best=b;
+      const up=best.edge>0;
+      return {t:`「${best.bucket}」後 BTC/該幣 ${hk} 勝率 ${best.win_rate}%，比基準${up?'高':'低'} <b>${Math.abs(best.edge)}</b> 分 → ${up?'偏多訊號':'偏空/避開訊號'}`,
+              c:up?'#3fb950':'#f85149'};
+    }
+    function sig(study,hk,title,sub){
+      if(!study) return '';
+      const v=verdict(study,hk), blk=study&&study.horizons&&study.horizons[hk];
+      const n=study.samples!=null?study.samples+' 樣本':(study.coins!=null?study.coins+' 幣':'');
+      return `<div class="vsig">
+        <div class="vhead">${title} <span class="vsub">${sub}${n?'｜'+n:''}</span></div>
+        ${v?`<div class="vverdict" style="border-left-color:${v.c}">📍 <span style="color:${v.c}">${v.t}</span></div>`:''}
+        ${edgeBars(blk)}
+        <details class="moredt"><summary>看完整數字（所有前瞻期·各桶勝率/報酬/中位）</summary>${tbl(study)}</details>
+      </div>`;
+    }
     document.getElementById('validate').innerHTML=`<div class="box">
       <h2>🔬 訊號驗證 <small>訊號出現後 BTC 實際怎麼走（前瞻報酬·勝率）——能不能預判價格的證明</small></h2>
-      <div class="meta" style="margin-bottom:6px">😱 散戶恐懼貪婪 → BTC（日線，近 ${pw.daily_bars||0} 天；極端兩側＝反指標候選）　樣本 ${(v.fear_greed&&v.fear_greed.samples)||0} 天</div>
-      ${tbl(v.fear_greed)}
-      <div class="meta" style="margin:12px 0 6px">🎯 大戶 vs 散戶雷達背離 gap → BTC（小時線；正=群眾偏多/聰明錢偏空）　樣本 ${(v.radar&&v.radar.samples)||0} 筆<br>
-        <span style="color:#8b949e">此為逐輪累積訊號，樣本少時統計力弱、會隨時間變強</span></div>
-      ${tbl(v.radar)}
-      <div class="meta" style="margin:14px 0 6px;color:#d29922">⭐ <b>逐幣背離（命題核心）</b>：聰明錢 vs 散戶費率 對「同一幣」反向 → 該幣前瞻報酬（跨 ${(v.divergence&&v.divergence.coins)||0} 幣彙整）<br>
-        <span style="color:#8b949e">正=大戶多/散戶空；負=大戶空/散戶多。回答「大戶散戶在某幣分歧時、該幣後續怎麼走」。隨累積變強。</span></div>
-      ${tbl(v.divergence)}
-      <div class="meta" style="margin:14px 0 6px">🧠 <b>逐幣</b>：聰明錢對「該幣」淨多空 → 該幣前瞻報酬（跨 ${(v.pos_smart&&v.pos_smart.coins)||0} 幣彙整）<br>
-        <span style="color:#8b949e">回答「聰明錢淨多某幣時、該幣後續是否上漲」——最貼近選幣。隨累積變強。</span></div>
-      ${tbl(v.pos_smart)}
-      <div class="meta" style="margin:14px 0 6px">🐋 <b>逐幣</b>：巨鯨對「該幣」淨多空 → 該幣前瞻報酬（跨 ${(v.pos_whale&&v.pos_whale.coins)||0} 幣彙整）</div>
-      ${tbl(v.pos_whale)}
-      <div class="meta" style="margin:14px 0 6px">⚡ <b>變化率</b>：聰明錢「正在翻倉/加碼」(近 ${(v.mom_smart&&v.mom_smart.window_hours)||4}h net 變化) → 該幣前瞻報酬<br>
-        <span style="color:#8b949e">大戶『剛開始翻多/加碼』通常領先價格，比靜態多空更早。跨 ${(v.mom_smart&&v.mom_smart.coins)||0} 幣彙整。</span></div>
-      ${tbl(v.mom_smart)}
-      <div class="meta" style="margin:14px 0 6px">⚡ <b>變化率</b>：巨鯨「正在翻倉/加碼」→ 該幣前瞻報酬（跨 ${(v.mom_whale&&v.mom_whale.coins)||0} 幣彙整）</div>
-      ${tbl(v.mom_whale)}
-      <div class="meta" style="margin-top:8px">讀法：<b>vs基準</b>＝該桶平均報酬減「全樣本基準」，<b>正且夠大才是真 edge</b>（勝率 60% 但基準也 58% 等於沒料）；再看樣本數夠不夠、方向合不合邏輯。三者都過才當進場依據。</div>
+      <div class="meta" style="margin-bottom:10px">每條 = 一種「市場狀態」出現後的結果。長條向<b style="color:#3fb950">右(綠)</b>＝勝率高於全樣本基準（有 edge）；向<b style="color:#f85149">左(紅)</b>＝低於基準（該避開）。bar 越長 edge 越強；右邊數字＝贏基準幾個百分點。</div>
+      ${sig(v.fear_greed,'30d','😱 散戶恐懼貪婪 → BTC','日線近'+(pw.daily_bars||0)+'天')}
+      ${sig(v.divergence,'24h','⭐ 逐幣背離（大戶 vs 散戶·命題核心）','小時線')}
+      ${sig(v.pos_smart,'24h','🧠 聰明錢逐幣淨多空','小時線')}
+      ${sig(v.pos_whale,'24h','🐋 巨鯨逐幣淨多空','小時線')}
+      ${sig(v.mom_smart,'24h','⚡ 聰明錢變化率（翻倉/加碼）','小時線')}
+      ${sig(v.mom_whale,'24h','⚡ 巨鯨變化率','小時線')}
     </div>`;
   }catch(e){document.getElementById('validate').innerHTML='<div class="box empty">訊號驗證載入失敗：'+e+'</div>';}
 }
