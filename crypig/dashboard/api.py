@@ -206,7 +206,8 @@ def validate_signals() -> dict:
     結果快取 30 分鐘（OKX K 線不必每次重抓）。
     """
     import time
-    from ..validate import fear_greed_study, radar_study, positioning_study
+    from ..validate import (fear_greed_study, radar_study,
+                            positioning_study, momentum_study)
     orc = orchestrator()
     if _validate_cache["data"] and time.time() - _validate_cache["ts"] < 1800:
         return _validate_cache["data"]
@@ -246,6 +247,8 @@ def validate_signals() -> dict:
         "radar": radar_study(radar_hist, hourly),
         "pos_smart": positioning_study(smart_hist, price_by_coin, cohort="smart"),
         "pos_whale": positioning_study(whale_hist, price_by_coin, cohort="whale"),
+        "mom_smart": momentum_study(smart_hist, price_by_coin, cohort="smart"),
+        "mom_whale": momentum_study(whale_hist, price_by_coin, cohort="whale"),
         "price_window": {"daily_bars": len(daily), "hourly_bars": len(hourly),
                          "per_coin": len(price_by_coin)},
     }

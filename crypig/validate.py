@@ -175,6 +175,74 @@ def positioning_study(history_by_coin: dict[str, list[dict]],
             "coins": len(sig_by_coin), "horizons": horizons}
 
 
+# 大戶『變化率』分桶（delta = 近 window 內 net 的變化；正=翻多/加碼）
+_MOM_BUCKETS = [
+    ("大幅翻多 ≥0.3", 0.3, 9),
+    ("加碼偏多 0.1–0.3", 0.1, 0.3),
+    ("持平 -0.1–0.1", -0.1, 0.1),
+    ("減碼偏空 -0.3–-0.1", -0.3, -0.1),
+    ("大幅翻空 <-0.3", -9, -0.3),
+]
+
+
+def _delta_signals(pts: list[tuple[int, float]], window_ms: int) -> list[tuple[int, float]]:
+    """把 net 時間序列轉成『變化量』訊號：每點 net 減去 ~window 前那點的 net。"""
+    out: list[tuple[int, float]] = []
+    times = [p[0] for p in pts]
+    for i in range(len(pts)):
+        t = times[i]
+        j = bisect.bisect_right(times, t - window_ms) - 1   # ≤ t-window 的最後一點
+        if j >= 0:
+            out.append((t, pts[i][1] - pts[j][1]))
+    return out
+
+
+def momentum_study(history_by_coin: dict[str, list[dict]],
+                   price_by_coin: dict[str, list[tuple[int, float]]],
+                   cohort: str = "smart",
+                   window_hours: float = 4.0,
+                   horizon_hours: tuple[int, ...] = (24, 72)) -> dict:
+    """逐幣『大戶持倉變化率(翻倉/加碼)』→ 該幣前瞻報酬。
+
+    比靜態淨多空更早：大戶『剛開始翻多/加碼』往往領先價格。delta = 近 window_hours
+    內 net 的變化，跨幣彙整成變化桶。隨 pos_series 累積變強。
+    """
+    sig_by_coin: dict[str, list[tuple[int, float]]] = {}
+    win = int(window_hours * 3600_000)
+    for coin, rows in history_by_coin.items():
+        pts = []
+        for r in rows:
+            t = _iso_ms(r.get("ts", ""))
+            n = r.get("net")
+            if t is not None and n is not None:
+                pts.append((t, float(n)))
+        pts.sort()
+        deltas = _delta_signals(pts, win)
+        if deltas:
+            sig_by_coin[coin] = deltas
+
+    horizons = {}
+    for h in horizon_hours:
+        pooled: list[tuple[float, float]] = []
+        by_coin: dict[str, dict] = {}
+        for coin, pts in sig_by_coin.items():
+            series = price_by_coin.get(coin)
+            if not series:
+                continue
+            pairs = _forward_pairs(pts, series, h * 3600_000)
+            if pairs:
+                pooled += pairs
+                by_coin[coin] = _stats([r for _, r in pairs])
+        horizons[f"{h}h"] = {
+            "overall": _stats([r for _, r in pooled]),
+            "buckets": _bucketize(pooled, _MOM_BUCKETS),
+            "by_coin": dict(sorted(by_coin.items(), key=lambda kv: -(kv[1]["n"] or 0))),
+        }
+    return {"signal": f"momentum_{cohort}", "cohort": cohort,
+            "window_hours": window_hours, "coins": len(sig_by_coin),
+            "horizons": horizons}
+
+
 def radar_study(radar_history: list[dict],
                 price_series: list[tuple[int, float]],
                 horizon_hours: tuple[int, ...] = (24, 72)) -> dict:

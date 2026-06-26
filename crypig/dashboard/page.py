@@ -657,6 +657,11 @@ async function loadValidate(){
       ${tbl(v.pos_smart)}
       <div class="meta" style="margin:14px 0 6px">🐋 <b>逐幣</b>：巨鯨對「該幣」淨多空 → 該幣前瞻報酬（跨 ${(v.pos_whale&&v.pos_whale.coins)||0} 幣彙整）</div>
       ${tbl(v.pos_whale)}
+      <div class="meta" style="margin:14px 0 6px">⚡ <b>變化率</b>：聰明錢「正在翻倉/加碼」(近 ${(v.mom_smart&&v.mom_smart.window_hours)||4}h net 變化) → 該幣前瞻報酬<br>
+        <span style="color:#8b949e">大戶『剛開始翻多/加碼』通常領先價格，比靜態多空更早。跨 ${(v.mom_smart&&v.mom_smart.coins)||0} 幣彙整。</span></div>
+      ${tbl(v.mom_smart)}
+      <div class="meta" style="margin:14px 0 6px">⚡ <b>變化率</b>：巨鯨「正在翻倉/加碼」→ 該幣前瞻報酬（跨 ${(v.mom_whale&&v.mom_whale.coins)||0} 幣彙整）</div>
+      ${tbl(v.mom_whale)}
       <div class="meta" style="margin-top:8px">讀法：某「區間」的<b>平均報酬為正且勝率高</b>＝該訊號出現後 BTC/該幣傾向上漲＝可作進場依據；樣本數太少先別當真。</div>
     </div>`;
   }catch(e){document.getElementById('validate').innerHTML='<div class="box empty">訊號驗證載入失敗：'+e+'</div>';}
