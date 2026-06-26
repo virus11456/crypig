@@ -35,7 +35,7 @@ class Orchestrator:
         self.social: dict[str, dict] = {}       # SYMBOL -> LunarCrush 社群情緒(需付費金鑰)
         self.fear_greed: dict = {}              # 全市場恐懼貪婪指數(免費 alternative.me)
         self.defi: dict = {}                    # DefiLlama 資金動向(TVL/穩定幣/各鏈，免費)
-        self.reddit: dict = {}                  # Reddit 散戶討論熱度/情緒(需 app 憑證)
+        self.reddit: dict = {}                  # Reddit 散戶討論熱度/情緒(公開 RSS，免憑證)
         self.hl_scan: list = []                 # HL 全市場資金費率掃描(背景每輪快取，扛瞬斷)
         self.news: dict = {}                    # 加密新聞分析(利多/利空＋影響幣，免費 RSS)
         self._md: MarketDataClient | None = None
@@ -311,15 +311,14 @@ class Orchestrator:
                 self.defi = snap
         except Exception:
             logger.warning("DefiLlama 抓取失敗")
-        # Reddit 散戶討論熱度（需 app 憑證才抓）
+        # Reddit 散戶討論熱度（公開 RSS，免 app 憑證）
         try:
             if self._rd is None:
                 from .clients.reddit import RedditClient
                 self._rd = RedditClient()
-            if self._rd.enabled:
-                buzz = self._rd.crypto_buzz()
-                if buzz:
-                    self.reddit = buzz
+            buzz = self._rd.crypto_buzz()
+            if buzz:
+                self.reddit = buzz
         except Exception:
             logger.warning("Reddit 討論熱度抓取失敗")
         # 加密新聞分析（免費 RSS，利多/利空＋影響幣）

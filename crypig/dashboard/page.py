@@ -664,20 +664,22 @@ async function loadReddit(){
   try{
     const r=await (await fetch('/reddit')).json();
     const coins=r.coins||{};
-    if(!r.enabled || !Object.keys(coins).length){
+    if(!Object.keys(coins).length){
       document.getElementById('reddit').innerHTML=`<div class="box">
-        <h2>👽 Reddit 散戶討論熱度（取代推特）</h2>
-        <div class="meta">尚未啟用——到 reddit.com/prefs/apps 建 script app，設
-        <b>REDDIT_CLIENT_ID</b> / <b>REDDIT_CLIENT_SECRET</b> 後自動顯示各幣討論熱度與情緒。</div></div>`;
+        <h2>👽 Reddit 散戶討論熱度</h2>
+        <div class="meta">暫無資料（Reddit RSS 抓取中或暫時被擋，下一輪自動重試）。</div></div>`;
       return;
     }
+    const maxM=Math.max(...Object.values(coins).map(v=>v.mentions||0),1);
     const rows=Object.entries(coins).sort((a,b)=>b[1].mentions-a[1].mentions).slice(0,10)
-      .map(([s,v])=>{const sen=v.sentiment,col=sen>=70?'#3fb950':sen>=50?'#d29922':'#f85149';
+      .map(([s,v])=>{const sen=v.sentiment,col=sen==null?'#8b949e':sen>=60?'#3fb950':sen>=40?'#d29922':'#f85149';
+        const w=Math.round((v.mentions/maxM)*100);
         return `<div class="sig"><div class="sigtitle"><span>${s}</span>
-          <span class="meta">提及 ${v.mentions} ｜ 互動 ${(v.score+v.comments).toLocaleString()} ｜ 情緒 <b style="color:${col}">${sen??'—'}%</b></span></div></div>`;}).join('');
+          <span class="meta">提及 <b>${v.mentions}</b> ｜ 情緒 <b style="color:${col}">${sen==null?'—':sen+'%'}</b></span></div>
+          <div class="bar"><i style="width:${w}%;background:#5a3"></i></div></div>`;}).join('');
     document.getElementById('reddit').innerHTML=`<div class="box">
-      <h2>👽 Reddit 散戶討論熱度 <small>r/CryptoCurrency+CryptoMarkets 熱門 ${r.total_posts} 篇｜散戶熱炒=反指標線索</small></h2>
-      <div class="meta" style="margin-bottom:8px">用法：某幣 Reddit 討論暴增＋聰明錢在做空 → 散戶 FOMO 反指標 alpha</div>
+      <h2>👽 Reddit 散戶討論熱度 <small>RSS 公開源·免憑證｜${r.subs||4} 大版熱門 ${r.total_posts} 篇｜散戶熱炒=反指標線索</small></h2>
+      <div class="meta" style="margin-bottom:8px">提及數＝討論熱度；情緒＝標題利多比例。用法：某幣 Reddit 討論暴增＋聰明錢在做空 → 散戶 FOMO 反指標 alpha</div>
       ${rows}</div>`;
   }catch(e){document.getElementById('reddit').innerHTML='<div class="box empty">Reddit 載入失敗：'+e+'</div>';}
 }

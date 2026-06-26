@@ -1,20 +1,24 @@
-"""Reddit 散戶討論熱度 client（官方 API、唯讀 app-only OAuth）。
+"""Reddit 散戶討論熱度 client（公開 RSS，免 OAuth／免 app 憑證）。
 
-取代推特當「群眾情緒」源：抓加密大版熱門貼文，算各幣討論熱度＋情緒(upvote 比)。
+子版的熱門 RSS（`/r/<sub>/hot/.rss`）公開可取，**不需要 API 金鑰**；在雲端/VPS IP
+上比未授權的 `.json`（常被 Reddit 回 403）更穩。對熱門貼文標題做：
+  1) 各幣提及數（＝散戶討論熱度，本就是主要訊號）
+  2) 利多/利空情緒傾向（共用新聞的加密語境關鍵字詞庫）
+
 散戶熱炒某幣常是局部頂部/反指標，與聰明錢方向對照找 alpha。
-
-需免費憑證（Reddit 建立 script app）：env REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET。
-唯讀 grant_type=client_credentials，雲端可用、不像爬蟲被封 IP。
+RSS 自帶 TTL 快取即可（非 OAuth、無權杖）。
 """
 from __future__ import annotations
 
-import os
 import re
 import time
+from xml.etree import ElementTree as ET
 
 import httpx
 
-# 幣 → 比對用名稱（標題裡出現就算一次討論）
+from .news import _BULL, _BEAR  # 共用加密語境利多/利空詞庫
+
+# 幣 → 標題比對用名稱（標題出現即算一次討論）
 _COIN_NAMES = {
     "BTC": ["btc", "bitcoin"], "ETH": ["eth", "ethereum", "ether"],
     "SOL": ["sol", "solana"], "XRP": ["xrp", "ripple"], "DOGE": ["doge", "dogecoin"],
@@ -22,83 +26,99 @@ _COIN_NAMES = {
     "LINK": ["link", "chainlink"], "MATIC": ["matic", "polygon"], "DOT": ["dot", "polkadot"],
     "SHIB": ["shib", "shiba"], "PEPE": ["pepe"], "WIF": ["wif", "dogwifhat"],
     "SUI": ["sui"], "TRX": ["trx", "tron"], "TON": ["toncoin"], "HYPE": ["hype", "hyperliquid"],
+    "LTC": ["ltc", "litecoin"], "NEAR": ["near"], "APT": ["apt", "aptos"],
+    "ARB": ["arb", "arbitrum"], "OP": ["optimism"], "INJ": ["injective"],
 }
-_SUBS = ["CryptoCurrency", "CryptoMarkets"]
+# 加密大版（熱門 RSS 公開）。多版彙整提高樣本量；Reddit 對連續未授權請求會 429，
+# 故每版間隔抓、單次退避重試，抓不到的版略過（至少 CryptoCurrency 通常可得 50 篇）。
+_SUBS = ["CryptoCurrency", "CryptoMarkets", "Bitcoin", "ethtrader"]
+
+
+def _local(tag: str) -> str:
+    """去掉 XML 命名空間（Reddit RSS 是 Atom：{http://www.w3.org/2005/Atom}entry）。"""
+    return tag.rsplit("}", 1)[-1]
 
 
 class RedditClient:
     def __init__(self, timeout: float = 15.0):
-        self._id = os.getenv("REDDIT_CLIENT_ID", "")
-        self._secret = os.getenv("REDDIT_CLIENT_SECRET", "")
-        self._ua = "crypig/0.1 (crypto sentiment)"
-        self._client = httpx.Client(timeout=timeout, headers={"User-Agent": self._ua})
-        self._token = ""
-        self._token_ts = 0.0
+        # 帶具識別性的 User-Agent；Reddit 對預設/空 UA 較易擋
+        self._client = httpx.Client(
+            timeout=timeout, follow_redirects=True,
+            headers={"User-Agent": "crypig/0.2 (crypto retail sentiment; +https://hypeboss.cc)"})
         self._cache: dict | None = None
         self._cache_ts = 0.0
 
     @property
     def enabled(self) -> bool:
-        return bool(self._id and self._secret)
+        return True   # 公開 RSS 不需憑證，恆可用
 
-    def _get_token(self) -> str:
-        if self._token and time.time() - self._token_ts < 3000:
-            return self._token
-        r = self._client.post(
-            "https://www.reddit.com/api/v1/access_token",
-            data={"grant_type": "client_credentials"},
-            auth=(self._id, self._secret))
-        r.raise_for_status()
-        self._token = r.json()["access_token"]
-        self._token_ts = time.time()
-        return self._token
+    def _fetch_sub(self, sub: str) -> list[str]:
+        """回某子版熱門貼文標題清單。429 時退避重試一次。"""
+        url = f"https://www.reddit.com/r/{sub}/hot/.rss?limit=50"
+        content = None
+        for attempt in range(2):
+            try:
+                r = self._client.get(url)
+                if r.status_code == 200:
+                    content = r.content
+                    break
+                if r.status_code == 429 and attempt == 0:
+                    time.sleep(5.0)   # Reddit 限流，退避後再試一次
+                    continue
+                return []
+            except Exception:
+                return []
+        if content is None:
+            return []
+        try:
+            root = ET.fromstring(content)
+        except Exception:
+            return []
+        titles: list[str] = []
+        for e in root.iter():
+            if _local(e.tag) != "entry":
+                continue
+            for ch in e:
+                if _local(ch.tag) == "title":
+                    t = (ch.text or "").strip()
+                    if t:
+                        titles.append(t)
+                    break
+        return titles
 
     def crypto_buzz(self, ttl: float = 600.0) -> dict:
-        """各幣 Reddit 討論熱度（提及數/互動）+ 平均 upvote 比(情緒)。無憑證回 {}。"""
-        if not self.enabled:
-            return {}
+        """各幣 Reddit 討論熱度（提及數）＋標題利多/利空傾向。抓不到回快取/空。"""
         if self._cache is not None and time.time() - self._cache_ts < ttl:
             return self._cache
-        try:
-            token = self._get_token()
-        except Exception:
-            return self._cache or {}
-        posts = []
-        for sub in _SUBS:
-            try:
-                r = self._client.get(
-                    f"https://oauth.reddit.com/r/{sub}/hot",
-                    params={"limit": 100},
-                    headers={"Authorization": f"bearer {token}", "User-Agent": self._ua})
-                if r.status_code == 200:
-                    posts += [c["data"] for c in r.json().get("data", {}).get("children", [])]
-            except Exception:
-                continue
-        if not posts:
+        titles: list[str] = []
+        for i, sub in enumerate(_SUBS):
+            if i:
+                time.sleep(3.0)   # 拉開間隔，降低被 Reddit 限流(429)機率
+            titles += self._fetch_sub(sub)
+        if not titles:
             return self._cache or {}
 
         coins: dict[str, dict] = {}
-        for p in posts:
-            title = (p.get("title") or "").lower()
-            score = p.get("score") or 0
-            ratio = p.get("upvote_ratio")
-            comments = p.get("num_comments") or 0
+        for title in titles:
+            t = title.lower()
+            bull = sum(1 for w in _BULL if w in t)
+            bear = sum(1 for w in _BEAR if w in t)
             for sym, names in _COIN_NAMES.items():
-                if any(re.search(rf"\b{re.escape(n)}\b", title) for n in names):
-                    b = coins.setdefault(sym, {"mentions": 0, "score": 0, "comments": 0, "_ratios": []})
+                if any(re.search(rf"\b{re.escape(n)}\b", t) for n in names):
+                    b = coins.setdefault(sym, {"mentions": 0, "bull": 0, "bear": 0, "net": 0})
                     b["mentions"] += 1
-                    b["score"] += score
-                    b["comments"] += comments
-                    if ratio is not None:
-                        b["_ratios"].append(ratio)
-        for sym, b in coins.items():
-            rs = b.pop("_ratios")
-            b["sentiment"] = round(sum(rs) / len(rs) * 100, 1) if rs else None   # upvote 比→情緒%
+                    b["bull"] += bull
+                    b["bear"] += bear
+                    b["net"] += bull - bear
+        for b in coins.values():
+            tot = b["bull"] + b["bear"]
+            # 情緒%＝標題偏多比例(0~100)；標題無情緒詞時為 None（顯示「—」）
+            b["sentiment"] = round(b["bull"] / tot * 100, 1) if tot else None
         out = {
             "coins": coins,
-            "total_posts": len(posts),
-            "total_score": sum(p.get("score") or 0 for p in posts),
-            "total_comments": sum(p.get("num_comments") or 0 for p in posts),
+            "total_posts": len(titles),
+            "subs": len(_SUBS),
+            "source": "reddit_rss",
         }
         self._cache, self._cache_ts = out, time.time()
         return out

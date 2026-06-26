@@ -475,14 +475,14 @@ def social() -> dict:
 
 @app.get("/reddit")
 def reddit_buzz() -> dict:
-    """Reddit 散戶討論熱度/情緒（取代推特；需 app 憑證）。"""
+    """Reddit 散戶討論熱度/情緒（公開 RSS，免 app 憑證）。"""
     orc = orchestrator()
     if orc.config.use_mock:
-        return {"enabled": True, "total_posts": 200, "total_comments": 18000,
-                "coins": {"BTC": {"mentions": 31, "score": 12000, "comments": 4200, "sentiment": 78.0},
-                          "ETH": {"mentions": 18, "score": 5400, "comments": 2100, "sentiment": 71.0},
-                          "SOL": {"mentions": 12, "score": 3300, "comments": 1500, "sentiment": 83.0},
-                          "PEPE": {"mentions": 6, "score": 900, "comments": 600, "sentiment": 88.0}}}
+        return {"enabled": True, "total_posts": 200, "subs": 4, "source": "reddit_rss",
+                "coins": {"BTC": {"mentions": 31, "bull": 9, "bear": 4, "net": 5, "sentiment": 69.0},
+                          "ETH": {"mentions": 18, "bull": 5, "bear": 3, "net": 2, "sentiment": 62.0},
+                          "SOL": {"mentions": 12, "bull": 6, "bear": 2, "net": 4, "sentiment": 75.0},
+                          "PEPE": {"mentions": 6, "bull": 3, "bear": 1, "net": 2, "sentiment": 80.0}}}
     if not orc.reddit:
         orc.run_cycle()
     return {"enabled": bool(orc.reddit), **(orc.reddit or {})}

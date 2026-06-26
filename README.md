@@ -49,7 +49,7 @@
 | 宏觀 | 總市值/OI/OI-Cap/Vol-Cap/BTC市佔、各幣市值 | CoinGecko(Demo金鑰) |
 | 資金動向 | DeFi TVL/穩定幣/各鏈 TVL | DefiLlama |
 | 新聞分析 | 6 家媒體 RSS 關鍵字利多/利空＋影響幣、整體情緒、各幣淨情緒 | 加密媒體 RSS |
-| 情緒 | 恐懼貪婪指數(全區間) / Reddit 散戶討論熱度 / (LunarCrush 需付費) | alternative.me / Reddit API |
+| 情緒 | 恐懼貪婪指數(全區間) / Reddit 散戶討論熱度 / (LunarCrush 需付費) | alternative.me / Reddit 公開 RSS |
 | 決策/回測 | 綜合評分·信心·共識·動作建議；命中率＋損益曲線(真實K線對齊) | — |
 | 知識庫 | Obsidian markdown 匯出(Coins/Journal/KOL/Strategies)、RAG 問答 | — |
 
@@ -87,7 +87,7 @@
 | 資金動向 TVL/穩定幣 | DefiLlama | ✅ |
 | 新聞 利多/利空 | Cointelegraph/Decrypt/CryptoSlate/NewsBTC/CryptoPotato/AMBCrypto RSS | ✅ |
 | 恐懼貪婪指數 | alternative.me（全區間 2018至今） | ✅ |
-| Reddit 散戶情緒 | Reddit 官方唯讀 OAuth（需 app 憑證） | ✅（需憑證）|
+| Reddit 散戶情緒 | Reddit 公開 RSS（`/r/<sub>/hot/.rss`，**免憑證**、間隔抓避免限流） | ✅ |
 
 ## 部署（Docker / VPS）
 
