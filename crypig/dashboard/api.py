@@ -136,8 +136,10 @@ class AskBody(BaseModel):
 
 
 @app.get("/", response_class=HTMLResponse)
-def index() -> str:
-    return INDEX_HTML
+def index() -> HTMLResponse:
+    # no-cache：瀏覽器每次重新驗證 HTML，部署即時生效、免手動清快取
+    # (SW 導覽已 network-first；這層擋的是瀏覽器自身的 HTTP 啟發式快取)
+    return HTMLResponse(INDEX_HTML, headers={"Cache-Control": "no-cache, must-revalidate"})
 
 
 @app.post("/cycle")
