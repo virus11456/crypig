@@ -151,6 +151,49 @@ INDEX_HTML = r"""<!doctype html>
     .newslist{max-height:60vh}
   }
   @media (max-width:380px){ .kpi .v{font-size:18px} .tbl{font-size:11px} }
+  /* ===== 重新設計：進場機會 hero + 可折疊摘要卡 ===== */
+  .wrap{max-width:1400px;margin:0 auto;padding:18px 24px;display:flex;flex-direction:column;gap:14px}
+  .hero{background:linear-gradient(160deg,#161b22,#11161d);border:1px solid var(--line);
+        border-radius:14px;padding:18px 20px}
+  .hero h2{margin:0 0 2px;font-size:14px;color:var(--mut);font-weight:600;letter-spacing:.3px}
+  .hero .verdict{font-size:21px;font-weight:800;line-height:1.35;margin:6px 0}
+  .hero .conv{font-size:14px;font-weight:700;margin:4px 0 2px}
+  .heroline{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+  .htag{background:#0d1117;border:1px solid var(--line);border-radius:999px;
+        padding:6px 12px;font-size:13px;white-space:nowrap}
+  .opps{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:14px}
+  .opp{background:#0d1117;border:1px solid var(--line);border-radius:10px;padding:12px;cursor:default}
+  .opp .ot{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .opp .osym{font-size:16px;font-weight:800}
+  .vs{display:flex;align-items:center;gap:6px;font-size:12px;margin:7px 0}
+  .vs .lab{width:38px;color:var(--mut)}
+  .vsbar{flex:1;height:7px;background:#21262d;border-radius:999px;position:relative;overflow:hidden}
+  .vsbar i{position:absolute;top:0;height:7px;border-radius:999px}
+  .vsbar .mid{position:absolute;left:50%;top:-2px;width:1px;height:11px;background:#3a4250}
+  /* 折疊卡：<details> 摘要＋點開細節 */
+  details.ccard{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  details.ccard>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;
+        padding:14px 18px;user-select:none}
+  details.ccard>summary::-webkit-details-marker{display:none}
+  details.ccard>summary:hover{background:#1a212b}
+  .ctitle{font-weight:700;font-size:15px;white-space:nowrap}
+  .csum{color:var(--mut);font-size:13px;flex:1;min-width:0;overflow:hidden;
+        text-overflow:ellipsis;white-space:nowrap}
+  .chev{color:var(--mut);transition:transform .2s;font-size:12px}
+  details.ccard[open]>summary{border-bottom:1px solid var(--line)}
+  details.ccard[open]>summary .chev{transform:rotate(180deg)}
+  /* 卡內沿用既有渲染，但去掉內層 box 的框/底色避免雙重邊框 */
+  details.ccard .box{background:transparent;border:0;border-radius:0;padding:14px 18px 18px}
+  details.ccard .box>h2:first-child{display:none}   /* 標題已在卡頭，內層 h2 隱藏免重複 */
+  details.ccard .box.empty{padding:28px;display:block}
+  @media (max-width:560px){
+    .wrap{padding:12px 12px}
+    .hero{padding:14px 14px;border-radius:12px}
+    .hero .verdict{font-size:18px}
+    details.ccard>summary{padding:12px 14px;gap:8px}
+    details.ccard .box{padding:12px 14px 14px}
+    .opps{grid-template-columns:1fr 1fr;gap:8px}
+  }
 </style>
 </head>
 <body>
@@ -164,14 +207,39 @@ INDEX_HTML = r"""<!doctype html>
   <span class="ts" id="ts">載入中…</span>
 </header>
 <div id="page-strategy" style="display:none"></div>
-<div id="page-market">
-<section id="radar" class="bt"><div class="empty">分歧雷達載入中…</div></section>
-<section id="macro" class="bt"><div class="empty">宏觀載入中…</div></section>
-<section id="defi" class="bt"><div class="empty">資金動向載入中…</div></section>
-<section id="pos" class="bt"><div class="empty">大玩家決心載入中…</div></section>
-<section id="whalechart" class="bt"><div class="empty">鯨魚每日變化載入中…</div></section>
-<section id="table" class="bt"><div class="empty">幣別總表載入中…</div></section>
-</div>
+<div id="page-market"><div class="wrap">
+  <section id="opp" class="hero"><h2>🎯 現在有沒有進場機會</h2><div class="meta">載入中…</div></section>
+
+  <details class="ccard" open>
+    <summary><span class="ctitle">🎯 分歧雷達</span><span class="csum" id="sum-radar">載入中…</span><span class="chev">▾</span></summary>
+    <div id="radar"><div class="box empty">分歧雷達載入中…</div></div>
+  </details>
+
+  <details class="ccard">
+    <summary><span class="ctitle">🧭 大玩家決心</span><span class="csum" id="sum-pos">載入中…</span><span class="chev">▾</span></summary>
+    <div id="pos"><div class="box empty">大玩家決心載入中…</div></div>
+  </details>
+
+  <details class="ccard">
+    <summary><span class="ctitle">📋 幣別總表</span><span class="csum" id="sum-table">載入中…</span><span class="chev">▾</span></summary>
+    <div id="table"><div class="box empty">幣別總表載入中…</div></div>
+  </details>
+
+  <details class="ccard">
+    <summary><span class="ctitle">🐋 巨鯨持倉軸</span><span class="csum" id="sum-whale">載入中…</span><span class="chev">▾</span></summary>
+    <div id="whalechart"><div class="box empty">鯨魚每日變化載入中…</div></div>
+  </details>
+
+  <details class="ccard">
+    <summary><span class="ctitle">🌐 全市場宏觀</span><span class="csum" id="sum-macro">載入中…</span><span class="chev">▾</span></summary>
+    <div id="macro"><div class="box empty">宏觀載入中…</div></div>
+  </details>
+
+  <details class="ccard">
+    <summary><span class="ctitle">💰 資金動向</span><span class="csum" id="sum-defi">載入中…</span><span class="chev">▾</span></summary>
+    <div id="defi"><div class="box empty">資金動向載入中…</div></div>
+  </details>
+</div></div>
 <script>
 const C={bull:'#3fb950',bear:'#f85149',neutral:'#8b949e'};
 const LBLC=l=>l.includes('多')?C.bull:l.includes('空')?C.bear:l==='訊號分歧'?'#d29922':C.neutral;
@@ -190,6 +258,33 @@ function bigMoney(x){
   if(a>=1e6) return '$'+(x/1e6).toFixed(1)+'M';
   return '$'+Math.round(x);
 }
+function setSum(id, html){ const el=document.getElementById(id); if(el) el.innerHTML=html; }
+const sgn=v=>v>0?'#3fb950':v<0?'#f85149':'#8b949e';
+// 進場機會 hero：把分歧雷達的結論＋alpha候選做成一眼看懂的對比視覺
+function renderHero(m, coins, conv){
+  const el=document.getElementById('opp'); if(!el) return;
+  const vcol=m.diverging?((m.verdict||'').match(/看多|底部/)?'#3fb950':'#f85149'):'#d29922';
+  const bar=(v,col)=>{const w=Math.min(50,Math.abs(v||0)*50);const left=(v||0)>=0;
+    return `<div class="vsbar"><span class="mid"></span><i style="${left?'left:50%':'right:50%'};width:${w}%;background:${col}"></i></div>`;};
+  const opps=(coins||[]).slice(0,6).map(c=>{
+    const bcol=c.bias==='看多'?'#3fb950':'#f85149';
+    return `<div class="opp">
+      <div class="ot"><span class="osym">${c.symbol}</span><span class="chip" style="background:${bcol}22;color:${bcol}">${c.type}·${c.bias}</span></div>
+      <div class="vs"><span class="lab">群眾</span>${bar(c.crowd,sgn(c.crowd))}<b style="width:44px;text-align:right;color:${sgn(c.crowd)}">${(c.crowd*100).toFixed(0)}%</b></div>
+      <div class="vs"><span class="lab">大戶</span>${bar(c.smart,sgn(c.smart))}<b style="width:44px;text-align:right;color:${sgn(c.smart)}">${(c.smart*100).toFixed(0)}%</b></div>
+      <div class="meta" style="margin-top:6px">分歧強度 ${c.score}${c.whale!=null?`｜鯨魚 ${(c.whale*100).toFixed(0)}%`:''}</div>
+    </div>`;}).join('');
+  el.innerHTML=`<h2>🎯 現在有沒有進場機會 <span class="meta">群眾(情緒·費率) vs 大戶(聰明錢·鯨魚) 反向＝alpha</span></h2>
+    <div class="verdict" style="color:${vcol}">${m.verdict||'—'}</div>
+    ${conv?`<div class="conv" style="color:${conv.c}">⏱ ${conv.t}</div>`:''}
+    <div class="heroline">
+      <span class="htag">😱 恐懼貪婪 <b>${m.fear_greed??'—'}</b> ${m.fg_label||''}</span>
+      <span class="htag">🧠 聰明錢整體 <b style="color:${sgn(m.smart_avg)}">${m.smart_avg!=null?(m.smart_avg*100).toFixed(0)+'%':'—'}</b></span>
+      <span class="htag">背離 <b>${m.n_div??'—'}</b> 幣（頂 ${m.n_top??0}／底 ${m.n_bottom??0}）</span>
+    </div>
+    <div style="font-weight:700;font-size:13px;color:var(--mut);margin:14px 0 2px">背離最大的幣 · alpha 候選（群眾與大戶反向）</div>
+    <div class="opps">${opps||'<div class="meta">目前沒有明顯的群眾 vs 大戶背離（多數同向）—— 順勢、等背離出現。</div>'}</div>`;
+}
 async function loadMacro(){
   try{
     const m=await (await fetch('/macro')).json();
@@ -206,6 +301,7 @@ async function loadMacro(){
         <div class="kpi"><div class="v">${(g.btc_dominance||0).toFixed(1)}%</div><div class="k">BTC 市佔</div></div>
       </div>
     </div>`;
+    setSum('sum-macro', `總市值 ${bigMoney(g.market_cap)} ｜ OI/Cap ${g.oi_cap==null?'—':(g.oi_cap*100).toFixed(2)+'%'} ｜ BTC 市佔 ${(g.btc_dominance||0).toFixed(1)}%`);
     return m.per_symbol||{};
   }catch(e){document.getElementById('macro').innerHTML='<div class="box empty">宏觀載入失敗：'+e+'</div>';return {};}
 }
@@ -310,6 +406,7 @@ function renderTable(){
     </div>
     <div class="meta" style="margin:-4px 0 8px">ℹ️ <b>標記價／OI／溢價</b>來自 Hyperliquid，全幣皆有。<b>市值／OI&#8202;Cap／Vol&#8202;Cap</b>來自 CoinGecko，僅 ${withCap}/${MROWS.length} 幣對得上——冷門幣顯示「—」代表 <b>CoinGecko 無此幣市值資料</b>，非系統錯誤。</div>
     <div class="scroll"><table class="tbl"><thead><tr>${head}</tr></thead><tbody id="mbody">${mBodyHTML()}</tbody></table></div></div>`;
+  setSum('sum-table', `共 <b>${MROWS.length}</b> 幣 · 判斷·聰明錢/巨鯨多空·背離·費率·市值 · 點開可排序/篩選`);
 }
 function posRow(name, sub, g, color){
   if(!g||!g.total) return `<div class="posrow"><div class="posname"><b style="color:${color}">${name}</b> <span class="meta">${sub}</span></div><div class="meta">無資料</div></div>`;
@@ -342,7 +439,7 @@ async function loadRadar(){
           ${c.whale!=null?`｜鯨魚 ${(c.whale*100).toFixed(0)}%`:''} ｜ 分歧強度 ${c.score}</div></div>`;
     }).join('') || '<div class="meta">目前沒有明顯的群眾 vs 大戶背離（多數同向）。</div>';
     // 時間軸：背離量 gap 逐輪變化，趨 0=收斂=反轉接近
-    let tl='';
+    let tl='', conv=null;
     const cut=Date.now()/1000-24*3600;
     const h24=hist.filter(h=>Date.parse(h.ts)/1000>=cut);
     const use=h24.length>=2?h24:hist;          // 近 24 小時(不足則顯示已累積)
@@ -351,7 +448,7 @@ async function loadRadar(){
       const k=Math.min(5,use.length), recent=use.slice(-k), prev=use.slice(-2*k,-k);
       const am=a=>a.length?a.reduce((s,x)=>s+Math.abs(x.gap),0)/a.length:0;
       const rA=am(recent), pA=am(prev||[]);
-      const conv = prev.length? (rA<pA-0.03?{t:'背離收斂中 → 群眾正在向聰明錢靠攏，接近反轉/進場時機',c:'#3fb950'}
+      conv = prev.length? (rA<pA-0.03?{t:'背離收斂中 → 群眾正在向聰明錢靠攏，接近反轉/進場時機',c:'#3fb950'}
                     : rA>pA+0.03?{t:'背離擴大中 → 分歧加劇，反轉時機未到，續觀望',c:'#d29922'}
                     : {t:'背離持平 → 僵持，等收斂訊號',c:'#8b949e'}) : null;
       const lastN=use[use.length-1];
@@ -369,6 +466,8 @@ async function loadRadar(){
       ${tl}
       <div class="sec">背離最大的幣（alpha 候選）</div>
       ${rows}</div>`;
+    renderHero(m, coins, conv);
+    setSum('sum-radar', `<b style="color:${vcol}">${(m.verdict||'').slice(0,18)}</b> ｜ 恐懼貪婪 ${m.fear_greed??'—'} ⟷ 聰明錢 ${m.smart_avg!=null?(m.smart_avg*100).toFixed(0)+'%':'—'} ｜ 背離 ${m.n_div??'—'} 幣`);
   }catch(e){document.getElementById('radar').innerHTML='<div class="box empty">分歧雷達載入失敗：'+e+'</div>';}
 }
 async function loadDefi(){
@@ -389,6 +488,7 @@ async function loadDefi(){
       <div class="meta" style="margin-top:8px">前 6 大鏈 TVL：${chainHtml}</div>
       <div class="meta">${lineChart((tvl.history||[]).map(h=>({t:h.t,v:h.v})), {color:'#58a6ff'})}</div>
     </div>`;
+    setSum('sum-defi', `DeFi TVL $${tvl.value?(tvl.value/1e9).toFixed(1):'—'}B ｜ 穩定幣 $${sc.value?(sc.value/1e9).toFixed(0):'—'}B（場邊乾火藥）`);
   }catch(e){document.getElementById('defi').innerHTML='<div class="box empty">資金動向載入失敗：'+e+'</div>';}
 }
 async function loadPositioning(){
@@ -400,6 +500,9 @@ async function loadPositioning(){
       ${posRow('🐋 巨鯨', '全市場淨值前N', p.whale, '#d29922')}
       <div class="meta">註：兩群為獨立母體——聰明錢=近期方向贏家、巨鯨=全市場最有錢者${p.overlap!=null?`（目前重疊 <b>${p.overlap}</b> 人）`:''}；已排除 HLP/做市金庫。觀望=無持倉；表態傾向只計有開倉者。<br>👉 聰明錢與巨鯨方向相反時＝值得注意的分歧訊號。</div>
     </div>`;
+    const leanS=g=>{ if(!g||!g.total) return '無資料'; const sp=g.short_pct,lp=g.long_pct;
+      return sp==null?'—':(sp>lp?`<b style="color:#f85149">空 ${(sp*100).toFixed(0)}%</b>`:`<b style="color:#3fb950">多 ${(lp*100).toFixed(0)}%</b>`); };
+    setSum('sum-pos', `🧠 聰明錢 ${leanS(p.smart)} ｜ 🐋 巨鯨 ${leanS(p.whale)}${p.overlap!=null?` ｜ 重疊 ${p.overlap} 人`:''}`);
   }catch(e){document.getElementById('pos').innerHTML='<div class="box empty">決心面板載入失敗：'+e+'</div>';}
 }
 function fmtD(t){ if(!t) return ''; const d=new Date(t*1000); return (d.getMonth()+1)+'/'+d.getDate(); }
@@ -492,7 +595,8 @@ async function loadWhaleChart(){
     const h=h24.length>=2?h24:all;            // 近 24 小時(不足則顯示已累積)
     if(h.length<2){document.getElementById('whalechart').innerHTML=
       '<div class="box"><h2>🐋 HL 巨鯨 BTC 合約淨持倉 <small>逐輪累積中</small></h2>'
-      +'<div class="meta">每 20 分鐘記一筆，目前 '+all.length+' 筆，2 筆以上即開始畫線（看大戶部位何時翻多/翻空＝進場時機）。</div></div>';return;}
+      +'<div class="meta">每 20 分鐘記一筆，目前 '+all.length+' 筆，2 筆以上即開始畫線（看大戶部位何時翻多/翻空＝進場時機）。</div></div>';
+      setSum('sum-whale', `逐輪累積中（${all.length} 筆）`);return;}
     const pts=h.map(x=>({t:Date.parse(x.ts)/1000, v:x.net_usd}));
     const last=h[h.length-1], lo=last.long_usd, sh=last.short_usd;
     const net=last.net_usd, bias=net>=0?'淨多':'淨空', col=net>=0?'#3fb950':'#f85149';
@@ -508,6 +612,7 @@ async function loadWhaleChart(){
         ｜ 線在零軸上＝大戶偏多、下＝偏空，穿越零軸＝部位翻轉</div>
       ${lineChart(pts)}
     </div>`;
+    setSum('sum-whale', `最新 <b style="color:${col}">${bias} $${(Math.abs(net)/1e6).toFixed(1)}M</b>（${last.count} 帳號，${span}）${flip?'<b style="color:#d29922"> 翻轉</b>':''}`);
   }catch(e){document.getElementById('whalechart').innerHTML='<div class="box empty">鯨魚圖載入失敗：'+e+'</div>';}
 }
 async function refresh(){
@@ -601,26 +706,46 @@ async function loadSocial(){
   }catch(e){document.getElementById('social').innerHTML='<div class="box empty">情緒載入失敗：'+e+'</div>';}
 }
 function loadStrategy(){
-  document.getElementById('page-strategy').innerHTML=`
-  <section class="bt"><div class="box">
-    <h2>🧠 Obsidian 策略知識庫 <small>把所有訊號變成可複盤的個人知識圖，找 alpha</small></h2>
-    <p><a class="dl" href="/vault.zip">⬇ 下載 Obsidian Vault (.zip)</a></p>
-    <div class="step">1. 解壓 → Obsidian「開啟資料夾作為 Vault」</div>
-    <div class="step">2. 看 Graph View：訊號 ↔ 幣 ↔ KOL 連成一張圖</div>
-    <div class="step">3. 內含 Coins/(40幣)、Journal/(每日快照)、KOL/、Strategies/(寫假設掛回測)</div>
-    <div class="step">4. 在 Strategies 寫你的策略假設，對照 Journal 複盤、找 edge</div>
-  </div></section>
-  <section class="bt" id="validate"><div class="empty">訊號驗證載入中…</div></section>
-  <section class="bt" id="news"><div class="empty">新聞分析載入中…</div></section>
-  <section class="bt" id="social"><div class="empty">社群情緒載入中…</div></section>
-  <section class="bt" id="reddit"><div class="empty">Reddit 討論熱度載入中…</div></section>
-  <section class="bt"><div class="box">
-    <h2>🔎 知識庫問答 <small>對累積的決策/關係問答（RAG）</small></h2>
-    <div class="ask"><input id="kbq" placeholder="例：聰明錢和鯨魚現在對 ETH 的態度一致嗎？" onkeydown="if(event.key==='Enter')askKB()">
-      <button onclick="askKB()">問</button></div>
-    <div id="kbout" class="meta"></div>
-  </div></section>
-  <section class="bt" id="bt"><div class="empty">回測載入中…</div></section>`;
+  document.getElementById('page-strategy').innerHTML=`<div class="wrap">
+  <details class="ccard" open>
+    <summary><span class="ctitle">🔬 訊號驗證</span><span class="csum">訊號出現後 BTC 實際怎麼走（前瞻報酬·勝率·vs基準）——能不能預判價格的證明</span><span class="chev">▾</span></summary>
+    <div id="validate"><div class="box empty">訊號驗證載入中…</div></div>
+  </details>
+  <details class="ccard">
+    <summary><span class="ctitle">📰 新聞分析</span><span class="csum">6 家媒體利多/利空＋影響幣·整體情緒</span><span class="chev">▾</span></summary>
+    <div id="news"><div class="box empty">新聞分析載入中…</div></div>
+  </details>
+  <details class="ccard">
+    <summary><span class="ctitle">👽 Reddit 散戶情緒</span><span class="csum">各幣討論熱度＋情緒（公開 RSS·不限流）</span><span class="chev">▾</span></summary>
+    <div id="reddit"><div class="box empty">Reddit 討論熱度載入中…</div></div>
+  </details>
+  <details class="ccard">
+    <summary><span class="ctitle">😱 恐懼貪婪 / 社群</span><span class="csum">全區間恐懼貪婪指數·各幣社群情緒</span><span class="chev">▾</span></summary>
+    <div id="social"><div class="box empty">社群情緒載入中…</div></div>
+  </details>
+  <details class="ccard">
+    <summary><span class="ctitle">📈 策略回測</span><span class="csum">方向命中率＋損益曲線（真實 K 線對齊）</span><span class="chev">▾</span></summary>
+    <div id="bt"><div class="box empty">回測載入中…</div></div>
+  </details>
+  <details class="ccard">
+    <summary><span class="ctitle">🧠 Obsidian 知識庫</span><span class="csum">下載 vault·把訊號變成個人交易知識圖</span><span class="chev">▾</span></summary>
+    <div class="box">
+      <p><a class="dl" href="/vault.zip">⬇ 下載 Obsidian Vault (.zip)</a></p>
+      <div class="step">1. 解壓 → Obsidian「開啟資料夾作為 Vault」</div>
+      <div class="step">2. 看 Graph View：訊號 ↔ 幣 ↔ KOL 連成一張圖</div>
+      <div class="step">3. 內含 Coins/(40幣)、Journal/(每日快照)、KOL/、Strategies/(寫假設掛回測)</div>
+      <div class="step">4. 在 Strategies 寫你的策略假設，對照 Journal 複盤、找 edge</div>
+    </div>
+  </details>
+  <details class="ccard">
+    <summary><span class="ctitle">🔎 知識庫問答（RAG）</span><span class="csum">對累積的決策/關係用自然語言問答</span><span class="chev">▾</span></summary>
+    <div class="box">
+      <div class="ask"><input id="kbq" placeholder="例：聰明錢和鯨魚現在對 ETH 的態度一致嗎？" onkeydown="if(event.key==='Enter')askKB()">
+        <button onclick="askKB()">問</button></div>
+      <div id="kbout" class="meta"></div>
+    </div>
+  </details>
+</div>`;
   loadValidate(); loadNews(); loadSocial(); loadReddit(); loadBacktest();
 }
 async function loadValidate(){
