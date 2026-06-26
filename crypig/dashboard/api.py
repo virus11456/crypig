@@ -195,6 +195,44 @@ def backtest_report(horizon_hours: float | None = None,
     return backtest(orc.decisions, horizon_hours=h, price_fn=price_fn)
 
 
+_validate_cache: dict = {"ts": 0.0, "data": None}
+
+
+@app.get("/validate")
+def validate_signals() -> dict:
+    """訊號→前瞻報酬驗證：散戶恐懼貪婪 / 大戶vs散戶雷達背離 能否預判 BTC 價格。
+
+    恐懼貪婪有長歷史→立刻有結論；雷達 gap 隨每輪累積→樣本變多才漸有統計力。
+    結果快取 30 分鐘（OKX K 線不必每次重抓）。
+    """
+    import time
+    from ..validate import fear_greed_study, radar_study
+    orc = orchestrator()
+    if _validate_cache["data"] and time.time() - _validate_cache["ts"] < 1800:
+        return _validate_cache["data"]
+    md = market()
+    try:
+        daily = md.fetch_candles("BTC", "1d", 300)
+    except Exception:
+        daily = []
+    try:
+        hourly = md.fetch_candles("BTC", "1h", 300)
+    except Exception:
+        hourly = []
+    fg_hist = (orc.fear_greed or {}).get("history") or []
+    try:
+        radar_hist = orc.pos_series.radar_history(limit=2000)
+    except Exception:
+        radar_hist = []
+    out = {
+        "fear_greed": fear_greed_study(fg_hist, daily),
+        "radar": radar_study(radar_hist, hourly),
+        "price_window": {"daily_bars": len(daily), "hourly_bars": len(hourly)},
+    }
+    _validate_cache.update(ts=time.time(), data=out)
+    return out
+
+
 _market: MarketDataClient | None = None
 _hl = None
 

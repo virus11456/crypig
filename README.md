@@ -132,7 +132,8 @@ uvicorn crypig.dashboard.api:app --reload   # 看板 http://127.0.0.1:8000/
 
 主要端點：`/`（看板）·`/positioning`（大玩家決心）·`/radar`·`/radar_history`·
 `/scores`（全市場評分）·`/hl_market`·`/macro`·`/news`·`/social`·`/defi`·`/reddit`·
-`/whale_history`·`/backtest`·`/decisions`·`/vault.zip`（Obsidian）·`POST /ask`（RAG）。
+`/whale_history`·`/backtest`·`/validate`（訊號→前瞻報酬驗證）·`/decisions`·
+`/vault.zip`（Obsidian）·`POST /ask`（RAG）。
 
 ## 知識圖譜（自我學習 RAG）
 

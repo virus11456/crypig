@@ -105,6 +105,11 @@ INDEX_HTML = r"""<!doctype html>
   .socbar i{display:block;height:8px}
   .newschips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
   .newschip{background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:6px 10px;font-size:13px}
+  table.vt{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px}
+  table.vt th{text-align:right;color:#8b949e;font-weight:500;padding:4px 6px;border-bottom:1px solid #21262d}
+  table.vt th:first-child{text-align:left}
+  table.vt td{padding:4px 6px;border-bottom:1px solid #161b22}
+  table.vt td:first-child{text-align:left;color:#c9d1d9}
   .newslist{max-height:420px;overflow:auto;border-top:1px solid #21262d;margin-top:6px}
   .newsrow{padding:9px 2px;border-bottom:1px solid #161b22}
   .newsrow a{color:#c9d1d9;text-decoration:none}
@@ -551,7 +556,7 @@ function showPage(name){
 function refreshStrategy(){
   if(!STRATLOADED) return;
   if(document.getElementById('page-strategy').style.display==='none') return;
-  loadNews(); loadSocial(); loadReddit(); loadBacktest();
+  loadValidate(); loadNews(); loadSocial(); loadReddit(); loadBacktest();
 }
 async function askKB(){
   const q=document.getElementById('kbq').value.trim(); if(!q) return;
@@ -605,6 +610,7 @@ function loadStrategy(){
     <div class="step">3. 內含 Coins/(40幣)、Journal/(每日快照)、KOL/、Strategies/(寫假設掛回測)</div>
     <div class="step">4. 在 Strategies 寫你的策略假設，對照 Journal 複盤、找 edge</div>
   </div></section>
+  <section class="bt" id="validate"><div class="empty">訊號驗證載入中…</div></section>
   <section class="bt" id="news"><div class="empty">新聞分析載入中…</div></section>
   <section class="bt" id="social"><div class="empty">社群情緒載入中…</div></section>
   <section class="bt" id="reddit"><div class="empty">Reddit 討論熱度載入中…</div></section>
@@ -615,7 +621,40 @@ function loadStrategy(){
     <div id="kbout" class="meta"></div>
   </div></section>
   <section class="bt" id="bt"><div class="empty">回測載入中…</div></section>`;
-  loadNews(); loadSocial(); loadReddit(); loadBacktest();
+  loadValidate(); loadNews(); loadSocial(); loadReddit(); loadBacktest();
+}
+async function loadValidate(){
+  try{
+    const v=await (await fetch('/validate')).json();
+    const pw=v.price_window||{};
+    const col=x=>x==null?'#8b949e':x>0?'#3fb950':'#f85149';
+    const wcol=x=>x==null?'#8b949e':x>=55?'#3fb950':x<=45?'#f85149':'#d29922';
+    function tbl(study){
+      const hz=(study&&study.horizons)||{};
+      const keys=Object.keys(hz);
+      if(!keys.length) return '<div class="meta">資料不足</div>';
+      return keys.map(k=>{
+        const blk=hz[k], o=blk.overall||{};
+        const rows=(blk.buckets||[]).map(b=>`<tr>
+          <td>${b.bucket}</td>
+          <td style="text-align:right">${b.n||0}</td>
+          <td style="text-align:right;color:${wcol(b.win_rate)}">${b.win_rate==null?'—':b.win_rate+'%'}</td>
+          <td style="text-align:right;color:${col(b.mean)}"><b>${b.mean==null?'—':(b.mean>0?'+':'')+b.mean+'%'}</b></td>
+          <td style="text-align:right;color:${col(b.median)}">${b.median==null?'—':(b.median>0?'+':'')+b.median+'%'}</td></tr>`).join('');
+        return `<div style="margin-top:8px"><div class="meta">前瞻 <b>${k}</b>　整體 n=${o.n||0}・勝率 ${o.win_rate==null?'—':o.win_rate+'%'}・平均 <span style="color:${col(o.mean)}">${o.mean==null?'—':(o.mean>0?'+':'')+o.mean+'%'}</span></div>
+        <table class="vt"><thead><tr><th>區間</th><th>樣本</th><th>勝率</th><th>平均報酬</th><th>中位</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      }).join('');
+    }
+    document.getElementById('validate').innerHTML=`<div class="box">
+      <h2>🔬 訊號驗證 <small>訊號出現後 BTC 實際怎麼走（前瞻報酬·勝率）——能不能預判價格的證明</small></h2>
+      <div class="meta" style="margin-bottom:6px">😱 散戶恐懼貪婪 → BTC（日線，近 ${pw.daily_bars||0} 天；極端兩側＝反指標候選）　樣本 ${(v.fear_greed&&v.fear_greed.samples)||0} 天</div>
+      ${tbl(v.fear_greed)}
+      <div class="meta" style="margin:12px 0 6px">🎯 大戶 vs 散戶雷達背離 gap → BTC（小時線；正=群眾偏多/聰明錢偏空）　樣本 ${(v.radar&&v.radar.samples)||0} 筆<br>
+        <span style="color:#8b949e">此為逐輪累積訊號，樣本少時統計力弱、會隨時間變強</span></div>
+      ${tbl(v.radar)}
+      <div class="meta" style="margin-top:8px">讀法：某「區間」的<b>平均報酬為正且勝率高</b>＝該訊號出現後 BTC 傾向上漲＝可作進場依據；樣本數太少先別當真。</div>
+    </div>`;
+  }catch(e){document.getElementById('validate').innerHTML='<div class="box empty">訊號驗證載入失敗：'+e+'</div>';}
 }
 function ago(ts){ if(!ts) return ''; const m=Math.floor((Date.now()/1000-ts)/60);
   return m<60?m+'分前':m<1440?Math.floor(m/60)+'時前':Math.floor(m/1440)+'天前'; }
