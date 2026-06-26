@@ -177,6 +177,10 @@ INDEX_HTML = r"""<!doctype html>
   .vsub{color:var(--mut);font-weight:400;font-size:12px}
   .vverdict{font-size:13px;margin:6px 0 10px;padding:8px 11px;border-radius:8px;
             background:#0d1117;border-left:3px solid var(--accent);line-height:1.5}
+  .nowbox{font-size:13px;line-height:1.55;margin:8px 0 10px;padding:10px 12px;border-radius:8px;
+          background:#11161d;border:1px solid;border-left-width:4px}
+  .nowtag{font-size:10px;background:#1f6feb;color:#fff;border-radius:4px;padding:1px 5px;margin-left:5px;vertical-align:middle}
+  .wrow.now{background:#1c2230;border-radius:5px;padding:3px 4px;margin:0 -4px}
   .wrhead{font-size:12px;color:var(--mut);margin:2px 0 8px}
   .ebars{display:flex;flex-direction:column;gap:6px}
   .wrow{display:flex;align-items:center;gap:10px;font-size:12px}
@@ -774,6 +778,8 @@ async function loadValidate(){
   try{
     const v=await (await fetch('/validate')).json();
     const pw=v.price_window||{};
+    let curFG=null;  // 當下恐懼貪婪值，用來判讀「現在落在哪個桶」
+    try{ const rd=await (await fetch('/radar')).json(); curFG=rd.market&&rd.market.fear_greed; }catch(e){}
     const col=x=>x==null?'#8b949e':x>0?'#3fb950':'#f85149';
     const wcol=x=>x==null?'#8b949e':x>=55?'#3fb950':x<=45?'#f85149':'#d29922';
     function tbl(study){
@@ -794,15 +800,17 @@ async function loadValidate(){
     }
     // 直觀「上漲機率」直條：直條=該情緒下買進後上漲機率；灰線=隨便買的平均勝率(基準)
     // 超過灰線(綠)=比平常更值得買；低於(紅)=更該避開。edge 只拿來決定好壞色與標籤。
-    function edgeBars(blk){
+    function edgeBars(blk, nowVal){
       const bs=(blk&&blk.buckets)||[], o=(blk&&blk.overall)||{}, base=o.win_rate;
       if(!bs.some(b=>b.n>0)) return '<div class="meta" style="padding:4px 0">　└ 樣本累積中，暫無資料</div>';
       const head=base!=null?`<div class="wrhead">直條＝買進後「上漲機率」　｜　灰線＝隨便買的平均 <b>${base}%</b>（過灰線＝比平常更值得買）</div>`:'';
       return head+'<div class="ebars">'+bs.map(b=>{
-        if(b.win_rate==null) return `<div class="wrow"><span class="wlab">${b.bucket}</span><span class="meta" style="flex:1">樣本不足</span><span class="en">${b.n||0}筆</span></div>`;
+        const now = nowVal!=null && b.range && nowVal>=b.range[0] && nowVal<b.range[1];
+        const lab = `${b.bucket}${now?' <span class="nowtag">📍現在</span>':''}`;
+        if(b.win_rate==null) return `<div class="wrow${now?' now':''}"><span class="wlab">${lab}</span><span class="meta" style="flex:1">樣本不足</span><span class="en">${b.n||0}筆</span></div>`;
         const e=b.edge||0, good=e>=3, bad=e<=-3, c=good?'#3fb950':bad?'#f85149':'#8b949e';
         const tag=good?'👍 值得買':bad?'👎 該避開':'— 跟平常差不多';
-        return `<div class="wrow"><span class="wlab">${b.bucket}</span>
+        return `<div class="wrow${now?' now':''}"><span class="wlab">${lab}</span>
           <div class="wtrack"><i class="wfill" style="width:${b.win_rate}%;background:${c}"></i>${base!=null?`<span class="wbase" style="left:${base}%"></span>`:''}</div>
           <span class="wpct" style="color:${c}">${b.win_rate}%</span>
           <span class="wret" style="color:${(b.mean||0)>=0?'#3fb950':'#f85149'}">${b.mean==null?'':'平均'+(b.mean>0?'+':'')+b.mean+'%'}</span>
@@ -823,21 +831,36 @@ async function loadValidate(){
       if(!parts.length) parts.push('各情況勝率都跟平常差不多，暫無明顯 edge');
       return {t:parts.join('　｜　'),c:'#c9d1d9'};
     }
-    function sig(study,hk,title,sub){
+    // 「現在 → 行動」：把當下狀態值對到歷史桶，直接講現在該做什麼
+    function nowAction(blk, nowVal, stateName){
+      if(!blk || nowVal==null) return '';
+      const b=(blk.buckets||[]).find(x=>x.range && nowVal>=x.range[0] && nowVal<x.range[1]);
+      if(!b || b.win_rate==null) return '';
+      const e=b.edge||0, good=e>=3, bad=e<=-3, c=good?'#3fb950':bad?'#f85149':'#d29922';
+      const act=good?'歷史上這情況買進勝算高 → 偏向<b>進場(做多)</b>'
+               :bad?'歷史上這情況買進最危險 → <b>避開／別追多</b>'
+               :'歷史上跟平常差不多 → 沒有明顯優勢，等更極端';
+      const base=(blk.overall||{}).win_rate;
+      return `<div class="nowbox" style="border-color:${c}">🎯 <b>現在</b>：${stateName} <b>${nowVal}</b> ＝「${b.bucket}」
+        ｜歷史上這情況買 BTC，<b style="color:${c}">${b.win_rate}% 會漲</b>、平均 ${b.mean>0?'+':''}${b.mean}%（${good?'勝過':bad?'低於':'約等於'}平常 ${base}%）
+        <br><span style="color:${c}">→ ${act}</span></div>`;
+    }
+    function sig(study,hk,title,sub,nowVal,stateName){
       if(!study) return '';
       const v=verdict(study,hk), blk=study&&study.horizons&&study.horizons[hk];
       const n=study.samples!=null?study.samples+' 樣本':(study.coins!=null?study.coins+' 幣':'');
       return `<div class="vsig">
         <div class="vhead">${title} <span class="vsub">${sub}${n?'｜'+n:''}</span></div>
-        ${v?`<div class="vverdict" style="border-left-color:${v.c}">📍 <span style="color:${v.c}">${v.t}</span></div>`:''}
-        ${edgeBars(blk)}
+        ${nowAction(blk, nowVal, stateName)}
+        ${v?`<div class="vverdict" style="border-left-color:${v.c}">${v.t}</div>`:''}
+        ${edgeBars(blk, nowVal)}
         <details class="moredt"><summary>看完整數字（所有前瞻期·各桶勝率/報酬/中位）</summary>${tbl(study)}</details>
       </div>`;
     }
     document.getElementById('validate').innerHTML=`<div class="box">
       <h2>🔬 訊號驗證 <small>訊號出現後 BTC 實際怎麼走（前瞻報酬·勝率）——能不能預判價格的證明</small></h2>
       <div class="meta" style="margin-bottom:10px">每條 = 一種「市場狀態」出現後的結果。長條向<b style="color:#3fb950">右(綠)</b>＝勝率高於全樣本基準（有 edge）；向<b style="color:#f85149">左(紅)</b>＝低於基準（該避開）。bar 越長 edge 越強；右邊數字＝贏基準幾個百分點。</div>
-      ${sig(v.fear_greed,'30d','😱 散戶恐懼貪婪 → BTC','日線近'+(pw.daily_bars||0)+'天')}
+      ${sig(v.fear_greed,'30d','😱 散戶恐懼貪婪 → BTC','日線近'+(pw.daily_bars||0)+'天',curFG,'恐懼貪婪')}
       ${sig(v.divergence,'24h','⭐ 逐幣背離（大戶 vs 散戶·命題核心）','小時線')}
       ${sig(v.pos_smart,'24h','🧠 聰明錢逐幣淨多空','小時線')}
       ${sig(v.pos_whale,'24h','🐋 巨鯨逐幣淨多空','小時線')}
