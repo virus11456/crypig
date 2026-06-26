@@ -177,14 +177,18 @@ INDEX_HTML = r"""<!doctype html>
   .vsub{color:var(--mut);font-weight:400;font-size:12px}
   .vverdict{font-size:13px;margin:6px 0 10px;padding:8px 11px;border-radius:8px;
             background:#0d1117;border-left:3px solid var(--accent);line-height:1.5}
-  .ebars{display:flex;flex-direction:column;gap:5px}
-  .ebar{display:flex;align-items:center;gap:8px;font-size:12px}
-  .eblab{width:150px;flex:none;color:#c9d1d9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .etrack{flex:1;height:16px;background:#0d1117;border:1px solid var(--line);border-radius:4px;position:relative}
-  .etrack .mid{position:absolute;left:50%;top:-1px;bottom:-1px;width:1px;background:#3a4250}
-  .efill{position:absolute;top:2px;height:10px;border-radius:3px}
-  .eval{width:42px;flex:none;text-align:right;font-weight:700}
-  .en{width:46px;flex:none;text-align:right;color:var(--mut);font-size:11px}
+  .wrhead{font-size:12px;color:var(--mut);margin:2px 0 8px}
+  .ebars{display:flex;flex-direction:column;gap:6px}
+  .wrow{display:flex;align-items:center;gap:10px;font-size:12px}
+  .wlab{width:128px;flex:none;color:#c9d1d9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wtrack{flex:1;height:18px;background:#0d1117;border:1px solid var(--line);border-radius:4px;position:relative;overflow:hidden}
+  .wfill{position:absolute;left:0;top:0;bottom:0;border-radius:3px 0 0 3px;opacity:.85}
+  .wbase{position:absolute;top:-2px;bottom:-2px;width:2px;background:#c9d1d9;z-index:2}
+  .wpct{width:40px;flex:none;text-align:right;font-weight:700}
+  .wret{width:74px;flex:none;text-align:right;color:var(--mut)}
+  .wtag{width:104px;flex:none;text-align:right;font-weight:600}
+  .en{width:44px;flex:none;text-align:right;color:var(--mut);font-size:11px}
+  @media (max-width:680px){ .wlab{width:88px} .wret,.wtag{display:none} }
   .moredt{margin-top:8px}
   .moredt>summary{cursor:pointer;color:var(--accent);font-size:12px;user-select:none}
   @media (max-width:560px){ .eblab{width:104px;font-size:11px} .vsub{display:block;margin-top:2px} }
@@ -788,29 +792,36 @@ async function loadValidate(){
         <table class="vt"><thead><tr><th>區間</th><th>樣本</th><th>勝率</th><th>平均報酬</th><th>vs基準</th></tr></thead><tbody>${rows}</tbody></table></div>`;
       }).join('');
     }
-    // 視覺化 edge 長條：每個桶一條，從中線往右(綠,贏基準)/左(紅,輸基準)，長度=|edge|
+    // 直觀「上漲機率」直條：直條=該情緒下買進後上漲機率；灰線=隨便買的平均勝率(基準)
+    // 超過灰線(綠)=比平常更值得買；低於(紅)=更該避開。edge 只拿來決定好壞色與標籤。
     function edgeBars(blk){
-      const bs=(blk&&blk.buckets)||[];
-      const withN=bs.filter(b=>b.n>0);
-      if(!withN.length) return '<div class="meta" style="padding:4px 0">　└ 樣本累積中，暫無資料</div>';
-      const mx=Math.max(8,...bs.map(b=>Math.abs(b.edge||0)));
-      return '<div class="ebars">'+bs.map(b=>{
-        const e=b.edge, w=e==null?0:Math.min(50,Math.abs(e)/mx*50), c=e==null?'#8b949e':e>0?'#3fb950':'#f85149';
-        return `<div class="ebar"><span class="eblab">${b.bucket}</span>
-          <div class="etrack"><span class="mid"></span><i class="efill" style="${e>=0?'left:50%':'right:50%'};width:${w}%;background:${c}"></i></div>
-          <span class="eval" style="color:${c}">${e==null?'—':(e>0?'+':'')+e}</span>
-          <span class="en">${b.n||0}筆</span></div>`;
+      const bs=(blk&&blk.buckets)||[], o=(blk&&blk.overall)||{}, base=o.win_rate;
+      if(!bs.some(b=>b.n>0)) return '<div class="meta" style="padding:4px 0">　└ 樣本累積中，暫無資料</div>';
+      const head=base!=null?`<div class="wrhead">直條＝買進後「上漲機率」　｜　灰線＝隨便買的平均 <b>${base}%</b>（過灰線＝比平常更值得買）</div>`:'';
+      return head+'<div class="ebars">'+bs.map(b=>{
+        if(b.win_rate==null) return `<div class="wrow"><span class="wlab">${b.bucket}</span><span class="meta" style="flex:1">樣本不足</span><span class="en">${b.n||0}筆</span></div>`;
+        const e=b.edge||0, good=e>=3, bad=e<=-3, c=good?'#3fb950':bad?'#f85149':'#8b949e';
+        const tag=good?'👍 值得買':bad?'👎 該避開':'— 跟平常差不多';
+        return `<div class="wrow"><span class="wlab">${b.bucket}</span>
+          <div class="wtrack"><i class="wfill" style="width:${b.win_rate}%;background:${c}"></i>${base!=null?`<span class="wbase" style="left:${base}%"></span>`:''}</div>
+          <span class="wpct" style="color:${c}">${b.win_rate}%</span>
+          <span class="wret" style="color:${(b.mean||0)>=0?'#3fb950':'#f85149'}">${b.mean==null?'':'平均'+(b.mean>0?'+':'')+b.mean+'%'}</span>
+          <span class="wtag" style="color:${c}">${tag}</span>
+          <span class="en">${b.n}筆</span></div>`;
       }).join('')+'</div>';
     }
-    // 一句白話結論：取 |edge| 最大且樣本夠的桶
+    // 兩句白話結論：最值得買 & 最該避開（樣本夠的桶）
     function verdict(study,hk,minN){
       const blk=study&&study.horizons&&study.horizons[hk]; if(!blk) return null;
       const cands=(blk.buckets||[]).filter(b=>b.n>=(minN||20)&&b.edge!=null);
-      if(!cands.length) return {t:'樣本還不足，統計力弱（累積中）',c:'#8b949e',weak:true};
-      let best=cands[0]; for(const b of cands) if(Math.abs(b.edge)>Math.abs(best.edge)) best=b;
-      const up=best.edge>0;
-      return {t:`「${best.bucket}」後 BTC/該幣 ${hk} 勝率 ${best.win_rate}%，比基準${up?'高':'低'} <b>${Math.abs(best.edge)}</b> 分 → ${up?'偏多訊號':'偏空/避開訊號'}`,
-              c:up?'#3fb950':'#f85149'};
+      if(!cands.length) return {t:'樣本還不足、統計力弱（累積中）',c:'#8b949e'};
+      let best=cands[0],worst=cands[0];
+      for(const b of cands){ if(b.edge>best.edge)best=b; if(b.edge<worst.edge)worst=b; }
+      const parts=[];
+      if(best.edge>=3) parts.push(`<span style="color:#3fb950">👍 「${best.bucket}」時買最有勝算（${best.win_rate}% 會漲）</span>`);
+      if(worst.edge<=-3) parts.push(`<span style="color:#f85149">👎 「${worst.bucket}」時買最危險（只 ${worst.win_rate}% 會漲）</span>`);
+      if(!parts.length) parts.push('各情況勝率都跟平常差不多，暫無明顯 edge');
+      return {t:parts.join('　｜　'),c:'#c9d1d9'};
     }
     function sig(study,hk,title,sub){
       if(!study) return '';
