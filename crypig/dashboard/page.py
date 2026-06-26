@@ -4,7 +4,7 @@
   - 每幣一張卡片：方向標籤、分數量表、信心度、操作建議、理由
   - 各訊號明細條（多/空/中性著色，寬度＝貢獻度）
   - 分數歷史 sparkline（SVG）
-  - 「立即跑一輪」按鈕觸發 POST /cycle
+  - 背景排程每輪自動更新並快取，頁面只讀快取；表頭顯示「最後更新：時刻（X 秒前）」持續跳動
 """
 
 INDEX_HTML = r"""<!doctype html>
@@ -125,7 +125,6 @@ INDEX_HTML = r"""<!doctype html>
     header h1{font-size:16px;width:100%}
     header .nav{margin-left:0}
     header .ts{font-size:11px;order:3;width:100%}
-    header #run{margin-left:auto;padding:7px 11px;font-size:13px}
     .nav button{padding:7px 10px;font-size:13px}
     main{padding:10px;gap:10px}
     .bt{padding:0 10px;margin-top:10px}
@@ -156,9 +155,8 @@ INDEX_HTML = r"""<!doctype html>
     <button id="nav-market" class="on" onclick="showPage('market')">📊 市場看板</button>
     <button id="nav-strategy" onclick="showPage('strategy')">🧠 策略 / Obsidian</button>
   </span>
-  <span class="ts" id="ts">載入中…</span>
   <span style="flex:1"></span>
-  <button id="run" onclick="runCycle()">立即跑一輪</button>
+  <span class="ts" id="ts">載入中…</span>
 </header>
 <div id="page-strategy" style="display:none"></div>
 <div id="page-market">
@@ -526,20 +524,19 @@ async function refresh(){
     r.label=d.label; r.score=d.score; r.confidence=d.confidence; if(r.price==null)r.price=d.price; });
   MROWS=Object.values(bySym);
   renderTable();
-  document.getElementById('ts').textContent=decisions[0]?('更新：'+new Date(decisions[0].ts).toLocaleString()):'';
+  if(decisions[0]) LASTUP=new Date(decisions[0].ts).getTime();
+  renderLastUp();
 }
-async function runCycle(){
-  const b=document.getElementById('run');b.disabled=true;b.textContent='跑一輪中…';
-  try{
-    const r=await fetch('/cycle',{method:'POST'});
-    const j=await r.json().catch(()=>({}));
-    await refresh();
-    if(j&&j.skipped){ b.textContent='已有一輪在跑…';
-      await new Promise(s=>setTimeout(s,1800)); }
-    else { b.textContent='✓ 已更新';
-      await new Promise(s=>setTimeout(s,1200)); }
-  }
-  finally{b.disabled=false;b.textContent='立即跑一輪';}
+// 最後更新時間：顯示時刻＋相對「X 秒/分前」，每秒持續跳動，一眼看出資料是活的。
+let LASTUP=0;
+function renderLastUp(){
+  const el=document.getElementById('ts'); if(!el) return;
+  if(!LASTUP){ el.textContent='載入中…'; return; }
+  const sec=Math.max(0,Math.round((Date.now()-LASTUP)/1000));
+  const ago = sec<60 ? sec+' 秒前'
+            : sec<3600 ? Math.floor(sec/60)+' 分前'
+            : Math.floor(sec/3600)+' 小時前';
+  el.textContent='最後更新：'+new Date(LASTUP).toLocaleTimeString()+'（'+ago+'）';
 }
 // ---- 頁2：策略 / Obsidian ----
 let STRATLOADED=false;
@@ -685,6 +682,7 @@ async function loadReddit(){
   }catch(e){document.getElementById('reddit').innerHTML='<div class="box empty">Reddit 載入失敗：'+e+'</div>';}
 }
 refresh(); setInterval(refresh,30000);
+setInterval(renderLastUp,1000);   // 「X 秒前」每秒持續跳動
 setInterval(refreshStrategy,180000);   // 策略頁每 3 分鐘自動重抓(僅該頁可見時)
 // PWA：註冊 service worker（可安裝、離線載入 App 殼）
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}
