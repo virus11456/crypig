@@ -678,7 +678,7 @@ async function loadReddit(){
           <span class="meta">提及 <b>${v.mentions}</b> ｜ 情緒 <b style="color:${col}">${sen==null?'—':sen+'%'}</b></span></div>
           <div class="bar"><i style="width:${w}%;background:#5a3"></i></div></div>`;}).join('');
     document.getElementById('reddit').innerHTML=`<div class="box">
-      <h2>👽 Reddit 散戶討論熱度 <small>RSS 公開源·免憑證｜${r.subs||4} 大版熱門 ${r.total_posts} 篇｜散戶熱炒=反指標線索</small></h2>
+      <h2>👽 Reddit 散戶討論熱度 <small>RSS 公開源·免憑證·不限流｜${r.subs||1}/${r.subs_total||6} 版輪轉·熱門 ${r.total_posts} 篇｜散戶熱炒=反指標線索</small></h2>
       <div class="meta" style="margin-bottom:8px">提及數＝討論熱度；情緒＝標題利多比例。用法：某幣 Reddit 討論暴增＋聰明錢在做空 → 散戶 FOMO 反指標 alpha</div>
       ${rows}</div>`;
   }catch(e){document.getElementById('reddit').innerHTML='<div class="box empty">Reddit 載入失敗：'+e+'</div>';}

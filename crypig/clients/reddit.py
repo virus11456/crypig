@@ -5,8 +5,11 @@
   1) 各幣提及數（＝散戶討論熱度，本就是主要訊號）
   2) 利多/利空情緒傾向（共用新聞的加密語境關鍵字詞庫）
 
+**不被限流的關鍵：每輪只抓「一個」版、輪流抓**（Reddit 對連續未授權請求會 429，
+一輪一個請求就永遠不會撞）。每版各自留最近一次快照，彙整時用「所有版最近快照」，
+幾輪後全部版都有資料、之後持續滾動刷新——以時間換取不被限流。
+
 散戶熱炒某幣常是局部頂部/反指標，與聰明錢方向對照找 alpha。
-RSS 自帶 TTL 快取即可（非 OAuth、無權杖）。
 """
 from __future__ import annotations
 
@@ -29,9 +32,10 @@ _COIN_NAMES = {
     "LTC": ["ltc", "litecoin"], "NEAR": ["near"], "APT": ["apt", "aptos"],
     "ARB": ["arb", "arbitrum"], "OP": ["optimism"], "INJ": ["injective"],
 }
-# 加密大版（熱門 RSS 公開）。多版彙整提高樣本量；Reddit 對連續未授權請求會 429，
-# 故每版間隔抓、單次退避重試，抓不到的版略過（至少 CryptoCurrency 通常可得 50 篇）。
-_SUBS = ["CryptoCurrency", "CryptoMarkets", "Bitcoin", "ethtrader"]
+# 加密大版（熱門 RSS 公開）。每輪只抓其中「一個」(輪轉)，永不撞 Reddit 限流。
+# 版多沒關係——靠輪轉慢慢補齊、持續刷新；各版最舊約 len(_SUBS) 輪前。
+_SUBS = ["CryptoCurrency", "CryptoMarkets", "Bitcoin", "ethtrader",
+         "altcoin", "SatoshiStreetBets"]
 
 
 def _local(tag: str) -> str:
@@ -47,6 +51,9 @@ class RedditClient:
             headers={"User-Agent": "crypig/0.2 (crypto retail sentiment; +https://hypeboss.cc)"})
         self._cache: dict | None = None
         self._cache_ts = 0.0
+        self._idx = 0                              # 輪轉指標：每輪抓 _SUBS[_idx]
+        self._sub_titles: dict[str, list[str]] = {}  # 每版最近一次快照(標題清單)
+        self._sub_ts: dict[str, float] = {}        # 每版最近一次抓取時間
 
     @property
     def enabled(self) -> bool:
@@ -86,15 +93,32 @@ class RedditClient:
                     break
         return titles
 
-    def crypto_buzz(self, ttl: float = 600.0) -> dict:
-        """各幣 Reddit 討論熱度（提及數）＋標題利多/利空傾向。抓不到回快取/空。"""
-        if self._cache is not None and time.time() - self._cache_ts < ttl:
+    def crypto_buzz(self, ttl: float = 300.0) -> dict:
+        """各幣 Reddit 討論熱度（提及數）＋標題利多/利空傾向。
+
+        每輪只抓「一個」版(輪轉)＝單一請求，永不撞 Reddit 限流；彙整時用所有版的
+        最近快照。幾輪後全部版都有資料、之後持續滾動刷新。抓不到回上次結果。
+        """
+        now = time.time()
+        if self._cache is not None and now - self._cache_ts < ttl:
             return self._cache
+        # 本輪只抓一個版
+        sub = _SUBS[self._idx % len(_SUBS)]
+        self._idx += 1
+        fresh = self._fetch_sub(sub)
+        if fresh:
+            self._sub_titles[sub] = fresh
+            self._sub_ts[sub] = now
+
+        # 用所有版的最近快照彙整(跨版去重，避免轉貼重複計數)
         titles: list[str] = []
-        for i, sub in enumerate(_SUBS):
-            if i:
-                time.sleep(3.0)   # 拉開間隔，降低被 Reddit 限流(429)機率
-            titles += self._fetch_sub(sub)
+        seen: set[str] = set()
+        for lst in self._sub_titles.values():
+            for t in lst:
+                k = t.strip().lower()
+                if k and k not in seen:
+                    seen.add(k)
+                    titles.append(t)
         if not titles:
             return self._cache or {}
 
@@ -117,10 +141,11 @@ class RedditClient:
         out = {
             "coins": coins,
             "total_posts": len(titles),
-            "subs": len(_SUBS),
+            "subs": len(self._sub_titles),   # 已收集到資料的版數(輪轉中會慢慢長到 subs_total)
+            "subs_total": len(_SUBS),
             "source": "reddit_rss",
         }
-        self._cache, self._cache_ts = out, time.time()
+        self._cache, self._cache_ts = out, now
         return out
 
     def close(self) -> None:
