@@ -212,7 +212,7 @@ def validate_signals() -> dict:
         return _validate_cache["data"]
     md = market()
     try:
-        daily = md.fetch_candles("BTC", "1d", 300)
+        daily = md.fetch_candles_history("BTC", "1d", 1100)   # 分頁抓回 ~3 年
     except Exception:
         daily = []
     try:

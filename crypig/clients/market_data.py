@@ -226,6 +226,42 @@ class MarketDataClient:
         rows = list(reversed(payload.get("data", [])))   # OKX 由新到舊→反轉
         return [(int(r[0]), float(r[4])) for r in rows]
 
+    def fetch_candles_history(self, symbol: str, timeframe: str = "1d",
+                              max_bars: int = 1100) -> list[tuple[int, float]]:
+        """分頁抓較長歷史 K 線（OKX history-candles，可回溯數年）。
+
+        回 [(epoch_ms, close)] 由舊到新。OKX 單頁上限 100，用 `after` 游標往更早翻，
+        直到湊滿 max_bars 或沒有更早資料。失敗時回目前已抓到的部分。
+        """
+        bar = _OKX_BAR.get(timeframe)
+        if not bar:
+            raise ValueError(f"OKX 不支援的 timeframe：{timeframe}")
+        inst = f"{symbol}-USDT"
+        closes: dict[int, float] = {}
+        after: int | None = None
+        for _ in range(max_bars // 100 + 2):     # 上限頁數，防無限迴圈
+            if len(closes) >= max_bars:
+                break
+            params = {"instId": inst, "bar": bar, "limit": "100"}
+            if after is not None:
+                params["after"] = str(after)
+            try:
+                resp = self._client.get(
+                    "https://www.okx.com/api/v5/market/history-candles", params=params)
+                resp.raise_for_status()
+                data = resp.json().get("data", [])
+            except Exception:
+                break
+            if not data:
+                break
+            for r in data:                       # OKX 回傳新→舊
+                closes[int(r[0])] = float(r[4])
+            after = int(data[-1][0])             # 本頁最舊 ts → 下頁抓更早
+            if len(data) < 100:                  # 沒有更早資料了
+                break
+        items = sorted(closes.items())
+        return items[-max_bars:]
+
     def _okx(self, symbol: str, timeframe: str, limit: int) -> dict[str, list[float]]:
         bar = _OKX_BAR.get(timeframe)
         if not bar:
