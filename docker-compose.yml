@@ -6,7 +6,9 @@ services:
     container_name: crypig
     restart: unless-stopped
     ports:
-      - "8000:8000"          # 對外 8000（前面可再掛 Caddy/nginx 上 HTTPS）
+      # 只綁 localhost：外面連不到 IP:8000，僅同主機的 Caddy 能轉發進來(走網域+HTTPS)。
+      # 若想完全直連對外，改回 "8000:8000"。
+      - "127.0.0.1:8000:8000"
     env_file:
       - .env                 # 金鑰放這（見 .env.example）
     environment:
