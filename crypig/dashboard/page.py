@@ -640,9 +640,9 @@ async function loadValidate(){
           <td style="text-align:right">${b.n||0}</td>
           <td style="text-align:right;color:${wcol(b.win_rate)}">${b.win_rate==null?'—':b.win_rate+'%'}</td>
           <td style="text-align:right;color:${col(b.mean)}"><b>${b.mean==null?'—':(b.mean>0?'+':'')+b.mean+'%'}</b></td>
-          <td style="text-align:right;color:${col(b.median)}">${b.median==null?'—':(b.median>0?'+':'')+b.median+'%'}</td></tr>`).join('');
-        return `<div style="margin-top:8px"><div class="meta">前瞻 <b>${k}</b>　整體 n=${o.n||0}・勝率 ${o.win_rate==null?'—':o.win_rate+'%'}・平均 <span style="color:${col(o.mean)}">${o.mean==null?'—':(o.mean>0?'+':'')+o.mean+'%'}</span></div>
-        <table class="vt"><thead><tr><th>區間</th><th>樣本</th><th>勝率</th><th>平均報酬</th><th>中位</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+          <td style="text-align:right;color:${col(b.edge_mean)}">${b.edge_mean==null?'—':(b.edge_mean>0?'+':'')+b.edge_mean+'%'}</td></tr>`).join('');
+        return `<div style="margin-top:8px"><div class="meta">前瞻 <b>${k}</b>　基準(全樣本) n=${o.n||0}・勝率 ${o.win_rate==null?'—':o.win_rate+'%'}・平均 <span style="color:${col(o.mean)}">${o.mean==null?'—':(o.mean>0?'+':'')+o.mean+'%'}</span></div>
+        <table class="vt"><thead><tr><th>區間</th><th>樣本</th><th>勝率</th><th>平均報酬</th><th>vs基準</th></tr></thead><tbody>${rows}</tbody></table></div>`;
       }).join('');
     }
     document.getElementById('validate').innerHTML=`<div class="box">
@@ -652,6 +652,9 @@ async function loadValidate(){
       <div class="meta" style="margin:12px 0 6px">🎯 大戶 vs 散戶雷達背離 gap → BTC（小時線；正=群眾偏多/聰明錢偏空）　樣本 ${(v.radar&&v.radar.samples)||0} 筆<br>
         <span style="color:#8b949e">此為逐輪累積訊號，樣本少時統計力弱、會隨時間變強</span></div>
       ${tbl(v.radar)}
+      <div class="meta" style="margin:14px 0 6px;color:#d29922">⭐ <b>逐幣背離（命題核心）</b>：聰明錢 vs 散戶費率 對「同一幣」反向 → 該幣前瞻報酬（跨 ${(v.divergence&&v.divergence.coins)||0} 幣彙整）<br>
+        <span style="color:#8b949e">正=大戶多/散戶空；負=大戶空/散戶多。回答「大戶散戶在某幣分歧時、該幣後續怎麼走」。隨累積變強。</span></div>
+      ${tbl(v.divergence)}
       <div class="meta" style="margin:14px 0 6px">🧠 <b>逐幣</b>：聰明錢對「該幣」淨多空 → 該幣前瞻報酬（跨 ${(v.pos_smart&&v.pos_smart.coins)||0} 幣彙整）<br>
         <span style="color:#8b949e">回答「聰明錢淨多某幣時、該幣後續是否上漲」——最貼近選幣。隨累積變強。</span></div>
       ${tbl(v.pos_smart)}
@@ -662,7 +665,7 @@ async function loadValidate(){
       ${tbl(v.mom_smart)}
       <div class="meta" style="margin:14px 0 6px">⚡ <b>變化率</b>：巨鯨「正在翻倉/加碼」→ 該幣前瞻報酬（跨 ${(v.mom_whale&&v.mom_whale.coins)||0} 幣彙整）</div>
       ${tbl(v.mom_whale)}
-      <div class="meta" style="margin-top:8px">讀法：某「區間」的<b>平均報酬為正且勝率高</b>＝該訊號出現後 BTC/該幣傾向上漲＝可作進場依據；樣本數太少先別當真。</div>
+      <div class="meta" style="margin-top:8px">讀法：<b>vs基準</b>＝該桶平均報酬減「全樣本基準」，<b>正且夠大才是真 edge</b>（勝率 60% 但基準也 58% 等於沒料）；再看樣本數夠不夠、方向合不合邏輯。三者都過才當進場依據。</div>
     </div>`;
   }catch(e){document.getElementById('validate').innerHTML='<div class="box empty">訊號驗證載入失敗：'+e+'</div>';}
 }

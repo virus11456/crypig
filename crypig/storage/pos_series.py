@@ -71,6 +71,17 @@ class PosSeriesStore:
             "net_usd": r["long_usd"] - r["short_usd"], "net": r["net"], "count": r["count"],
         } for r in reversed(rows)]
 
+    def record_crowd(self, ts: str, symbol: str, net: float, count: int | None = None) -> None:
+        """逐幣散戶方向（由資金費率正規化的 crowd，-1..+1）落地，供逐幣背離驗證。
+
+        散戶端沒有多空名目金額，net 直接存正規化的擁擠方向（cohort='crowd'）。
+        """
+        self._conn.execute(
+            "INSERT OR REPLACE INTO pos_series(ts,cohort,symbol,long_usd,short_usd,net,count)"
+            " VALUES (?,?,?,?,?,?,?)",
+            (ts, "crowd", symbol, 0.0, 0.0, net, count))
+        self._conn.commit()
+
     def symbols(self, cohort: str, min_rows: int = 1) -> list[str]:
         """某族群有持倉時間序列的幣（依資料筆數多到少）——逐幣驗證用。"""
         rows = self._conn.execute(

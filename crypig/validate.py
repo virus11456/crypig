@@ -70,6 +70,27 @@ def _bucketize(pairs: list[tuple[float, float]],
     return out
 
 
+def _attach_edge(overall: dict, buckets: list[dict]) -> None:
+    """把每桶相對「無條件基準(overall)」的 edge 算出來——勝率/報酬高於基準才是真有預判力。"""
+    bw, bm = overall.get("win_rate"), overall.get("mean")
+    for b in buckets:
+        b["edge"] = (None if bw is None or b["win_rate"] is None
+                     else round(b["win_rate"] - bw, 1))           # 勝率超出基準幾個百分點
+        b["edge_mean"] = (None if bm is None or b["mean"] is None
+                          else round(b["mean"] - bm, 2))          # 平均報酬超出基準幾 %
+
+
+def _horizon(pairs: list[tuple[float, float]], buckets_def, by_coin=None) -> dict:
+    """組一個 horizon 區塊：整體基準 + 各桶(含 edge) + (選)逐幣。"""
+    overall = _stats([r for _, r in pairs])
+    buckets = _bucketize(pairs, buckets_def)
+    _attach_edge(overall, buckets)
+    blk = {"overall": overall, "buckets": buckets}
+    if by_coin is not None:
+        blk["by_coin"] = by_coin
+    return blk
+
+
 # 恐懼貪婪分桶（0~100）：極端兩側是反指標候選
 _FG_BUCKETS = [
     ("極度恐懼 <25", 0, 25),
@@ -94,10 +115,7 @@ def fear_greed_study(fg_history: list[dict],
     horizons = {}
     for d in horizon_days:
         pairs = _forward_pairs(signals, price_series, d * 86400_000)
-        horizons[f"{d}d"] = {
-            "overall": _stats([r for _, r in pairs]),
-            "buckets": _bucketize(pairs, _FG_BUCKETS),
-        }
+        horizons[f"{d}d"] = _horizon(pairs, _FG_BUCKETS)
     return {"signal": "fear_greed", "asset": "BTC", "samples": len(signals),
             "horizons": horizons}
 
@@ -166,13 +184,65 @@ def positioning_study(history_by_coin: dict[str, list[dict]],
             if pairs:
                 pooled += pairs
                 by_coin[coin] = _stats([r for _, r in pairs])
-        horizons[f"{h}h"] = {
-            "overall": _stats([r for _, r in pooled]),
-            "buckets": _bucketize(pooled, _POS_BUCKETS),
-            "by_coin": dict(sorted(by_coin.items(), key=lambda kv: -(kv[1]["n"] or 0))),
-        }
+        horizons[f"{h}h"] = _horizon(
+            pooled, _POS_BUCKETS,
+            by_coin=dict(sorted(by_coin.items(), key=lambda kv: -(kv[1]["n"] or 0))))
     return {"signal": f"positioning_{cohort}", "cohort": cohort,
             "coins": len(sig_by_coin), "horizons": horizons}
+
+
+# 逐幣『大戶 vs 散戶背離』分桶（divergence = 大戶 net − 散戶費率 crowd）
+_DIV_BUCKETS = [
+    ("大戶多/散戶空 ≥0.5", 0.5, 9),
+    ("偏大戶多 0.15–0.5", 0.15, 0.5),
+    ("方向一致 -0.15–0.15", -0.15, 0.15),
+    ("偏大戶空 -0.5–-0.15", -0.5, -0.15),
+    ("大戶空/散戶多 <-0.5", -9, -0.5),
+]
+
+
+def divergence_study(smart_by_coin: dict[str, list[dict]],
+                     crowd_by_coin: dict[str, list[dict]],
+                     price_by_coin: dict[str, list[tuple[int, float]]],
+                     horizon_hours: tuple[int, ...] = (24, 72)) -> dict:
+    """逐幣『大戶 vs 散戶背離』→ 該幣前瞻報酬——你命題的核心。
+
+    背離 = 聰明錢對該幣 net − 散戶費率 crowd（同一輪同 ts 對齊）。正＝大戶比散戶更
+    多頭（大戶多/散戶空）。驗證這種逐幣背離能否預判該幣走勢。隨累積變強。
+    """
+    sig_by_coin: dict[str, list[tuple[int, float]]] = {}
+    for coin, srows in smart_by_coin.items():
+        crows = crowd_by_coin.get(coin)
+        if not crows:
+            continue
+        smap = {r["ts"]: r["net"] for r in srows if r.get("net") is not None}
+        pts = []
+        for r in crows:
+            cn, ts = r.get("net"), r.get("ts")
+            if cn is None or ts not in smap:
+                continue
+            t = _iso_ms(ts)
+            if t is not None:
+                pts.append((t, float(smap[ts]) - float(cn)))   # 大戶 − 散戶
+        if pts:
+            sig_by_coin[coin] = sorted(pts)
+
+    horizons = {}
+    for h in horizon_hours:
+        pooled: list[tuple[float, float]] = []
+        by_coin: dict[str, dict] = {}
+        for coin, pts in sig_by_coin.items():
+            series = price_by_coin.get(coin)
+            if not series:
+                continue
+            pairs = _forward_pairs(pts, series, h * 3600_000)
+            if pairs:
+                pooled += pairs
+                by_coin[coin] = _stats([r for _, r in pairs])
+        horizons[f"{h}h"] = _horizon(
+            pooled, _DIV_BUCKETS,
+            by_coin=dict(sorted(by_coin.items(), key=lambda kv: -(kv[1]["n"] or 0))))
+    return {"signal": "divergence", "coins": len(sig_by_coin), "horizons": horizons}
 
 
 # 大戶『變化率』分桶（delta = 近 window 內 net 的變化；正=翻多/加碼）
@@ -233,11 +303,9 @@ def momentum_study(history_by_coin: dict[str, list[dict]],
             if pairs:
                 pooled += pairs
                 by_coin[coin] = _stats([r for _, r in pairs])
-        horizons[f"{h}h"] = {
-            "overall": _stats([r for _, r in pooled]),
-            "buckets": _bucketize(pooled, _MOM_BUCKETS),
-            "by_coin": dict(sorted(by_coin.items(), key=lambda kv: -(kv[1]["n"] or 0))),
-        }
+        horizons[f"{h}h"] = _horizon(
+            pooled, _MOM_BUCKETS,
+            by_coin=dict(sorted(by_coin.items(), key=lambda kv: -(kv[1]["n"] or 0))))
     return {"signal": f"momentum_{cohort}", "cohort": cohort,
             "window_hours": window_hours, "coins": len(sig_by_coin),
             "horizons": horizons}
@@ -256,9 +324,6 @@ def radar_study(radar_history: list[dict],
     horizons = {}
     for h in horizon_hours:
         pairs = _forward_pairs(signals, price_series, h * 3600_000)
-        horizons[f"{h}h"] = {
-            "overall": _stats([r for _, r in pairs]),
-            "buckets": _bucketize(pairs, _GAP_BUCKETS),
-        }
+        horizons[f"{h}h"] = _horizon(pairs, _GAP_BUCKETS)
     return {"signal": "radar_gap", "asset": "BTC", "samples": len(signals),
             "horizons": horizons}

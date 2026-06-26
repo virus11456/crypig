@@ -206,8 +206,8 @@ def validate_signals() -> dict:
     結果快取 30 分鐘（OKX K 線不必每次重抓）。
     """
     import time
-    from ..validate import (fear_greed_study, radar_study,
-                            positioning_study, momentum_study)
+    from ..validate import (fear_greed_study, radar_study, positioning_study,
+                            momentum_study, divergence_study)
     orc = orchestrator()
     cached = _validate_cache["data"]
     # 只把「F&G 已有資料」的結果當有效快取——避免暖機未抓到 F&G 時把空結果快取 30 分
@@ -232,6 +232,7 @@ def validate_signals() -> dict:
     # 逐幣大戶持倉驗證：取有歷史的幣(資料多→少)，上限 20 幣以控 OKX 請求數
     smart_hist: dict = {}
     whale_hist: dict = {}
+    crowd_hist: dict = {}
     price_by_coin: dict = {}
     try:
         coins = orc.pos_series.symbols("smart", min_rows=3)[:20]
@@ -242,12 +243,14 @@ def validate_signals() -> dict:
                 continue
             smart_hist[c] = orc.pos_series.history("smart", c, limit=2000)
             whale_hist[c] = orc.pos_series.history("whale", c, limit=2000)
+            crowd_hist[c] = orc.pos_series.history("crowd", c, limit=2000)
     except Exception:
         pass
 
     out = {
         "fear_greed": fear_greed_study(fg_hist, daily),
         "radar": radar_study(radar_hist, hourly),
+        "divergence": divergence_study(smart_hist, crowd_hist, price_by_coin),
         "pos_smart": positioning_study(smart_hist, price_by_coin, cohort="smart"),
         "pos_whale": positioning_study(whale_hist, price_by_coin, cohort="whale"),
         "mom_smart": momentum_study(smart_hist, price_by_coin, cohort="smart"),

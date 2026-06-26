@@ -201,6 +201,8 @@ class Orchestrator:
                         key=lambda kv: (kv[1].get("long", 0.0) + kv[1].get("short", 0.0)),
                         reverse=True)
         targets = core | {sym for sym, _ in ranked[:40]}
+        # 散戶端逐幣方向：資金費率→crowd(與雷達一致 clamp(fa/0.5)±1)，供逐幣背離驗證
+        funding = {r["symbol"]: r.get("funding_ann") for r in (self.hl_scan or [])}
         for sym in targets:
             b = agg.get(sym)
             if not b:
@@ -212,6 +214,9 @@ class Orchestrator:
                 self.pos_series.record(ts, "smart", sym,
                                        b.get("long", 0.0), b.get("short", 0.0),
                                        int(b.get("count", 0)))
+                fa = funding.get(sym)
+                if fa is not None:
+                    self.pos_series.record_crowd(ts, sym, max(-1.0, min(1.0, fa / 0.5)))
             except Exception as e:
                 logger.warning("持倉時間序列：寫入 %s 失敗 %s", sym, e)
 
