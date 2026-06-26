@@ -530,7 +530,15 @@ async function refresh(){
 }
 async function runCycle(){
   const b=document.getElementById('run');b.disabled=true;b.textContent='跑一輪中…';
-  try{await fetch('/cycle',{method:'POST'});await refresh();}
+  try{
+    const r=await fetch('/cycle',{method:'POST'});
+    const j=await r.json().catch(()=>({}));
+    await refresh();
+    if(j&&j.skipped){ b.textContent='已有一輪在跑…';
+      await new Promise(s=>setTimeout(s,1800)); }
+    else { b.textContent='✓ 已更新';
+      await new Promise(s=>setTimeout(s,1200)); }
+  }
   finally{b.disabled=false;b.textContent='立即跑一輪';}
 }
 // ---- 頁2：策略 / Obsidian ----
