@@ -122,6 +122,59 @@ def _iso_ms(s: str) -> int | None:
         return None
 
 
+# 逐幣大戶持倉分桶（net = 該幣淨多空 -1..+1）
+_POS_BUCKETS = [
+    ("大戶極多 ≥0.5", 0.5, 9),
+    ("偏多 0.15–0.5", 0.15, 0.5),
+    ("中性 -0.15–0.15", -0.15, 0.15),
+    ("偏空 -0.5–-0.15", -0.5, -0.15),
+    ("大戶極空 <-0.5", -9, -0.5),
+]
+
+
+def positioning_study(history_by_coin: dict[str, list[dict]],
+                      price_by_coin: dict[str, list[tuple[int, float]]],
+                      cohort: str = "smart",
+                      horizon_hours: tuple[int, ...] = (24, 72)) -> dict:
+    """逐幣『大戶(聰明錢/鯨魚)對該幣淨多空』→ 該幣前瞻報酬。
+
+    history_by_coin: {coin: [{'ts':iso, 'net':float}]}（pos_series.history 輸出）。
+    跨幣彙整（pool）成方向桶，回答「大戶淨多某幣時、該幣後續是否上漲」；另附逐幣統計。
+    隨 pos_series 累積，樣本變多統計力變強。
+    """
+    # 預轉每幣訊號點 [(ts_ms, net)]
+    sig_by_coin: dict[str, list[tuple[int, float]]] = {}
+    for coin, rows in history_by_coin.items():
+        pts = []
+        for r in rows:
+            t = _iso_ms(r.get("ts", ""))
+            n = r.get("net")
+            if t is not None and n is not None:
+                pts.append((t, float(n)))
+        if pts:
+            sig_by_coin[coin] = pts
+
+    horizons = {}
+    for h in horizon_hours:
+        pooled: list[tuple[float, float]] = []
+        by_coin: dict[str, dict] = {}
+        for coin, pts in sig_by_coin.items():
+            series = price_by_coin.get(coin)
+            if not series:
+                continue
+            pairs = _forward_pairs(pts, series, h * 3600_000)
+            if pairs:
+                pooled += pairs
+                by_coin[coin] = _stats([r for _, r in pairs])
+        horizons[f"{h}h"] = {
+            "overall": _stats([r for _, r in pooled]),
+            "buckets": _bucketize(pooled, _POS_BUCKETS),
+            "by_coin": dict(sorted(by_coin.items(), key=lambda kv: -(kv[1]["n"] or 0))),
+        }
+    return {"signal": f"positioning_{cohort}", "cohort": cohort,
+            "coins": len(sig_by_coin), "horizons": horizons}
+
+
 def radar_study(radar_history: list[dict],
                 price_series: list[tuple[int, float]],
                 horizon_hours: tuple[int, ...] = (24, 72)) -> dict:

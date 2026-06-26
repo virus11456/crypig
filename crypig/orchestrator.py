@@ -194,7 +194,13 @@ class Orchestrator:
         except Exception as e:
             logger.warning("持倉時間序列：取聚合失敗 %s", e)
             return
-        targets = set(self.config.symbols) | {"BTC", "ETH", "SOL", "HYPE"}
+        # 逐幣驗證需要更多幣的歷史：固定主要幣 + 本輪聰明錢名目最大的前 40 幣
+        # （冷門幣訊號雜訊大故只取活躍前段；sqlite 寫入便宜，可長期累積）
+        core = set(self.config.symbols) | {"BTC", "ETH", "SOL", "HYPE"}
+        ranked = sorted(agg.items(),
+                        key=lambda kv: (kv[1].get("long", 0.0) + kv[1].get("short", 0.0)),
+                        reverse=True)
+        targets = core | {sym for sym, _ in ranked[:40]}
         for sym in targets:
             b = agg.get(sym)
             if not b:

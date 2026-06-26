@@ -206,7 +206,7 @@ def validate_signals() -> dict:
     結果快取 30 分鐘（OKX K 線不必每次重抓）。
     """
     import time
-    from ..validate import fear_greed_study, radar_study
+    from ..validate import fear_greed_study, radar_study, positioning_study
     orc = orchestrator()
     if _validate_cache["data"] and time.time() - _validate_cache["ts"] < 1800:
         return _validate_cache["data"]
@@ -224,10 +224,30 @@ def validate_signals() -> dict:
         radar_hist = orc.pos_series.radar_history(limit=2000)
     except Exception:
         radar_hist = []
+
+    # 逐幣大戶持倉驗證：取有歷史的幣(資料多→少)，上限 20 幣以控 OKX 請求數
+    smart_hist: dict = {}
+    whale_hist: dict = {}
+    price_by_coin: dict = {}
+    try:
+        coins = orc.pos_series.symbols("smart", min_rows=3)[:20]
+        for c in coins:
+            try:
+                price_by_coin[c] = md.fetch_candles(c, "1h", 300)
+            except Exception:
+                continue
+            smart_hist[c] = orc.pos_series.history("smart", c, limit=2000)
+            whale_hist[c] = orc.pos_series.history("whale", c, limit=2000)
+    except Exception:
+        pass
+
     out = {
         "fear_greed": fear_greed_study(fg_hist, daily),
         "radar": radar_study(radar_hist, hourly),
-        "price_window": {"daily_bars": len(daily), "hourly_bars": len(hourly)},
+        "pos_smart": positioning_study(smart_hist, price_by_coin, cohort="smart"),
+        "pos_whale": positioning_study(whale_hist, price_by_coin, cohort="whale"),
+        "price_window": {"daily_bars": len(daily), "hourly_bars": len(hourly),
+                         "per_coin": len(price_by_coin)},
     }
     _validate_cache.update(ts=time.time(), data=out)
     return out

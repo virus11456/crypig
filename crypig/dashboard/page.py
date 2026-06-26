@@ -652,7 +652,12 @@ async function loadValidate(){
       <div class="meta" style="margin:12px 0 6px">🎯 大戶 vs 散戶雷達背離 gap → BTC（小時線；正=群眾偏多/聰明錢偏空）　樣本 ${(v.radar&&v.radar.samples)||0} 筆<br>
         <span style="color:#8b949e">此為逐輪累積訊號，樣本少時統計力弱、會隨時間變強</span></div>
       ${tbl(v.radar)}
-      <div class="meta" style="margin-top:8px">讀法：某「區間」的<b>平均報酬為正且勝率高</b>＝該訊號出現後 BTC 傾向上漲＝可作進場依據；樣本數太少先別當真。</div>
+      <div class="meta" style="margin:14px 0 6px">🧠 <b>逐幣</b>：聰明錢對「該幣」淨多空 → 該幣前瞻報酬（跨 ${(v.pos_smart&&v.pos_smart.coins)||0} 幣彙整）<br>
+        <span style="color:#8b949e">回答「聰明錢淨多某幣時、該幣後續是否上漲」——最貼近選幣。隨累積變強。</span></div>
+      ${tbl(v.pos_smart)}
+      <div class="meta" style="margin:14px 0 6px">🐋 <b>逐幣</b>：巨鯨對「該幣」淨多空 → 該幣前瞻報酬（跨 ${(v.pos_whale&&v.pos_whale.coins)||0} 幣彙整）</div>
+      ${tbl(v.pos_whale)}
+      <div class="meta" style="margin-top:8px">讀法：某「區間」的<b>平均報酬為正且勝率高</b>＝該訊號出現後 BTC/該幣傾向上漲＝可作進場依據；樣本數太少先別當真。</div>
     </div>`;
   }catch(e){document.getElementById('validate').innerHTML='<div class="box empty">訊號驗證載入失敗：'+e+'</div>';}
 }

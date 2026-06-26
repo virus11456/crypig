@@ -71,6 +71,13 @@ class PosSeriesStore:
             "net_usd": r["long_usd"] - r["short_usd"], "net": r["net"], "count": r["count"],
         } for r in reversed(rows)]
 
+    def symbols(self, cohort: str, min_rows: int = 1) -> list[str]:
+        """某族群有持倉時間序列的幣（依資料筆數多到少）——逐幣驗證用。"""
+        rows = self._conn.execute(
+            "SELECT symbol, COUNT(*) n FROM pos_series WHERE cohort=? "
+            "GROUP BY symbol HAVING n>=? ORDER BY n DESC", (cohort, min_rows)).fetchall()
+        return [r["symbol"] for r in rows]
+
     def record_radar(self, ts: str, market: dict) -> None:
         self._conn.execute(
             "INSERT OR REPLACE INTO radar_hist(ts,gap,crowd_m,smart_avg,n_div,n_top,n_bottom,diverging)"
