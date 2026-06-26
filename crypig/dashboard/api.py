@@ -209,8 +209,11 @@ def validate_signals() -> dict:
     from ..validate import (fear_greed_study, radar_study,
                             positioning_study, momentum_study)
     orc = orchestrator()
-    if _validate_cache["data"] and time.time() - _validate_cache["ts"] < 1800:
-        return _validate_cache["data"]
+    cached = _validate_cache["data"]
+    # 只把「F&G 已有資料」的結果當有效快取——避免暖機未抓到 F&G 時把空結果快取 30 分
+    if (cached and time.time() - _validate_cache["ts"] < 1800
+            and (cached.get("fear_greed") or {}).get("samples", 0) > 0):
+        return cached
     md = market()
     try:
         daily = md.fetch_candles_history("BTC", "1d", 1100)   # 分頁抓回 ~3 年
