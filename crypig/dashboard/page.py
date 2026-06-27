@@ -263,8 +263,13 @@ INDEX_HTML = r"""<!doctype html>
   </details>
 
   <details class="ccard">
-    <summary><span class="ctitle">🐋 巨鯨持倉軸</span><span class="csum" id="sum-whale">載入中…</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle">🐋 巨鯨持倉軸（合約）</span><span class="csum" id="sum-whale">載入中…</span><span class="chev">▾</span></summary>
     <div id="whalechart"><div class="box empty">鯨魚每日變化載入中…</div></div>
+  </details>
+
+  <details class="ccard" open>
+    <summary><span class="ctitle">🪙 鏈上巨鯨 BTC 現貨持倉量</span><span class="csum" id="sum-onchain">載入中…</span><span class="chev">▾</span></summary>
+    <div id="onchainwhale"><div class="box empty">鏈上巨鯨持幣量載入中…</div></div>
   </details>
 
   <details class="ccard">
@@ -644,6 +649,37 @@ function lineChart(pts, opts){
     <circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="3.5" fill="${col}"/>
     ${ticks}${yl}</svg>`;
 }
+// 🪙 鏈上巨鯨 BTC 現貨持倉量：真實持幣的累積/派發（與合約持倉互補）
+async function loadOnchainWhale(){
+  try{
+    const r=await (await fetch('/onchain_whale')).json();
+    const h=r.history||[];
+    if(h.length<2){
+      document.getElementById('onchainwhale').innerHTML=
+        '<div class="box"><h2>🪙 鏈上巨鯨 BTC 現貨持倉量</h2><div class="meta">'
+        +(r.error?('bitcoin-data 暫時取不到（'+r.error+'），下輪重試。'):'資料載入中…')+'</div></div>';
+      setSum('sum-onchain','—');return;
+    }
+    const pts=h.map(x=>({t:Date.parse(x.date)/1000, v:x.btc}));
+    const last=h[h.length-1].btc;
+    // 近 ~7 天變化（資料是日頻）
+    const k=Math.min(7,h.length-1), prev=h[h.length-1-k].btc;
+    const dBtc=last-prev, pctc=prev?dBtc/prev:0;
+    const col=dBtc>=0?'#3fb950':'#f85149';
+    let concl;
+    if(pctc>0.002) concl={t:`▲ 巨鯨<b>正在吸籌 BTC</b>（近 ${k} 天鏈上多了 <b>${Math.round(dBtc).toLocaleString()}</b> 顆）→ 大戶把幣搬走、移除供給＝結構性偏多`,c:'#2ea043'};
+    else if(pctc<-0.002) concl={t:`▼ 巨鯨<b>正在派發/出貨 BTC</b>（近 ${k} 天鏈上少了 <b>${Math.round(-dBtc).toLocaleString()}</b> 顆）→ 大戶在賣＝結構性偏空/留意頂部`,c:'#da3633'};
+    else concl={t:`巨鯨持幣量<b>大致持平</b>（近 ${k} 天變化 ${dBtc>=0?'+':''}${Math.round(dBtc).toLocaleString()} 顆）→ 無明顯吸籌/派發`,c:'#8b949e'};
+    const span = (pts[pts.length-1].t - pts[0].t)/86400;
+    document.getElementById('onchainwhale').innerHTML=`<div class="box">
+      <h2>🪙 鏈上巨鯨 BTC 現貨持倉量 <small>${r.bands||'大型持有者'} 真實持幣（bitcoin-data，日頻，近 ${Math.round(span)} 天）</small></h2>
+      <div class="vline" style="border-left-color:${concl.c}">📍 現在：${concl.t}</div>
+      <div class="meta">最新持有 <b style="color:#c9d1d9">${Math.round(last).toLocaleString()} BTC</b>｜這是<b>真實鏈上持幣</b>(非合約)：線往上＝大戶在買進/囤幣、往下＝在賣出。<br>用法：對照上面「合約持倉」——<b>合約做多＋鏈上吸幣＝最強偏多</b>；合約多但鏈上出貨＝假突破警訊。</div>
+      ${lineChart(pts,{color:dBtc>=0?'#3fb950':'#f85149'})}
+    </div>`;
+    setSum('sum-onchain', `${concl.t.replace(/<[^>]+>/g,'')}`.slice(0,40));
+  }catch(e){document.getElementById('onchainwhale').innerHTML='<div class="box empty">鏈上持幣載入失敗：'+e+'</div>';}
+}
 // 🧠 聰明錢 BTC 吸籌偵測：連續加碼 + 加碼量遞增 = 加速吸籌（只看最近幾輪，不需長累積）
 async function loadSmartBTC(){
   try{
@@ -716,7 +752,7 @@ async function loadWhaleChart(){
   }catch(e){document.getElementById('whalechart').innerHTML='<div class="box empty">鯨魚圖載入失敗：'+e+'</div>';}
 }
 async function refresh(){
-  loadRadar(); loadDefi(); loadPositioning(); loadSmartBTC(); loadWhaleChart();
+  loadRadar(); loadDefi(); loadPositioning(); loadSmartBTC(); loadWhaleChart(); loadOnchainWhale();
   await loadMacro();
   let decisions=[], hlcoins=[], scores={};
   try{ decisions=(await (await fetch('/decisions')).json()).decisions||[]; }catch(e){}
