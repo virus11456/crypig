@@ -177,6 +177,10 @@ INDEX_HTML = r"""<!doctype html>
   .vsub{color:var(--mut);font-weight:400;font-size:12px}
   .vverdict{font-size:13px;margin:6px 0 10px;padding:8px 11px;border-radius:8px;
             background:#0d1117;border-left:3px solid var(--accent);line-height:1.5}
+  .vsec{font-size:12px;color:var(--mut);font-weight:700;margin:16px 0 8px;
+        border-top:1px solid var(--line);padding-top:12px}
+  .acc{font-size:13px;line-height:1.55;padding:9px 12px;border-radius:8px;background:#11161d;
+       border-left:4px solid #6e7681;color:#c9d1d9}
   .vline{font-size:13px;line-height:1.5;margin:0 0 12px;padding:9px 12px;border-radius:8px;
          background:#11161d;border-left:4px solid var(--accent)}
   .nowbox{font-size:13px;line-height:1.55;margin:8px 0 10px;padding:10px 12px;border-radius:8px;
@@ -834,16 +838,22 @@ async function loadValidate(){
     }
     // 直觀「上漲機率」直條：直條=該情緒下買進後上漲機率；灰線=隨便買的平均勝率(基準)
     // 超過灰線(綠)=比平常更值得買；低於(紅)=更該避開。edge 只拿來決定好壞色與標籤。
+    // 基準勝率極端(單向行情)或樣本太少 → 統計力不足，不可信
+    function reliable(blk){
+      const o=(blk&&blk.overall)||{}, base=o.win_rate, n=o.n;
+      return base!=null && base<=72 && base>=28 && (n==null||n>=30);
+    }
     function edgeBars(blk, nowVal){
-      const bs=(blk&&blk.buckets)||[], o=(blk&&blk.overall)||{}, base=o.win_rate;
+      const bs=(blk&&blk.buckets)||[], o=(blk&&blk.overall)||{}, base=o.win_rate, ok=reliable(blk);
       if(!bs.some(b=>b.n>0)) return '<div class="meta" style="padding:4px 0">　└ 樣本累積中，暫無資料</div>';
       const head=base!=null?`<div class="wrhead">直條＝買進後「上漲機率」　｜　灰線＝隨便買的平均 <b>${base}%</b>（過灰線＝比平常更值得買）</div>`:'';
       return head+'<div class="ebars">'+bs.map(b=>{
         const now = nowVal!=null && b.range && nowVal>=b.range[0] && nowVal<b.range[1];
         const lab = `${b.bucket}${now?' <span class="nowtag">📍現在</span>':''}`;
         if(b.win_rate==null) return `<div class="wrow${now?' now':''}"><span class="wlab">${lab}</span><span class="meta" style="flex:1">樣本不足</span><span class="en">${b.n||0}筆</span></div>`;
-        const e=b.edge||0, good=e>=3, bad=e<=-3, c=good?'#3fb950':bad?'#f85149':'#8b949e';
-        const tag=good?'👍 值得買':bad?'👎 該避開':'— 跟平常差不多';
+        const e=b.edge||0, good=e>=3, bad=e<=-3;
+        const c = ok ? (good?'#3fb950':bad?'#f85149':'#8b949e') : '#6e7681';   // 不可信→全灰，不誤導
+        const tag = ok ? (good?'👍 值得買':bad?'👎 該避開':'— 跟平常差不多') : '';
         return `<div class="wrow${now?' now':''}"><span class="wlab">${lab}</span>
           <div class="wtrack"><i class="wfill" style="width:${b.win_rate}%;background:${c}"></i>${base!=null?`<span class="wbase" style="left:${base}%"></span>`:''}</div>
           <span class="wpct" style="color:${c}">${b.win_rate}%</span>
@@ -879,12 +889,22 @@ async function loadValidate(){
         ｜歷史上這情況買 BTC，<b style="color:${c}">${b.win_rate}% 會漲</b>、平均 ${b.mean>0?'+':''}${b.mean}%（${good?'勝過':bad?'低於':'約等於'}平常 ${base}%）
         <br><span style="color:${c}">→ ${act}</span></div>`;
     }
+    // 估「還要多久才可信」：粗估每天約 72 筆/幣，要 ~400 筆樣本且需涵蓋漲跌
     function sig(study,hk,title,sub,nowVal,stateName){
       if(!study) return '';
-      const v=verdict(study,hk), blk=study&&study.horizons&&study.horizons[hk];
+      const blk=study&&study.horizons&&study.horizons[hk];
       const n=study.samples!=null?study.samples+' 樣本':(study.coins!=null?study.coins+' 幣':'');
-      return `<div class="vsig">
-        <div class="vhead">${title} <span class="vsub">${sub}${n?'｜'+n:''}</span></div>
+      const head=`<div class="vhead">${title} <span class="vsub">${sub}${n?'｜'+n:''}</span></div>`;
+      const hasData=blk&&(blk.buckets||[]).some(b=>b.n>0);
+      if(!hasData) return `<div class="vsig">${head}<div class="acc">⏳ 樣本累積中，暫無資料（部署後逐輪累積）</div></div>`;
+      if(!reliable(blk)){
+        const base=(blk.overall||{}).win_rate;
+        return `<div class="vsig">${head}
+          <div class="acc">⏳ <b>累積中，尚不可用</b>　基準勝率 <b>${base}%</b> ＝最近幾乎什麼都在漲（單向行情）→ 這時算的勝率<b>不具統計意義</b>，不管 88% 還 100% 都只是反映「近期都漲」。<br>需再累積數週、涵蓋<b>上漲與下跌兩種行情</b>，基準回到 ~50% 才看得出真訊號。
+          <details class="moredt"><summary>還是要看目前（未成熟）數字</summary>${edgeBars(blk,nowVal)}${tbl(study)}</details></div></div>`;
+      }
+      const v=verdict(study,hk);
+      return `<div class="vsig">${head}
         ${nowAction(blk, nowVal, stateName)}
         ${v?`<div class="vverdict" style="border-left-color:${v.c}">${v.t}</div>`:''}
         ${edgeBars(blk, nowVal)}
@@ -892,9 +912,11 @@ async function loadValidate(){
       </div>`;
     }
     document.getElementById('validate').innerHTML=`<div class="box">
-      <h2>🔬 訊號驗證 <small>訊號出現後 BTC 實際怎麼走（前瞻報酬·勝率）——能不能預判價格的證明</small></h2>
-      <div class="meta" style="margin-bottom:10px">每條 = 一種「市場狀態」出現後的結果。長條向<b style="color:#3fb950">右(綠)</b>＝勝率高於全樣本基準（有 edge）；向<b style="color:#f85149">左(紅)</b>＝低於基準（該避開）。bar 越長 edge 越強；右邊數字＝贏基準幾個百分點。</div>
+      <h2>🔬 訊號驗證 <small>把「某狀態出現後價格實際怎麼走」量化成勝率，看訊號能不能預判價格</small></h2>
+      <div class="meta" style="margin-bottom:6px">直條＝該狀態下買進後的「上漲機率」；灰線＝隨便買的平均（基準）。<b>過灰線＝比平常更值得買</b>。只有「基準接近 50%、樣本夠」的訊號才可信。</div>
+      <div class="vsec">✅ 已可用（有長歷史，立刻能用）</div>
       ${sig(v.fear_greed,'30d','😱 散戶恐懼貪婪 → BTC','日線近'+(pw.daily_bars||0)+'天',curFG,'恐懼貪婪')}
+      <div class="vsec">⏳ 累積中（逐幣訊號，部署後才開始記，需數週＋含漲跌行情）</div>
       ${sig(v.divergence,'24h','⭐ 逐幣背離（大戶 vs 散戶·命題核心）','小時線')}
       ${sig(v.pos_smart,'24h','🧠 聰明錢逐幣淨多空','小時線')}
       ${sig(v.pos_whale,'24h','🐋 巨鯨逐幣淨多空','小時線')}
@@ -965,8 +987,12 @@ async function loadReddit(){
           <div class="bar"><i style="width:${w}%;background:#5a3"></i></div></div>`;}).join('');
     const hot=Object.entries(coins).sort((a,b)=>b[1].mentions-a[1].mentions)[0];
     const rc=hot?{t:`散戶討論最熱：<b>${hot[0]}</b>（${hot[1].mentions} 提及${hot[1].sentiment!=null?'，情緒 '+hot[1].sentiment+'%':''}）→ 散戶熱炒常是局部頂部，<b>去幣別總表/雷達看 ${hot[0]} 的聰明錢方向：若聰明錢在做空＝反指標 alpha</b>`,c:'#d29922'}:null;
+    const aMin=r.newest_ts?Math.max(0,Math.round((Date.now()/1000-r.newest_ts)/60)):null;
+    const aTxt=aMin==null?'':(aMin<60?aMin+' 分前':Math.floor(aMin/60)+' 小時前');
+    const rangeTxt=r.span_hours!=null?`📅 資料範圍：近 <b>${r.span_hours} 小時</b>的熱門貼文${aTxt?`（最新 ${aTxt}）`:''}——抓的是 Reddit「目前熱門(hot)」，非固定一週`:'';
     document.getElementById('reddit').innerHTML=`<div class="box">
       <h2>👽 Reddit 散戶討論熱度 <small>RSS 公開源·免憑證·不限流｜${r.subs||1}/${r.subs_total||6} 版輪轉·熱門 ${r.total_posts} 篇｜散戶熱炒=反指標線索</small></h2>
+      ${rangeTxt?`<div class="meta" style="margin:-2px 0 8px">${rangeTxt}</div>`:''}
       ${rc?`<div class="vline" style="border-left-color:${rc.c}">📍 現在：${rc.t}</div>`:''}
       <div class="meta" style="margin-bottom:8px">提及數＝討論熱度；情緒＝標題利多比例。用法：某幣 Reddit 討論暴增＋聰明錢在做空 → 散戶 FOMO 反指標 alpha</div>
       ${rows}</div>`;

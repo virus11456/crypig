@@ -43,6 +43,17 @@ def _local(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
+def _parse_iso(s: str | None) -> float | None:
+    """Atom 時間（ISO 8601）→ epoch 秒。"""
+    if not s:
+        return None
+    try:
+        from datetime import datetime
+        return datetime.fromisoformat(s.strip().replace("Z", "+00:00")).timestamp()
+    except (ValueError, TypeError):
+        return None
+
+
 class RedditClient:
     def __init__(self, timeout: float = 15.0):
         # 帶具識別性的 User-Agent；Reddit 對預設/空 UA 較易擋
@@ -59,8 +70,8 @@ class RedditClient:
     def enabled(self) -> bool:
         return True   # 公開 RSS 不需憑證，恆可用
 
-    def _fetch_sub(self, sub: str) -> list[str]:
-        """回某子版熱門貼文標題清單。429 時退避重試一次。"""
+    def _fetch_sub(self, sub: str) -> list[tuple[str, float | None]]:
+        """回某子版熱門貼文 (標題, 發布epoch) 清單。429 時退避重試一次。"""
         url = f"https://www.reddit.com/r/{sub}/hot/.rss?limit=50"
         content = None
         for attempt in range(2):
@@ -81,17 +92,20 @@ class RedditClient:
             root = ET.fromstring(content)
         except Exception:
             return []
-        titles: list[str] = []
+        out: list[tuple[str, float | None]] = []
         for e in root.iter():
             if _local(e.tag) != "entry":
                 continue
+            title, ts = "", None
             for ch in e:
-                if _local(ch.tag) == "title":
-                    t = (ch.text or "").strip()
-                    if t:
-                        titles.append(t)
-                    break
-        return titles
+                lt = _local(ch.tag)
+                if lt == "title" and not title:
+                    title = (ch.text or "").strip()
+                elif lt in ("published", "updated") and ts is None:
+                    ts = _parse_iso(ch.text)
+            if title:
+                out.append((title, ts))
+        return out
 
     def crypto_buzz(self, ttl: float = 300.0) -> dict:
         """各幣 Reddit 討論熱度（提及數）＋標題利多/利空傾向。
@@ -110,15 +124,19 @@ class RedditClient:
             self._sub_titles[sub] = fresh
             self._sub_ts[sub] = now
 
-        # 用所有版的最近快照彙整(跨版去重，避免轉貼重複計數)
+        # 用所有版的最近快照彙整(跨版去重，避免轉貼重複計數)；同時記下貼文時間範圍
         titles: list[str] = []
         seen: set[str] = set()
+        post_ts: list[float] = []
         for lst in self._sub_titles.values():
-            for t in lst:
-                k = t.strip().lower()
+            for item in lst:
+                title, pts = item if isinstance(item, tuple) else (item, None)
+                k = title.strip().lower()
                 if k and k not in seen:
                     seen.add(k)
-                    titles.append(t)
+                    titles.append(title)
+                    if pts:
+                        post_ts.append(pts)
         if not titles:
             return self._cache or {}
 
@@ -144,6 +162,10 @@ class RedditClient:
             "subs": len(self._sub_titles),   # 已收集到資料的版數(輪轉中會慢慢長到 subs_total)
             "subs_total": len(_SUBS),
             "source": "reddit_rss",
+            # 貼文時間範圍（hot 熱帖，非固定窗）：最新貼文、最舊貼文、跨度小時
+            "newest_ts": max(post_ts) if post_ts else None,
+            "oldest_ts": min(post_ts) if post_ts else None,
+            "span_hours": round((max(post_ts) - min(post_ts)) / 3600, 1) if len(post_ts) >= 2 else None,
         }
         self._cache, self._cache_ts = out, now
         return out
