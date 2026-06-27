@@ -177,6 +177,8 @@ INDEX_HTML = r"""<!doctype html>
   .vsub{color:var(--mut);font-weight:400;font-size:12px}
   .vverdict{font-size:13px;margin:6px 0 10px;padding:8px 11px;border-radius:8px;
             background:#0d1117;border-left:3px solid var(--accent);line-height:1.5}
+  .vline{font-size:13px;line-height:1.5;margin:0 0 12px;padding:9px 12px;border-radius:8px;
+         background:#11161d;border-left:4px solid var(--accent)}
   .nowbox{font-size:13px;line-height:1.55;margin:8px 0 10px;padding:10px 12px;border-radius:8px;
           background:#11161d;border:1px solid;border-left-width:4px}
   .nowtag{font-size:10px;background:#1f6feb;color:#fff;border-radius:4px;padding:1px 5px;margin-left:5px;vertical-align:middle}
@@ -316,8 +318,13 @@ async function loadMacro(){
     const m=await (await fetch('/macro')).json();
     const g=m.global;
     if(!g){document.getElementById('macro').innerHTML='<div class="box empty">宏觀資料暫無（外部 API 失敗）</div>';return {};}
+    const oc=g.oi_cap;
+    const mc=oc==null?null:{
+      t:`槓桿水位 OI/Cap <b>${(oc*100).toFixed(2)}%</b> → ${oc>0.03?'<b>偏高</b>，市場槓桿擁擠，留意過熱／插針洗盤':oc<0.015?'<b>偏低</b>，槓桿不高、尚有加倉空間，較不易連環爆倉':'中性，槓桿環境正常'}`,
+      c:oc>0.03?'#f85149':oc<0.015?'#3fb950':'#8b949e'};
     document.getElementById('macro').innerHTML=`<div class="box">
       <h2>🌐 全市場宏觀 <small>整體槓桿與換手環境（來源 CoinGecko 聚合）</small></h2>
+      ${mc?`<div class="vline" style="border-left-color:${mc.c}">📍 現在：${mc.t}</div>`:''}
       <div class="kpis">
         <div class="kpi"><div class="v">${bigMoney(g.market_cap)}</div><div class="k">總市值</div></div>
         <div class="kpi"><div class="v">${bigMoney(g.volume_24h)}</div><div class="k">24h 成交量</div></div>
@@ -502,8 +509,13 @@ async function loadDefi(){
     const tvl=d.tvl||{}, sc=d.stablecoin||{}, chains=d.chains||[];
     const chg=(x)=>x==null?'—':`<b style="color:${x>=0?'#3fb950':'#f85149'}">${(x*100).toFixed(1)}%</b>`;
     const chainHtml=chains.map(c=>`<span style="margin-right:14px">${c.name} <b>$${(c.tvl/1e9).toFixed(1)}B</b></span>`).join('');
+    const t7=tvl.chg_7d;
+    const dc=t7==null?null:{
+      t:`TVL 7天 <b>${(t7*100).toFixed(1)}%</b> → ${t7>0.02?'資金正流入鏈上、<b>風險偏好上升</b>':t7<-0.02?'資金撤離、<b>轉趨保守</b>':'盤整、無明顯進出'}${sc.chg_30d>0.01?'；穩定幣增發中＝場邊乾火藥變多（潛在買盤）':sc.chg_30d<-0.01?'；穩定幣縮減＝乾火藥減少':''}`,
+      c:t7>0.02?'#3fb950':t7<-0.02?'#f85149':'#8b949e'};
     document.getElementById('defi').innerHTML=`<div class="box">
       <h2>💰 資金動向（DefiLlama）<small>TVL=風險偏好；穩定幣=場邊乾火藥</small></h2>
+      ${dc?`<div class="vline" style="border-left-color:${dc.c}">📍 現在：${dc.t}</div>`:''}
       <div class="kpis">
         <div class="kpi"><div class="v">$${tvl.value?(tvl.value/1e9).toFixed(1):'—'}B</div><div class="k">DeFi 總 TVL</div></div>
         <div class="kpi"><div class="v">${chg(tvl.chg_7d)}</div><div class="k">TVL 7天</div></div>
@@ -520,8 +532,19 @@ async function loadDefi(){
 async function loadPositioning(){
   try{
     const p=await (await fetch('/positioning')).json();
+    const pdir=g=>(!g||!g.total||g.short_pct==null)?null:(g.short_pct>g.long_pct?'空':g.long_pct>g.short_pct?'多':'中性');
+    const sd=pdir(p.smart), wd=pdir(p.whale);
+    let pc=null;
+    if(sd&&wd){
+      if((sd==='多'&&wd==='空')||(sd==='空'&&wd==='多'))
+        pc={t:`⚠️ <b>分歧訊號</b>：聰明錢偏<b>${sd}</b>、巨鯨偏<b>${wd}</b>（方向相反）→ 會交易的贏家和最有錢的人看法不同，值得盯`,c:'#d29922'};
+      else if(sd===wd)
+        pc={t:`聰明錢與巨鯨<b>同向偏${sd}</b> → 大戶共識，順勢偏${sd}；無分歧`,c:sd==='多'?'#3fb950':sd==='空'?'#f85149':'#8b949e'};
+      else pc={t:`聰明錢偏${sd}、巨鯨${wd} → 一方中性，方向未明、續觀望`,c:'#8b949e'};
+    }
     document.getElementById('pos').innerHTML=`<div class="box">
       <h2>🧭 大玩家決心 <small>多空人數＋槓桿（人數=表態強度，槓桿=決心）</small></h2>
+      ${pc?`<div class="vline" style="border-left-color:${pc.c}">📍 現在：${pc.t}</div>`:''}
       ${posRow('🧠 聰明錢', '近100筆勝率+獲利', p.smart, '#58a6ff')}
       ${posRow('🐋 巨鯨', '全市場淨值前N', p.whale, '#d29922')}
       <div class="meta">註：兩群為獨立母體——聰明錢=近期方向贏家、巨鯨=全市場最有錢者${p.overlap!=null?`（目前重疊 <b>${p.overlap}</b> 人）`:''}；已排除 HLP/做市金庫。觀望=無持倉；表態傾向只計有開倉者。<br>👉 聰明錢與巨鯨方向相反時＝值得注意的分歧訊號。</div>
@@ -630,8 +653,12 @@ async function loadWhaleChart(){
     const firstNet=h[0].net_usd;
     const flip = firstNet<0&&net>=0?'　🔄 期間翻多（轉折）':firstNet>=0&&net<0?'　🔄 期間翻空（轉折）':'';
     const span=spanLabel(pts[0].t, pts[pts.length-1].t);
+    const wc = flip
+      ? {t:`🔄 大戶部位剛<b>${net>=0?'翻多':'翻空'}</b>（穿越零軸＝轉折）→ 進場時機線索，留意跟進`,c:'#d29922'}
+      : {t:`大戶持續<b>${bias}</b>（這段未翻轉）→ 順勢偏${net>=0?'多':'空'}，等穿越零軸再考慮轉向`,c:net>=0?'#3fb950':'#f85149'};
     document.getElementById('whalechart').innerHTML=`<div class="box">
       <h2>🐋 HL 巨鯨 BTC 合約淨持倉 <small>淨值前N大戶，每 20 分鐘一筆，${span}</small></h2>
+      <div class="vline" style="border-left-color:${wc.c}">📍 現在：${wc.t}</div>
       <div class="meta">最新 <b style="color:${col}">${bias} $${(Math.abs(net)/1e6).toFixed(1)}M</b>
         （多 $${(lo/1e6).toFixed(1)}M／空 $${(sh/1e6).toFixed(1)}M，${last.count} 個帳號）
         <b style="color:#d29922">${flip}</b>
@@ -708,8 +735,15 @@ async function loadSocial(){
       const pctNote = fg.percentile!=null
         ? `歷史第 <b style="color:${col}">${fg.percentile}</b> 百分位${fg.percentile<=10?'（極罕見，越低越接近大底）':fg.percentile>=90?'（極度貪婪，留意風險）':''}`
         : '';
+      const v=fg.value;
+      const fc = v<25?{t:`極度恐懼（${v}）→ 散戶過度悲觀，歷史上常是<b>反向買點</b>；對照聰明錢，若聰明錢開始翻多＝底部訊號`,c:'#3fb950'}
+               : v>=75?{t:`極度貪婪（${v}）→ 散戶過熱，<b>留意風險/別追多</b>；若聰明錢同時做空＝頂部反指標`,c:'#f85149'}
+               : v<45?{t:`偏恐懼（${v}）→ 情緒偏弱，未到極端；等更極端或看聰明錢動向`,c:'#d29922'}
+               : v>55?{t:`偏貪婪（${v}）→ 情緒偏熱，未到極端；順勢但留意過熱`,c:'#d29922'}
+               : {t:`中性（${v}）→ 情緒無極端，恐懼貪婪暫無明顯訊號`,c:'#8b949e'};
       fgHtml=`<div class="box">
         <h2>😱 恐懼貪婪指數 <small>全市場情緒（alternative.me，全區間 ${fg.days||''} 天 2018至今）｜極度恐懼常是反向買點</small></h2>
+        <div class="vline" style="border-left-color:${fc.c}">📍 現在：${fc.t}</div>
         <div class="kpis"><div class="kpi"><div class="v" style="color:${col};font-size:34px">${fg.value}</div>
           <div class="k">${fg.label}</div></div>
           <div class="kpi"><div class="v" style="color:${col}">${fg.percentile??'—'}%</div><div class="k">歷史百分位</div></div>
@@ -929,8 +963,11 @@ async function loadReddit(){
         return `<div class="sig"><div class="sigtitle"><span>${s}</span>
           <span class="meta">提及 <b>${v.mentions}</b> ｜ 情緒 <b style="color:${col}">${sen==null?'—':sen+'%'}</b></span></div>
           <div class="bar"><i style="width:${w}%;background:#5a3"></i></div></div>`;}).join('');
+    const hot=Object.entries(coins).sort((a,b)=>b[1].mentions-a[1].mentions)[0];
+    const rc=hot?{t:`散戶討論最熱：<b>${hot[0]}</b>（${hot[1].mentions} 提及${hot[1].sentiment!=null?'，情緒 '+hot[1].sentiment+'%':''}）→ 散戶熱炒常是局部頂部，<b>去幣別總表/雷達看 ${hot[0]} 的聰明錢方向：若聰明錢在做空＝反指標 alpha</b>`,c:'#d29922'}:null;
     document.getElementById('reddit').innerHTML=`<div class="box">
       <h2>👽 Reddit 散戶討論熱度 <small>RSS 公開源·免憑證·不限流｜${r.subs||1}/${r.subs_total||6} 版輪轉·熱門 ${r.total_posts} 篇｜散戶熱炒=反指標線索</small></h2>
+      ${rc?`<div class="vline" style="border-left-color:${rc.c}">📍 現在：${rc.t}</div>`:''}
       <div class="meta" style="margin-bottom:8px">提及數＝討論熱度；情緒＝標題利多比例。用法：某幣 Reddit 討論暴增＋聰明錢在做空 → 散戶 FOMO 反指標 alpha</div>
       ${rows}</div>`;
   }catch(e){document.getElementById('reddit').innerHTML='<div class="box empty">Reddit 載入失敗：'+e+'</div>';}
