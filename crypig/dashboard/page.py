@@ -177,6 +177,9 @@ INDEX_HTML = r"""<!doctype html>
   .vsub{color:var(--mut);font-weight:400;font-size:12px}
   .vverdict{font-size:13px;margin:6px 0 10px;padding:8px 11px;border-radius:8px;
             background:#0d1117;border-left:3px solid var(--accent);line-height:1.5}
+  .combo{background:linear-gradient(180deg,#161b22,#11161d);border:1px solid;border-left-width:5px;
+         border-radius:12px;padding:13px 16px;font-size:14px;line-height:1.55}
+  .combo .ct{font-weight:800;margin-right:6px;white-space:nowrap}
   .rtoggle{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
   .rtoggle button{background:#0d1117;color:var(--mut);font-weight:600;font-size:12px;
         padding:5px 12px;border:0;border-radius:0}
@@ -244,6 +247,7 @@ INDEX_HTML = r"""<!doctype html>
 </header>
 <div id="page-strategy" style="display:none"></div>
 <div id="page-market"><div class="wrap">
+  <div id="bigmoney"></div>
   <section id="opp" class="hero"><h2>🎯 現在有沒有進場機會</h2><div class="meta">載入中…</div></section>
 
   <details class="ccard" open>
@@ -653,6 +657,30 @@ function lineChart(pts, opts){
     <circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="3.5" fill="${col}"/>
     ${ticks}${yl}</svg>`;
 }
+// 🐋 大戶綜合判讀：鏈上現貨(結構性) × 合約(短期方向) 交叉結論，放最上面
+let SB_VERDICT=null, OC_VERDICT=null;
+function renderBigMoney(){
+  const el=document.getElementById('bigmoney'); if(!el) return;
+  const o=OC_VERDICT, s=SB_VERDICT;
+  if(!o){ return; }                       // 至少要有現貨那條
+  const m={buy:'囤幣/買進', sell:'出貨/賣出', flat:'持平'};
+  let v;
+  if(!s || s.insufficient){               // 合約還在累積，先只用現貨
+    v = o.dir==='flat'
+      ? {t:`鏈上現貨持平、合約持倉累積中 → 大戶暫無明顯動向`,c:'#8b949e'}
+      : {t:`鏈上現貨<b>${m[o.dir]}</b>（結構性${o.dir==='sell'?'偏空':'偏多'}）｜合約持倉累積中，暫只看現貨`,c:o.dir==='sell'?'#f85149':'#3fb950'};
+  }
+  else if(o.dir==='buy'&&s.dir==='buy') v={t:`🟢 <b>大戶一致偏多</b>：鏈上現貨囤幣 ＋ 合約加碼，兩邊都在買 → <b>最強偏多訊號</b>`,c:'#2ea043'};
+  else if(o.dir==='sell'&&s.dir==='sell') v={t:`🔴 <b>大戶一致偏空</b>：鏈上現貨出貨 ＋ 合約減碼，兩邊都在賣 → <b>強烈偏空，留意頂部</b>`,c:'#da3633'};
+  else if(o.dir==='sell'&&s.dir==='buy') v={t:`⚠️ <b>假突破警訊</b>：合約還做多、但鏈上現貨偷偷出貨 → 漲勢恐無量、留意誘多`,c:'#d29922'};
+  else if(o.dir==='buy'&&s.dir==='sell') v={t:`🟡 <b>大戶分歧</b>：鏈上囤幣、合約卻做空（避險或低調吸籌）→ 方向未定，續觀察`,c:'#d29922'};
+  else {                                  // 一方持平
+    const act = o.dir!=='flat'?`鏈上現貨${m[o.dir]}` : s.dir!=='flat'?`合約${m[s.dir]}` : '';
+    v = act ? {t:`大戶綜合：<b>${act}</b>（另一邊持平）→ 單邊訊號，參考即可`,c:'#8b949e'}
+            : {t:`大戶綜合：現貨與合約都持平，無明顯動向`,c:'#8b949e'};
+  }
+  el.innerHTML=`<div class="combo" style="border-color:${v.c}"><span class="ct">🐋 大戶綜合判讀</span><span style="color:${v.c}">${v.t}</span></div>`;
+}
 // 🪙 鏈上巨鯨 BTC 現貨持倉量：每日買/賣量柱狀（綠囤幣/紅出貨）＋近30天/近7天切換
 let OC_ALL=[], OC_RANGE='30d', OC_BANDS='大型持有者', OC_ERR=null;
 function setOCRange(rg){ OC_RANGE=rg; renderOnchain(); }
@@ -679,6 +707,7 @@ function renderOnchain(){
   if(pctc>0.002) concl={t:`▲ 巨鯨<b>正在吸籌 BTC</b>（近 ${k} 天鏈上多了 <b>${Math.round(dBtc).toLocaleString()}</b> 顆）→ 移除供給＝結構性偏多`,c:'#2ea043'};
   else if(pctc<-0.002) concl={t:`▼ 巨鯨<b>正在派發/出貨 BTC</b>（近 ${k} 天鏈上少了 <b>${Math.round(-dBtc).toLocaleString()}</b> 顆）→ 大戶在賣＝結構性偏空/留意頂部`,c:'#da3633'};
   else concl={t:`巨鯨持幣量<b>大致持平</b>（近 ${k} 天 ${dBtc>=0?'+':''}${Math.round(dBtc).toLocaleString()} 顆）→ 無明顯吸籌/派發`,c:'#8b949e'};
+  OC_VERDICT={dir: pctc>0.002?'buy':pctc<-0.002?'sell':'flat'}; renderBigMoney();
   const bars = OC_RANGE==='7d' ? deltas.slice(-7) : deltas;
   document.getElementById('onchainwhale').innerHTML=`<div class="box">
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><span class="meta">🪙 ${OC_BANDS} 真實鏈上持幣（bitcoin-data 日頻）</span>${toggle}</div>
@@ -737,7 +766,8 @@ function renderSmartBTC(){
   const toggle=`<span class="rtoggle"><button class="${SB_RANGE==='24h'?'on':''}" onclick="setSBRange('24h')">24H</button><button class="${SB_RANGE==='30d'?'on':''}" onclick="setSBRange('30d')">近30天</button></span>`;
   if(all.length<3){
     document.getElementById('smartbtc').innerHTML='<div class="box"><div class="row" style="justify-content:flex-end">'+toggle+'</div><div class="meta">每 20 分鐘記一筆，目前 '+all.length+' 筆，3 筆以上開始偵測。</div></div>';
-    setSum('sum-smartbtc',`累積中（${all.length} 筆）`);return;
+    setSum('sum-smartbtc',`累積中（${all.length} 筆）`);
+    SB_VERDICT={insufficient:true}; renderBigMoney();return;
   }
   const v=all.map(p=>p.v);
   const d=[]; for(let i=1;i<v.length;i++) d.push(v[i]-v[i-1]);
@@ -752,6 +782,7 @@ function renderSmartBTC(){
   else if(lastSign<0 && streak>=2 && accel) concl={t:`⚡ <b>聰明錢正在加速減碼/出貨 BTC</b>（連續 ${streak} 輪減碼且越減越快）→ 偏空警訊`,c:'#da3633'};
   else if(lastSign<0 && streak>=2) concl={t:`▼ 聰明錢<b>持續減碼 BTC</b>（連續 ${streak} 輪淨賣出）→ 偏空`,c:'#f85149'};
   else concl={t:`聰明錢 BTC 部位<b>來回震盪</b>，無明顯吸籌/出貨方向`,c:'#8b949e'};
+  SB_VERDICT={dir: streak>=2?(lastSign>0?'buy':lastSign<0?'sell':'flat'):'flat', accel}; renderBigMoney();
   const bars=bucketNet(all, SB_RANGE);
   const note = SB_RANGE==='30d' && bars.length<3 ? `<div class="meta">（30天資料累積中——逐輪記錄，目前約 ${Math.max(1,Math.round((all[all.length-1].t-all[0].t)/86400))} 天）</div>` : '';
   document.getElementById('smartbtc').innerHTML=`<div class="box">
