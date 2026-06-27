@@ -177,6 +177,10 @@ INDEX_HTML = r"""<!doctype html>
   .vsub{color:var(--mut);font-weight:400;font-size:12px}
   .vverdict{font-size:13px;margin:6px 0 10px;padding:8px 11px;border-radius:8px;
             background:#0d1117;border-left:3px solid var(--accent);line-height:1.5}
+  .rtoggle{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .rtoggle button{background:#0d1117;color:var(--mut);font-weight:600;font-size:12px;
+        padding:5px 12px;border:0;border-radius:0}
+  .rtoggle button.on{background:var(--accent);color:#0d1117}
   .vsec{font-size:12px;color:var(--mut);font-weight:700;margin:16px 0 8px;
         border-top:1px solid var(--line);padding-top:12px}
   .acc{font-size:13px;line-height:1.55;padding:9px 12px;border-radius:8px;background:#11161d;
@@ -680,43 +684,79 @@ async function loadOnchainWhale(){
     setSum('sum-onchain', `${concl.t.replace(/<[^>]+>/g,'')}`.slice(0,40));
   }catch(e){document.getElementById('onchainwhale').innerHTML='<div class="box empty">鏈上持幣載入失敗：'+e+'</div>';}
 }
-// 🧠 聰明錢 BTC 吸籌偵測：連續加碼 + 加碼量遞增 = 加速吸籌（只看最近幾輪，不需長累積）
+// 柱狀圖：從零軸長出垂直柱，綠(正)/紅(負)，附 Y 格線與時間刻度
+function barChart(pts, opts){
+  opts=opts||{};
+  if(!pts||!pts.length) return '<span class="meta">此區間資料累積中…</span>';
+  const W=1000,H=200,L=52,R=16,T=14,Bm=30,n=pts.length,vs=pts.map(p=>p.v);
+  let mn=Math.min(0,...vs),mx=Math.max(0,...vs);
+  const step=niceStep((mx-mn)||Math.abs(mx)||1,5);
+  let lo=Math.floor(mn/step)*step, hi=Math.ceil(mx/step)*step; if(lo===hi)hi=lo+step;
+  const xs=i=>L+(i+0.5)/n*(W-L-R), ys=v=>T+(1-(v-lo)/(hi-lo))*(H-T-Bm);
+  const bw=Math.max(1.5,(W-L-R)/n*0.66), z=ys(0);
+  const fa=v=>{const a=Math.abs(v);return a>=1e9?(v/1e9).toFixed(1)+'B':a>=1e6?(v/1e6).toFixed(1)+'M':a>=1e3?(v/1e3).toFixed(0)+'K':''+Math.round(v);};
+  let grid='';
+  for(let g=lo; g<=hi+1e-9; g+=step){ const y=ys(g);
+    grid+=`<line x1="${L}" y1="${y.toFixed(1)}" x2="${W-R}" y2="${y.toFixed(1)}" stroke="#21262d"/>`
+        +`<text x="${L-6}" y="${(y+4).toFixed(1)}" fill="#6e7681" font-size="11" text-anchor="end">${fa(g)}</text>`; }
+  const bars=pts.map((p,i)=>{ const y=ys(p.v), x=xs(i)-bw/2, top=Math.min(y,z), hh=Math.max(0.6,Math.abs(y-z));
+    return `<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" rx="1" fill="${p.v>=0?(opts.up||'#3fb950'):(opts.down||'#f85149')}"/>`; }).join('');
+  const pad2=x=>('0'+x).slice(-2), spanD=(Number(pts[n-1].t)-Number(pts[0].t))/86400;
+  const tk=i=>{const d=new Date(Number(pts[i].t)*1000); return spanD<2?pad2(d.getHours())+':'+pad2(d.getMinutes()):(d.getMonth()+1)+'/'+d.getDate();};
+  const nT=Math.min(6,n), idxs=[...new Set(Array.from({length:nT},(_,k)=>Math.round(k*(n-1)/(nT-1))))];
+  const ticks=idxs.map(i=>{const tx=Math.max(L+8,Math.min(W-R-8,xs(i)));return `<text x="${tx.toFixed(1)}" y="${H-8}" fill="#8b949e" font-size="12" text-anchor="middle">${tk(i)}</text>`;}).join('');
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}">${grid}
+    <line x1="${L}" y1="${z.toFixed(1)}" x2="${W-R}" y2="${z.toFixed(1)}" stroke="#484f58"/>${bars}${ticks}</svg>`;
+}
+// 依區間分桶：24h→每小時一柱、30天→每天一柱（取桶內最後一筆淨持倉）
+function bucketNet(all, rangeKey){
+  const now=Date.now()/1000;
+  const cutoff = rangeKey==='30d' ? now-30*86400 : now-24*3600;
+  const bsec   = rangeKey==='30d' ? 86400 : 3600;
+  const pts=all.filter(p=>p.t>=cutoff);
+  const m=new Map();
+  for(const p of pts) m.set(Math.floor(p.t/bsec), p);   // 升冪→最後一筆勝出
+  return [...m.entries()].sort((a,b)=>a[0]-b[0]).map(([k,p])=>({t:k*bsec, v:p.v}));
+}
+// 🧠 聰明錢 BTC 吸籌偵測：連續加碼 + 加碼量遞增 = 加速吸籌（柱狀＋24H/30天可選）
+let SB_ALL=[], SB_RANGE='24h';
+function setSBRange(rg){ SB_RANGE=rg; renderSmartBTC(); }
 async function loadSmartBTC(){
   try{
     const r=await (await fetch('/whale_history?symbol=BTC&cohort=smart')).json();
-    const all=r.history||[];
-    if(all.length<3){
-      document.getElementById('smartbtc').innerHTML=
-        '<div class="box"><h2>🧠 聰明錢 BTC 吸籌偵測</h2><div class="meta">每 20 分鐘記一筆，目前 '+all.length+' 筆，3 筆以上開始偵測「連續加碼/加速吸籌」。</div></div>';
-      setSum('sum-smartbtc',`累積中（${all.length} 筆）`);return;
-    }
-    const pts=all.map(x=>({t:Date.parse(x.ts)/1000, v:x.net_usd}));
-    const v=pts.map(p=>p.v);
-    // 近 6 輪的逐輪變化（買入量增減）
-    const d=[]; for(let i=1;i<v.length;i++) d.push(v[i]-v[i-1]);
-    const recent=d.slice(-6);
-    // 連續同向（加碼/減碼）輪數
-    const lastSign=Math.sign(recent[recent.length-1]||0);
-    let streak=0; for(let i=recent.length-1;i>=0;i--){ if(Math.sign(recent[i])===lastSign&&lastSign!==0) streak++; else break; }
-    // 加速：連續同向段裡，變化量(絕對值)是否一路變大
-    const seg=recent.slice(-streak).map(Math.abs);
-    let accel = seg.length>=2 && seg[seg.length-1]>seg[0] && seg.every((x,i)=>i===0||x>=seg[i-1]*0.8);
-    const net=v[v.length-1], col=net>=0?'#3fb950':'#f85149';
-    let concl;
-    if(lastSign>0 && streak>=2 && accel) concl={t:`⚡ <b>聰明錢正在加速吸籌 BTC</b>（連續 ${streak} 輪加碼，且每輪買入量遞增）→ 強力買盤訊號`,c:'#2ea043'};
-    else if(lastSign>0 && streak>=2) concl={t:`▲ 聰明錢<b>持續加碼 BTC</b>（連續 ${streak} 輪淨買入）→ 偏多吸籌`,c:'#3fb950'};
-    else if(lastSign<0 && streak>=2 && accel) concl={t:`⚡ <b>聰明錢正在加速減碼/出貨 BTC</b>（連續 ${streak} 輪減碼且越減越快）→ 偏空警訊`,c:'#da3633'};
-    else if(lastSign<0 && streak>=2) concl={t:`▼ 聰明錢<b>持續減碼 BTC</b>（連續 ${streak} 輪淨賣出）→ 偏空`,c:'#f85149'};
-    else concl={t:`聰明錢 BTC 部位<b>來回震盪</b>，無明顯吸籌/出貨方向`,c:'#8b949e'};
-    const span=spanLabel(pts[0].t, pts[pts.length-1].t);
-    document.getElementById('smartbtc').innerHTML=`<div class="box">
-      <h2>🧠 聰明錢 BTC 吸籌偵測 <small>近期勝率/獲利贏家對 BTC 的淨持倉，${span}</small></h2>
-      <div class="vline" style="border-left-color:${concl.c}">📍 現在：${concl.t}</div>
-      <div class="meta">最新淨持倉 <b style="color:${col}">${net>=0?'淨多':'淨空'} $${(Math.abs(net)/1e6).toFixed(1)}M</b>（${all[all.length-1].count} 個聰明錢帳號）｜線往上＝在加碼、往下＝在減碼；越陡＝量越大</div>
-      ${lineChart(pts)}
-    </div>`;
-    setSum('sum-smartbtc', `${concl.t.replace(/<[^>]+>/g,'')}`.slice(0,40));
+    SB_ALL=(r.history||[]).map(x=>({t:Date.parse(x.ts)/1000, v:x.net_usd, count:x.count}));
+    renderSmartBTC();
   }catch(e){document.getElementById('smartbtc').innerHTML='<div class="box empty">聰明錢吸籌偵測載入失敗：'+e+'</div>';}
+}
+function renderSmartBTC(){
+  const all=SB_ALL||[];
+  const toggle=`<span class="rtoggle"><button class="${SB_RANGE==='24h'?'on':''}" onclick="setSBRange('24h')">24H</button><button class="${SB_RANGE==='30d'?'on':''}" onclick="setSBRange('30d')">近30天</button></span>`;
+  if(all.length<3){
+    document.getElementById('smartbtc').innerHTML='<div class="box"><div class="row" style="justify-content:flex-end">'+toggle+'</div><div class="meta">每 20 分鐘記一筆，目前 '+all.length+' 筆，3 筆以上開始偵測。</div></div>';
+    setSum('sum-smartbtc',`累積中（${all.length} 筆）`);return;
+  }
+  const v=all.map(p=>p.v);
+  const d=[]; for(let i=1;i<v.length;i++) d.push(v[i]-v[i-1]);
+  const recent=d.slice(-6), lastSign=Math.sign(recent[recent.length-1]||0);
+  let streak=0; for(let i=recent.length-1;i>=0;i--){ if(Math.sign(recent[i])===lastSign&&lastSign!==0) streak++; else break; }
+  const seg=recent.slice(-streak).map(Math.abs);
+  const accel = seg.length>=2 && seg[seg.length-1]>seg[0] && seg.every((x,i)=>i===0||x>=seg[i-1]*0.8);
+  const net=v[v.length-1], col=net>=0?'#3fb950':'#f85149';
+  let concl;
+  if(lastSign>0 && streak>=2 && accel) concl={t:`⚡ <b>聰明錢正在加速吸籌 BTC</b>（連續 ${streak} 輪加碼，且每輪買入量遞增）→ 強力買盤訊號`,c:'#2ea043'};
+  else if(lastSign>0 && streak>=2) concl={t:`▲ 聰明錢<b>持續加碼 BTC</b>（連續 ${streak} 輪淨買入）→ 偏多吸籌`,c:'#3fb950'};
+  else if(lastSign<0 && streak>=2 && accel) concl={t:`⚡ <b>聰明錢正在加速減碼/出貨 BTC</b>（連續 ${streak} 輪減碼且越減越快）→ 偏空警訊`,c:'#da3633'};
+  else if(lastSign<0 && streak>=2) concl={t:`▼ 聰明錢<b>持續減碼 BTC</b>（連續 ${streak} 輪淨賣出）→ 偏空`,c:'#f85149'};
+  else concl={t:`聰明錢 BTC 部位<b>來回震盪</b>，無明顯吸籌/出貨方向`,c:'#8b949e'};
+  const bars=bucketNet(all, SB_RANGE);
+  const note = SB_RANGE==='30d' && bars.length<3 ? `<div class="meta">（30天資料累積中——逐輪記錄，目前約 ${Math.max(1,Math.round((all[all.length-1].t-all[0].t)/86400))} 天）</div>` : '';
+  document.getElementById('smartbtc').innerHTML=`<div class="box">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><span class="meta">🧠 近期勝率/獲利贏家對 BTC 的淨持倉</span>${toggle}</div>
+    <div class="vline" style="border-left-color:${concl.c}">📍 現在：${concl.t}</div>
+    <div class="meta">最新淨持倉 <b style="color:${col}">${net>=0?'淨多':'淨空'} $${(Math.abs(net)/1e6).toFixed(1)}M</b>（${all[all.length-1].count} 個聰明錢帳號）｜柱往上＝淨多/在加碼、往下＝淨空/在減碼</div>
+    ${note}${barChart(bars)}
+  </div>`;
+  setSum('sum-smartbtc', `${concl.t.replace(/<[^>]+>/g,'')}`.slice(0,40));
 }
 async function loadWhaleChart(){
   try{
