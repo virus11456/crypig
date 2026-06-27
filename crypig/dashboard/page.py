@@ -177,6 +177,9 @@ INDEX_HTML = r"""<!doctype html>
   .vsub{color:var(--mut);font-weight:400;font-size:12px}
   .vverdict{font-size:13px;margin:6px 0 10px;padding:8px 11px;border-radius:8px;
             background:#0d1117;border-left:3px solid var(--accent);line-height:1.5}
+  .ctip{position:fixed;z-index:50;pointer-events:none;background:#0d1117;border:1px solid var(--line);
+        border-radius:6px;padding:5px 9px;font-size:12px;color:#e6edf3;white-space:nowrap;display:none;
+        box-shadow:0 4px 14px rgba(0,0,0,.5)}
   .combo{background:linear-gradient(180deg,#161b22,#11161d);border:1px solid;border-left-width:5px;
          border-radius:12px;padding:13px 16px;font-size:14px;line-height:1.55}
   .combo .ct{font-weight:800;margin-right:6px;white-space:nowrap}
@@ -245,6 +248,7 @@ INDEX_HTML = r"""<!doctype html>
   <span style="flex:1"></span>
   <span class="ts" id="ts">載入中…</span>
 </header>
+<div id="ctip" class="ctip"></div>
 <div id="page-strategy" style="display:none"></div>
 <div id="page-market"><div class="wrap">
   <div id="bigmoney"></div>
@@ -713,7 +717,7 @@ function renderOnchain(){
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><span class="meta">🪙 ${OC_BANDS} 真實鏈上持幣（bitcoin-data 日頻）</span>${toggle}</div>
     <div class="vline" style="border-left-color:${concl.c}">📍 現在：${concl.t}</div>
     <div class="meta">最新持有 <b style="color:#c9d1d9">${Math.round(last).toLocaleString()} BTC</b>｜每根柱＝<b>那天大戶淨買/賣的 BTC 量</b>：<b style="color:#3fb950">綠=囤幣(買進)</b>、<b style="color:#f85149">紅=出貨(賣出)</b>。連續紅柱越來越長＝加速出貨。<br>對照上面合約：合約多＋鏈上囤幣＝最強偏多；合約多但鏈上出貨＝假突破警訊。</div>
-    ${barChart(bars,{up:'#3fb950',down:'#f85149'})}
+    ${barChart(bars,{up:'#3fb950',down:'#f85149',tip:p=>(p.v>=0?'囤幣 +':'出貨 ')+Math.round(p.v).toLocaleString()+' BTC'})}
   </div>`;
   setSum('sum-onchain', `${concl.t.replace(/<[^>]+>/g,'')}`.slice(0,40));
 }
@@ -732,15 +736,30 @@ function barChart(pts, opts){
   for(let g=lo; g<=hi+1e-9; g+=step){ const y=ys(g);
     grid+=`<line x1="${L}" y1="${y.toFixed(1)}" x2="${W-R}" y2="${y.toFixed(1)}" stroke="#21262d"/>`
         +`<text x="${L-6}" y="${(y+4).toFixed(1)}" fill="#6e7681" font-size="11" text-anchor="end">${fa(g)}</text>`; }
-  const bars=pts.map((p,i)=>{ const y=ys(p.v), x=xs(i)-bw/2, top=Math.min(y,z), hh=Math.max(0.6,Math.abs(y-z));
-    return `<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" rx="1" fill="${p.v>=0?(opts.up||'#3fb950'):(opts.down||'#f85149')}"/>`; }).join('');
   const pad2=x=>('0'+x).slice(-2), spanD=(Number(pts[n-1].t)-Number(pts[0].t))/86400;
-  const tk=i=>{const d=new Date(Number(pts[i].t)*1000); return spanD<2?pad2(d.getHours())+':'+pad2(d.getMinutes()):(d.getMonth()+1)+'/'+d.getDate();};
-  const nT=Math.min(6,n), idxs=[...new Set(Array.from({length:nT},(_,k)=>Math.round(k*(n-1)/(nT-1))))];
-  const ticks=idxs.map(i=>{const tx=Math.max(L+8,Math.min(W-R-8,xs(i)));return `<text x="${tx.toFixed(1)}" y="${H-8}" fill="#8b949e" font-size="12" text-anchor="middle">${tk(i)}</text>`;}).join('');
+  const dlab=t=>{const d=new Date(Number(t)*1000); return spanD<2?(d.getMonth()+1)+'/'+d.getDate()+' '+pad2(d.getHours())+':'+pad2(d.getMinutes()):(d.getMonth()+1)+'/'+d.getDate();};
+  const colW=(W-L-R)/n;
+  const bars=pts.map((p,i)=>{ const y=ys(p.v), x=xs(i)-bw/2, top=Math.min(y,z), hh=Math.max(0.6,Math.abs(y-z));
+    const lab=dlab(p.t)+'　'+(opts.tip?opts.tip(p):(p.v>=0?'+':'')+fa(p.v));
+    const bar=`<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" rx="1" fill="${p.v>=0?(opts.up||'#3fb950'):(opts.down||'#f85149')}" pointer-events="none"/>`;
+    const hit=`<rect x="${(xs(i)-colW/2).toFixed(1)}" y="${T}" width="${colW.toFixed(1)}" height="${(H-T-Bm).toFixed(1)}" fill="transparent" onmousemove="ctip(event,'${lab}')" onmouseout="ctipHide()"/>`;
+    return bar+hit; }).join('');
+  let ticks;
+  if(n<=10){   // 柱不多→每根標日期
+    ticks=pts.map((p,i)=>`<text x="${xs(i).toFixed(1)}" y="${H-8}" fill="#8b949e" font-size="11" text-anchor="middle">${dlab(p.t)}</text>`).join('');
+  }else{       // 柱多→稀疏刻度，細節靠滑過顯示
+    const nT=Math.min(6,n), idxs=[...new Set(Array.from({length:nT},(_,k)=>Math.round(k*(n-1)/(nT-1))))];
+    ticks=idxs.map(i=>{const tx=Math.max(L+8,Math.min(W-R-8,xs(i)));return `<text x="${tx.toFixed(1)}" y="${H-8}" fill="#8b949e" font-size="12" text-anchor="middle">${dlab(pts[i].t)}</text>`;}).join('');
+  }
   return `<svg width="100%" viewBox="0 0 ${W} ${H}">${grid}
     <line x1="${L}" y1="${z.toFixed(1)}" x2="${W-R}" y2="${z.toFixed(1)}" stroke="#484f58"/>${bars}${ticks}</svg>`;
 }
+// 圖表浮動提示（滑過柱顯示日期＋數值）
+function ctip(e,txt){ const t=document.getElementById('ctip'); if(!t)return;
+  t.textContent=txt; t.style.display='block';
+  t.style.left=Math.min(window.innerWidth-t.offsetWidth-10, e.clientX+12)+'px';
+  t.style.top=Math.max(8, e.clientY-34)+'px'; }
+function ctipHide(){ const t=document.getElementById('ctip'); if(t)t.style.display='none'; }
 // 依區間分桶：24h→每小時一柱、30天→每天一柱（取桶內最後一筆淨持倉）
 function bucketNet(all, rangeKey){
   const now=Date.now()/1000;
@@ -789,7 +808,7 @@ function renderSmartBTC(){
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><span class="meta">🧠 近期勝率/獲利贏家對 BTC 的淨持倉</span>${toggle}</div>
     <div class="vline" style="border-left-color:${concl.c}">📍 現在：${concl.t}</div>
     <div class="meta">最新淨持倉 <b style="color:${col}">${net>=0?'淨多':'淨空'} $${(Math.abs(net)/1e6).toFixed(1)}M</b>（${all[all.length-1].count} 個聰明錢帳號）｜柱往上＝淨多/在加碼、往下＝淨空/在減碼</div>
-    ${note}${barChart(bars)}
+    ${note}${barChart(bars,{tip:p=>(p.v>=0?'淨多 $':'淨空 $')+(Math.abs(p.v)/1e6).toFixed(1)+'M'})}
   </div>`;
   setSum('sum-smartbtc', `${concl.t.replace(/<[^>]+>/g,'')}`.slice(0,40));
 }
