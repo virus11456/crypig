@@ -653,36 +653,40 @@ function lineChart(pts, opts){
     <circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="3.5" fill="${col}"/>
     ${ticks}${yl}</svg>`;
 }
-// 🪙 鏈上巨鯨 BTC 現貨持倉量：真實持幣的累積/派發（與合約持倉互補）
+// 🪙 鏈上巨鯨 BTC 現貨持倉量：每日買/賣量柱狀（綠囤幣/紅出貨）＋近30天/近7天切換
+let OC_ALL=[], OC_RANGE='30d', OC_BANDS='大型持有者', OC_ERR=null;
+function setOCRange(rg){ OC_RANGE=rg; renderOnchain(); }
 async function loadOnchainWhale(){
   try{
     const r=await (await fetch('/onchain_whale')).json();
-    const h=r.history||[];
-    if(h.length<2){
-      document.getElementById('onchainwhale').innerHTML=
-        '<div class="box"><h2>🪙 鏈上巨鯨 BTC 現貨持倉量</h2><div class="meta">'
-        +(r.error?('bitcoin-data 暫時取不到（'+r.error+'），下輪重試。'):'資料載入中…')+'</div></div>';
-      setSum('sum-onchain','—');return;
-    }
-    const pts=h.map(x=>({t:Date.parse(x.date)/1000, v:x.btc}));
-    const last=h[h.length-1].btc;
-    // 近 ~7 天變化（資料是日頻）
-    const k=Math.min(7,h.length-1), prev=h[h.length-1-k].btc;
-    const dBtc=last-prev, pctc=prev?dBtc/prev:0;
-    const col=dBtc>=0?'#3fb950':'#f85149';
-    let concl;
-    if(pctc>0.002) concl={t:`▲ 巨鯨<b>正在吸籌 BTC</b>（近 ${k} 天鏈上多了 <b>${Math.round(dBtc).toLocaleString()}</b> 顆）→ 大戶把幣搬走、移除供給＝結構性偏多`,c:'#2ea043'};
-    else if(pctc<-0.002) concl={t:`▼ 巨鯨<b>正在派發/出貨 BTC</b>（近 ${k} 天鏈上少了 <b>${Math.round(-dBtc).toLocaleString()}</b> 顆）→ 大戶在賣＝結構性偏空/留意頂部`,c:'#da3633'};
-    else concl={t:`巨鯨持幣量<b>大致持平</b>（近 ${k} 天變化 ${dBtc>=0?'+':''}${Math.round(dBtc).toLocaleString()} 顆）→ 無明顯吸籌/派發`,c:'#8b949e'};
-    const span = (pts[pts.length-1].t - pts[0].t)/86400;
-    document.getElementById('onchainwhale').innerHTML=`<div class="box">
-      <h2>🪙 鏈上巨鯨 BTC 現貨持倉量 <small>${r.bands||'大型持有者'} 真實持幣（bitcoin-data，日頻，近 ${Math.round(span)} 天）</small></h2>
-      <div class="vline" style="border-left-color:${concl.c}">📍 現在：${concl.t}</div>
-      <div class="meta">最新持有 <b style="color:#c9d1d9">${Math.round(last).toLocaleString()} BTC</b>｜這是<b>真實鏈上持幣</b>(非合約)：線往上＝大戶在買進/囤幣、往下＝在賣出。<br>用法：對照上面「合約持倉」——<b>合約做多＋鏈上吸幣＝最強偏多</b>；合約多但鏈上出貨＝假突破警訊。</div>
-      ${lineChart(pts,{color:dBtc>=0?'#3fb950':'#f85149'})}
-    </div>`;
-    setSum('sum-onchain', `${concl.t.replace(/<[^>]+>/g,'')}`.slice(0,40));
+    OC_ALL=(r.history||[]).map(x=>({t:Date.parse(x.date)/1000, btc:x.btc}));
+    OC_BANDS=r.bands||'大型持有者'; OC_ERR=r.error||null;
+    renderOnchain();
   }catch(e){document.getElementById('onchainwhale').innerHTML='<div class="box empty">鏈上持幣載入失敗：'+e+'</div>';}
+}
+function renderOnchain(){
+  const all=OC_ALL||[];
+  const toggle=`<span class="rtoggle"><button class="${OC_RANGE==='7d'?'on':''}" onclick="setOCRange('7d')">近7天</button><button class="${OC_RANGE==='30d'?'on':''}" onclick="setOCRange('30d')">近30天</button></span>`;
+  if(all.length<2){
+    document.getElementById('onchainwhale').innerHTML='<div class="box"><div class="meta">'+(OC_ERR?('bitcoin-data 暫時取不到（'+OC_ERR+'），下輪重試。'):'資料載入中…')+'</div></div>';
+    setSum('sum-onchain','—');return;
+  }
+  // 每日變化（流入/流出）：綠=當天淨買進、紅=當天淨賣出
+  const deltas=[]; for(let i=1;i<all.length;i++) deltas.push({t:all[i].t, v:all[i].btc-all[i-1].btc});
+  const last=all[all.length-1].btc;
+  const k=Math.min(7,all.length-1), base=all[all.length-1-k].btc, dBtc=last-base, pctc=base?dBtc/base:0;
+  let concl;
+  if(pctc>0.002) concl={t:`▲ 巨鯨<b>正在吸籌 BTC</b>（近 ${k} 天鏈上多了 <b>${Math.round(dBtc).toLocaleString()}</b> 顆）→ 移除供給＝結構性偏多`,c:'#2ea043'};
+  else if(pctc<-0.002) concl={t:`▼ 巨鯨<b>正在派發/出貨 BTC</b>（近 ${k} 天鏈上少了 <b>${Math.round(-dBtc).toLocaleString()}</b> 顆）→ 大戶在賣＝結構性偏空/留意頂部`,c:'#da3633'};
+  else concl={t:`巨鯨持幣量<b>大致持平</b>（近 ${k} 天 ${dBtc>=0?'+':''}${Math.round(dBtc).toLocaleString()} 顆）→ 無明顯吸籌/派發`,c:'#8b949e'};
+  const bars = OC_RANGE==='7d' ? deltas.slice(-7) : deltas;
+  document.getElementById('onchainwhale').innerHTML=`<div class="box">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><span class="meta">🪙 ${OC_BANDS} 真實鏈上持幣（bitcoin-data 日頻）</span>${toggle}</div>
+    <div class="vline" style="border-left-color:${concl.c}">📍 現在：${concl.t}</div>
+    <div class="meta">最新持有 <b style="color:#c9d1d9">${Math.round(last).toLocaleString()} BTC</b>｜每根柱＝<b>那天大戶淨買/賣的 BTC 量</b>：<b style="color:#3fb950">綠=囤幣(買進)</b>、<b style="color:#f85149">紅=出貨(賣出)</b>。連續紅柱越來越長＝加速出貨。<br>對照上面合約：合約多＋鏈上囤幣＝最強偏多；合約多但鏈上出貨＝假突破警訊。</div>
+    ${barChart(bars,{up:'#3fb950',down:'#f85149'})}
+  </div>`;
+  setSum('sum-onchain', `${concl.t.replace(/<[^>]+>/g,'')}`.slice(0,40));
 }
 // 柱狀圖：從零軸長出垂直柱，綠(正)/紅(負)，附 Y 格線與時間刻度
 function barChart(pts, opts){
