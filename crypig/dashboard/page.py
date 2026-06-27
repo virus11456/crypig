@@ -257,6 +257,11 @@ INDEX_HTML = r"""<!doctype html>
     <div id="table"><div class="box empty">幣別總表載入中…</div></div>
   </details>
 
+  <details class="ccard" open>
+    <summary><span class="ctitle">🧠 聰明錢 BTC 吸籌偵測</span><span class="csum" id="sum-smartbtc">載入中…</span><span class="chev">▾</span></summary>
+    <div id="smartbtc"><div class="box empty">聰明錢 BTC 吸籌偵測載入中…</div></div>
+  </details>
+
   <details class="ccard">
     <summary><span class="ctitle">🐋 巨鯨持倉軸</span><span class="csum" id="sum-whale">載入中…</span><span class="chev">▾</span></summary>
     <div id="whalechart"><div class="box empty">鯨魚每日變化載入中…</div></div>
@@ -639,6 +644,44 @@ function lineChart(pts, opts){
     <circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="3.5" fill="${col}"/>
     ${ticks}${yl}</svg>`;
 }
+// 🧠 聰明錢 BTC 吸籌偵測：連續加碼 + 加碼量遞增 = 加速吸籌（只看最近幾輪，不需長累積）
+async function loadSmartBTC(){
+  try{
+    const r=await (await fetch('/whale_history?symbol=BTC&cohort=smart')).json();
+    const all=r.history||[];
+    if(all.length<3){
+      document.getElementById('smartbtc').innerHTML=
+        '<div class="box"><h2>🧠 聰明錢 BTC 吸籌偵測</h2><div class="meta">每 20 分鐘記一筆，目前 '+all.length+' 筆，3 筆以上開始偵測「連續加碼/加速吸籌」。</div></div>';
+      setSum('sum-smartbtc',`累積中（${all.length} 筆）`);return;
+    }
+    const pts=all.map(x=>({t:Date.parse(x.ts)/1000, v:x.net_usd}));
+    const v=pts.map(p=>p.v);
+    // 近 6 輪的逐輪變化（買入量增減）
+    const d=[]; for(let i=1;i<v.length;i++) d.push(v[i]-v[i-1]);
+    const recent=d.slice(-6);
+    // 連續同向（加碼/減碼）輪數
+    const lastSign=Math.sign(recent[recent.length-1]||0);
+    let streak=0; for(let i=recent.length-1;i>=0;i--){ if(Math.sign(recent[i])===lastSign&&lastSign!==0) streak++; else break; }
+    // 加速：連續同向段裡，變化量(絕對值)是否一路變大
+    const seg=recent.slice(-streak).map(Math.abs);
+    let accel = seg.length>=2 && seg[seg.length-1]>seg[0] && seg.every((x,i)=>i===0||x>=seg[i-1]*0.8);
+    const net=v[v.length-1], col=net>=0?'#3fb950':'#f85149';
+    let concl;
+    if(lastSign>0 && streak>=2 && accel) concl={t:`⚡ <b>聰明錢正在加速吸籌 BTC</b>（連續 ${streak} 輪加碼，且每輪買入量遞增）→ 強力買盤訊號`,c:'#2ea043'};
+    else if(lastSign>0 && streak>=2) concl={t:`▲ 聰明錢<b>持續加碼 BTC</b>（連續 ${streak} 輪淨買入）→ 偏多吸籌`,c:'#3fb950'};
+    else if(lastSign<0 && streak>=2 && accel) concl={t:`⚡ <b>聰明錢正在加速減碼/出貨 BTC</b>（連續 ${streak} 輪減碼且越減越快）→ 偏空警訊`,c:'#da3633'};
+    else if(lastSign<0 && streak>=2) concl={t:`▼ 聰明錢<b>持續減碼 BTC</b>（連續 ${streak} 輪淨賣出）→ 偏空`,c:'#f85149'};
+    else concl={t:`聰明錢 BTC 部位<b>來回震盪</b>，無明顯吸籌/出貨方向`,c:'#8b949e'};
+    const span=spanLabel(pts[0].t, pts[pts.length-1].t);
+    document.getElementById('smartbtc').innerHTML=`<div class="box">
+      <h2>🧠 聰明錢 BTC 吸籌偵測 <small>近期勝率/獲利贏家對 BTC 的淨持倉，${span}</small></h2>
+      <div class="vline" style="border-left-color:${concl.c}">📍 現在：${concl.t}</div>
+      <div class="meta">最新淨持倉 <b style="color:${col}">${net>=0?'淨多':'淨空'} $${(Math.abs(net)/1e6).toFixed(1)}M</b>（${all[all.length-1].count} 個聰明錢帳號）｜線往上＝在加碼、往下＝在減碼；越陡＝量越大</div>
+      ${lineChart(pts)}
+    </div>`;
+    setSum('sum-smartbtc', `${concl.t.replace(/<[^>]+>/g,'')}`.slice(0,40));
+  }catch(e){document.getElementById('smartbtc').innerHTML='<div class="box empty">聰明錢吸籌偵測載入失敗：'+e+'</div>';}
+}
 async function loadWhaleChart(){
   try{
     const r=await (await fetch('/whale_history?symbol=BTC&cohort=whale')).json();
@@ -673,7 +716,7 @@ async function loadWhaleChart(){
   }catch(e){document.getElementById('whalechart').innerHTML='<div class="box empty">鯨魚圖載入失敗：'+e+'</div>';}
 }
 async function refresh(){
-  loadRadar(); loadDefi(); loadPositioning(); loadWhaleChart();
+  loadRadar(); loadDefi(); loadPositioning(); loadSmartBTC(); loadWhaleChart();
   await loadMacro();
   let decisions=[], hlcoins=[], scores={};
   try{ decisions=(await (await fetch('/decisions')).json()).decisions||[]; }catch(e){}
