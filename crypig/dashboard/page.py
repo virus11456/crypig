@@ -514,7 +514,7 @@ async function loadRadar(){
       const span=spanLabel(Date.parse(use[0].ts)/1000, Date.parse(lastN.ts)/1000);
       tl=`<div class="sec">背離時間軸 <small>${span}｜gap=群眾−聰明錢；線趨近 0 ＝收斂＝反轉接近</small></div>
         <div class="meta">最新背離量 <b>${(lastN.gap>=0?'+':'')+lastN.gap}</b>｜背離幣數 <b>${lastN.n_div}</b>（頂 ${lastN.n_top}／底 ${lastN.n_bottom}）${conv?`<br><b style="color:${conv.c}">${conv.t}</b>`:''}</div>
-        ${lineChart(pts,{color:'#d29922',includeZero:true})}`;
+        ${lineChart(pts,{color:'#d29922',includeZero:true,tip:p=>'背離量 '+(p.v>=0?'+':'')+(+p.v).toFixed(2)})}`;
     } else {
       tl=`<div class="sec">背離時間軸</div><div class="meta">每 20 分鐘記一筆，目前 ${hist.length} 筆，2 筆以上開始畫線（看背離何時收斂＝進場時機）。</div>`;
     }
@@ -605,7 +605,7 @@ function spanLabel(firstT, lastT){
   if(h>=1.5) return '近 '+Math.round(h)+' 小時';
   return '近 '+Math.max(1,Math.round(h*60))+' 分鐘';
 }
-let _gid=0;
+let _gid=0; const LINE_DATA={};
 function lineChart(pts, opts){
   opts=opts||{};
   if(!pts||pts.length<2) return '<span class="meta">資料累積中…</span>';
@@ -649,9 +649,11 @@ function lineChart(pts, opts){
   const line=smoothPath(P);
   const area=line+` L${xs(n-1).toFixed(1)},${(H-Bm).toFixed(1)} L${xs(0).toFixed(1)},${(H-Bm).toFixed(1)} Z`;
   const ex=xs(n-1), ey=ys(vs[n-1]);
-  const gid='grad'+(_gid++);
+  const gid='g'+(_gid++);
   const yl=opts.ylabel?`<text x="13" y="${T+(H-T-Bm)/2}" fill="#6e7681" font-size="11" transform="rotate(-90 13 ${T+(H-T-Bm)/2})" text-anchor="middle">${opts.ylabel}</text>`:'';
-  return `<svg width="100%" viewBox="0 0 ${W} ${H}">
+  // 存圖資料供滑過查最近點顯示日期/數值
+  LINE_DATA[gid]={L,R,W,n,pts,P,spanD,label:(p)=>(opts.tip?opts.tip(p):fa(p.v))};
+  return `<svg id="lc-${gid}" width="100%" viewBox="0 0 ${W} ${H}">
     <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="${col}" stop-opacity="0.30"/>
       <stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
@@ -659,8 +661,24 @@ function lineChart(pts, opts){
     <path d="${area}" fill="url(#${gid})" stroke="none"/>
     <path d="${line}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round"/>
     <circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="3.5" fill="${col}"/>
-    ${ticks}${yl}</svg>`;
+    <circle id="lm-${gid}" r="4" fill="${col}" stroke="#0d1117" stroke-width="1.5" style="display:none" pointer-events="none"/>
+    ${ticks}${yl}
+    <rect x="${L}" y="${T}" width="${(W-L-R).toFixed(1)}" height="${(H-T-Bm).toFixed(1)}" fill="transparent" onmousemove="lineTip(event,'${gid}')" onmouseout="lineOut('${gid}')"/></svg>`;
 }
+// 線圖滑過：依滑鼠 x 找最近資料點，顯示日期＋數值並標出該點
+function dateLab(t,spanD){ if(t==null) return ''; const d=new Date(Number(t)*1000), p2=x=>('0'+x).slice(-2);
+  return spanD<2 ? (d.getMonth()+1)+'/'+d.getDate()+' '+p2(d.getHours())+':'+p2(d.getMinutes())
+       : spanD<=160 ? (d.getMonth()+1)+'/'+d.getDate()
+       : d.getFullYear()+'/'+(d.getMonth()+1)+'/'+d.getDate(); }
+function lineTip(e,id){ const d=LINE_DATA[id]; if(!d) return;
+  const svg=document.getElementById('lc-'+id); if(!svg) return;
+  const r=svg.getBoundingClientRect(); if(!r.width) return;
+  const vx=(e.clientX-r.left)/r.width*d.W;
+  let i=Math.round((vx-d.L)/(d.W-d.L-d.R)*(d.n-1)); i=Math.max(0,Math.min(d.n-1,i));
+  const p=d.pts[i], m=document.getElementById('lm-'+id);
+  if(m){ m.setAttribute('cx',d.P[i][0].toFixed(1)); m.setAttribute('cy',d.P[i][1].toFixed(1)); m.style.display='block'; }
+  ctip(e, dateLab(p.t,d.spanD)+'　'+d.label(p)); }
+function lineOut(id){ ctipHide(); const m=document.getElementById('lm-'+id); if(m)m.style.display='none'; }
 // 🐋 大戶綜合判讀：鏈上現貨(結構性) × 合約(短期方向) 交叉結論，放最上面
 let SB_VERDICT=null, OC_VERDICT=null;
 function renderBigMoney(){
@@ -907,7 +925,7 @@ async function loadSocial(){
     let fgHtml='';
     if(fg.value!=null){
       const col=fgColor(fg.value);
-      const spark=lineChart((fg.history||[]).map(h=>({t:+h.t,v:h.v})), {color:'#58a6ff', zeroFloor:true});
+      const spark=lineChart((fg.history||[]).map(h=>({t:+h.t,v:h.v})), {color:'#58a6ff', zeroFloor:true, tip:p=>'恐懼貪婪 '+Math.round(p.v)});
       const pctNote = fg.percentile!=null
         ? `歷史第 <b style="color:${col}">${fg.percentile}</b> 百分位${fg.percentile<=10?'（極罕見，越低越接近大底）':fg.percentile>=90?'（極度貪婪，留意風險）':''}`
         : '';
