@@ -812,38 +812,37 @@ function renderSmartBTC(){
   </div>`;
   setSum('sum-smartbtc', `${concl.t.replace(/<[^>]+>/g,'')}`.slice(0,40));
 }
+// 🐋 巨鯨 BTC 合約淨持倉：柱狀（綠淨多/紅淨空）＋24H/30天切換，柱往零軸＝接近翻轉
+let WH_ALL=[], WH_RANGE='24h';
+function setWHRange(rg){ WH_RANGE=rg; renderWhaleChart(); }
 async function loadWhaleChart(){
   try{
     const r=await (await fetch('/whale_history?symbol=BTC&cohort=whale')).json();
-    const all=r.history||[];
-    const cut=Date.now()/1000-24*3600;
-    const h24=all.filter(x=>Date.parse(x.ts)/1000>=cut);
-    const h=h24.length>=2?h24:all;            // 近 24 小時(不足則顯示已累積)
-    if(h.length<2){document.getElementById('whalechart').innerHTML=
-      '<div class="box"><h2>🐋 HL 巨鯨 BTC 合約淨持倉 <small>逐輪累積中</small></h2>'
-      +'<div class="meta">每 20 分鐘記一筆，目前 '+all.length+' 筆，2 筆以上即開始畫線（看大戶部位何時翻多/翻空＝進場時機）。</div></div>';
-      setSum('sum-whale', `逐輪累積中（${all.length} 筆）`);return;}
-    const pts=h.map(x=>({t:Date.parse(x.ts)/1000, v:x.net_usd}));
-    const last=h[h.length-1], lo=last.long_usd, sh=last.short_usd;
-    const net=last.net_usd, bias=net>=0?'淨多':'淨空', col=net>=0?'#3fb950':'#f85149';
-    // 是否在這段期間翻轉
-    const firstNet=h[0].net_usd;
-    const flip = firstNet<0&&net>=0?'　🔄 期間翻多（轉折）':firstNet>=0&&net<0?'　🔄 期間翻空（轉折）':'';
-    const span=spanLabel(pts[0].t, pts[pts.length-1].t);
-    const wc = flip
-      ? {t:`🔄 大戶部位剛<b>${net>=0?'翻多':'翻空'}</b>（穿越零軸＝轉折）→ 進場時機線索，留意跟進`,c:'#d29922'}
-      : {t:`大戶持續<b>${bias}</b>（這段未翻轉）→ 順勢偏${net>=0?'多':'空'}，等穿越零軸再考慮轉向`,c:net>=0?'#3fb950':'#f85149'};
-    document.getElementById('whalechart').innerHTML=`<div class="box">
-      <h2>🐋 HL 巨鯨 BTC 合約淨持倉 <small>淨值前N大戶，每 20 分鐘一筆，${span}</small></h2>
-      <div class="vline" style="border-left-color:${wc.c}">📍 現在：${wc.t}</div>
-      <div class="meta">最新 <b style="color:${col}">${bias} $${(Math.abs(net)/1e6).toFixed(1)}M</b>
-        （多 $${(lo/1e6).toFixed(1)}M／空 $${(sh/1e6).toFixed(1)}M，${last.count} 個帳號）
-        <b style="color:#d29922">${flip}</b>
-        ｜ 線在零軸上＝大戶偏多、下＝偏空，穿越零軸＝部位翻轉</div>
-      ${lineChart(pts)}
-    </div>`;
-    setSum('sum-whale', `最新 <b style="color:${col}">${bias} $${(Math.abs(net)/1e6).toFixed(1)}M</b>（${last.count} 帳號，${span}）${flip?'<b style="color:#d29922"> 翻轉</b>':''}`);
+    WH_ALL=(r.history||[]).map(x=>({t:Date.parse(x.ts)/1000, v:x.net_usd, long:x.long_usd, short:x.short_usd, count:x.count}));
+    renderWhaleChart();
   }catch(e){document.getElementById('whalechart').innerHTML='<div class="box empty">鯨魚圖載入失敗：'+e+'</div>';}
+}
+function renderWhaleChart(){
+  const all=WH_ALL||[];
+  const toggle=`<span class="rtoggle"><button class="${WH_RANGE==='24h'?'on':''}" onclick="setWHRange('24h')">24H</button><button class="${WH_RANGE==='30d'?'on':''}" onclick="setWHRange('30d')">近30天</button></span>`;
+  if(all.length<2){
+    document.getElementById('whalechart').innerHTML='<div class="box"><div class="row" style="justify-content:flex-end">'+toggle+'</div><div class="meta">每 20 分鐘記一筆，目前 '+all.length+' 筆，2 筆以上開始畫（看大戶部位何時翻多/翻空＝進場時機）。</div></div>';
+    setSum('sum-whale',`累積中（${all.length} 筆）`);return;}
+  const last=all[all.length-1], net=last.v, bias=net>=0?'淨多':'淨空', col=net>=0?'#3fb950':'#f85149';
+  const firstNet=all[0].v;
+  const flip = firstNet<0&&net>=0?'翻多':firstNet>=0&&net<0?'翻空':'';
+  const wc = flip
+    ? {t:`🔄 大戶部位剛<b>${flip}</b>（穿越零軸＝轉折）→ 進場時機線索，留意跟進`,c:'#d29922'}
+    : {t:`大戶持續<b>${bias}</b>（這段未翻轉）→ 順勢偏${net>=0?'多':'空'}，等穿越零軸再考慮轉向`,c:net>=0?'#3fb950':'#f85149'};
+  const bars=bucketNet(all, WH_RANGE);
+  const note = WH_RANGE==='30d' && bars.length<3 ? `<div class="meta">（30天資料累積中——逐輪記錄，目前約 ${Math.max(1,Math.round((all[all.length-1].t-all[0].t)/86400))} 天）</div>` : '';
+  document.getElementById('whalechart').innerHTML=`<div class="box">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><span class="meta">🐋 淨值前N大戶對 BTC 的合約淨持倉</span>${toggle}</div>
+    <div class="vline" style="border-left-color:${wc.c}">📍 現在：${wc.t}</div>
+    <div class="meta">最新 <b style="color:${col}">${bias} $${(Math.abs(net)/1e6).toFixed(1)}M</b>（多 $${(last.long/1e6).toFixed(1)}M／空 $${(last.short/1e6).toFixed(1)}M，${last.count} 個帳號）｜柱往上＝淨多、往下＝淨空，<b>穿越零軸＝部位翻轉</b></div>
+    ${note}${barChart(bars,{tip:p=>(p.v>=0?'淨多 $':'淨空 $')+(Math.abs(p.v)/1e6).toFixed(1)+'M'})}
+  </div>`;
+  setSum('sum-whale', `最新 ${bias} $${(Math.abs(net)/1e6).toFixed(1)}M（${last.count} 帳號）${flip?'·剛'+flip:''}`);
 }
 async function refresh(){
   loadRadar(); loadDefi(); loadPositioning(); loadSmartBTC(); loadWhaleChart(); loadOnchainWhale();
