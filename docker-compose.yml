@@ -5,6 +5,11 @@ services:
     image: crypig:latest
     container_name: crypig
     restart: unless-stopped
+    logging:                   # 日誌封頂，避免長久跑爆磁碟（最多 3×20MB＝60MB）
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
     ports:
       # 只綁 localhost：外面連不到 IP:8000，僅同主機的 Caddy 能轉發進來(走網域+HTTPS)。
       # 若想完全直連對外，改回 "8000:8000"。
