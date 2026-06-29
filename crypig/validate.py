@@ -70,6 +70,25 @@ def _bucketize(pairs: list[tuple[float, float]],
     return out
 
 
+def _bucket_of(val: float, buckets: list[tuple[str, float, float]]) -> str | None:
+    """某數值落在哪個桶（給「此刻各幣落點」用）。"""
+    for label, lo, hi in buckets:
+        if lo <= val < hi:
+            return label
+    return None
+
+
+def _now_by_coin(sig_by_coin: dict, buckets: list[tuple[str, float, float]]) -> list[dict]:
+    """每幣「最新一筆」訊號值落在哪個桶——回答此時此刻各幣在什麼環境。"""
+    now = []
+    for coin, pts in sig_by_coin.items():
+        if pts:
+            val = pts[-1][1]
+            now.append({"coin": coin, "val": round(val, 3), "bucket": _bucket_of(val, buckets)})
+    now.sort(key=lambda x: -x["val"])
+    return now
+
+
 def _attach_edge(overall: dict, buckets: list[dict]) -> None:
     """把每桶相對「無條件基準(overall)」的 edge 算出來——勝率/報酬高於基準才是真有預判力。"""
     bw, bm = overall.get("win_rate"), overall.get("mean")
@@ -188,7 +207,8 @@ def positioning_study(history_by_coin: dict[str, list[dict]],
             pooled, _POS_BUCKETS,
             by_coin=dict(sorted(by_coin.items(), key=lambda kv: -(kv[1]["n"] or 0))))
     return {"signal": f"positioning_{cohort}", "cohort": cohort,
-            "coins": len(sig_by_coin), "horizons": horizons}
+            "coins": len(sig_by_coin), "horizons": horizons,
+            "now": _now_by_coin(sig_by_coin, _POS_BUCKETS)}
 
 
 # 逐幣『大戶 vs 散戶背離』分桶（divergence = 大戶 net − 散戶費率 crowd）
@@ -242,7 +262,8 @@ def divergence_study(smart_by_coin: dict[str, list[dict]],
         horizons[f"{h}h"] = _horizon(
             pooled, _DIV_BUCKETS,
             by_coin=dict(sorted(by_coin.items(), key=lambda kv: -(kv[1]["n"] or 0))))
-    return {"signal": "divergence", "coins": len(sig_by_coin), "horizons": horizons}
+    return {"signal": "divergence", "coins": len(sig_by_coin), "horizons": horizons,
+            "now": _now_by_coin(sig_by_coin, _DIV_BUCKETS)}
 
 
 # 大戶『變化率』分桶（delta = 近 window 內 net 的變化；正=翻多/加碼）
@@ -308,7 +329,7 @@ def momentum_study(history_by_coin: dict[str, list[dict]],
             by_coin=dict(sorted(by_coin.items(), key=lambda kv: -(kv[1]["n"] or 0))))
     return {"signal": f"momentum_{cohort}", "cohort": cohort,
             "window_hours": window_hours, "coins": len(sig_by_coin),
-            "horizons": horizons}
+            "horizons": horizons, "now": _now_by_coin(sig_by_coin, _MOM_BUCKETS)}
 
 
 def radar_study(radar_history: list[dict],

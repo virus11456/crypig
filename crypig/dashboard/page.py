@@ -1080,6 +1080,19 @@ async function loadValidate(){
         <br><span style="color:${c}">→ ${act}</span></div>`;
     }
     // 估「還要多久才可信」：粗估每天約 72 筆/幣，要 ~400 筆樣本且需涵蓋漲跌
+    // 逐幣訊號「此刻各幣落在哪個桶」＋怎麼用（對應 F&G 的 nowAction）
+    function nowDist(study, blk){
+      const now=(study&&study.now)||[]; if(!now.length||!blk) return '';
+      const byB={}; now.forEach(x=>{(byB[x.bucket]=byB[x.bucket]||[]).push(x.coin);});
+      const lines=(blk.buckets||[]).map(b=>{
+        const coins=byB[b.bucket]; if(!coins||!coins.length) return null;
+        const e=b.edge||0, good=e>=3, bad=e<=-3, c=good?'#3fb950':bad?'#f85149':'#8b949e';
+        const tag=good?'👍 值得買':bad?'👎 該避開':'— 中性';
+        return `<div style="margin:3px 0"><span style="color:${c};font-weight:700">${tag}</span> <span class="meta">${b.bucket}（歷史 ${b.win_rate}% 會漲）</span>：<b>${coins.join('　')}</b></div>`;
+      }).filter(Boolean).join('');
+      if(!lines) return '';
+      return `<div class="nowbox" style="border-color:#58a6ff">🎯 <b>此刻各幣落在哪</b>（共 ${now.length} 幣）<br><span class="meta">怎麼用：<b style="color:#3fb950">挑落在 👍 桶的幣優先做多</b>、<b style="color:#f85149">避開 👎 桶的幣</b>（歷史%＝該桶買進後上漲機率）</span>${lines}</div>`;
+    }
     function sig(study,hk,title,sub,nowVal,stateName){
       if(!study) return '';
       const blk=study&&study.horizons&&study.horizons[hk];
@@ -1096,6 +1109,7 @@ async function loadValidate(){
       const v=verdict(study,hk);
       return `<div class="vsig">${head}
         ${nowAction(blk, nowVal, stateName)}
+        ${nowDist(study, blk)}
         ${v?`<div class="vverdict" style="border-left-color:${v.c}">${v.t}</div>`:''}
         ${edgeBars(blk, nowVal)}
         <details class="moredt"><summary>看完整數字（所有前瞻期·各桶勝率/報酬/中位）</summary>${tbl(study)}</details>
