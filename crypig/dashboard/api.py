@@ -395,6 +395,31 @@ def whale_history(symbol: str = "BTC", cohort: str = "whale", limit: int = 400) 
 
 
 _btcdata = None
+_defi_hist = None
+
+
+@app.get("/stablecoins")
+def stablecoins() -> dict:
+    """穩定幣總供應完整歷史（DefiLlama，2017 至今日頻）——場邊乾火藥/資金進出的宏觀訊號。
+
+    增發＝新錢進場（結構性偏多）、縮減＝贖回撤離（偏空）。client 自帶 6 小時快取。
+    """
+    global _defi_hist
+    if orchestrator().config.use_mock:
+        import math
+        from datetime import datetime, timedelta
+        base = datetime(2020, 1, 1)
+        out = [{"t": int((base + timedelta(days=i)).timestamp()),
+                "v": round(5e9 + i * 1.5e8 + 2e10 * math.sin(i / 200))} for i in range(0, 2200, 2)]
+        return {"history": out}
+    try:
+        if _defi_hist is None:
+            from ..clients.defillama import DefiLlamaClient
+            _defi_hist = DefiLlamaClient()
+        hist = _defi_hist.stablecoin_history()
+    except Exception as e:
+        return {"history": [], "error": str(e)}
+    return {"history": hist}
 
 
 @app.get("/onchain_whale")

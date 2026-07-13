@@ -293,6 +293,11 @@ INDEX_HTML = r"""<!doctype html>
     <summary><span class="ctitle">💰 資金動向</span><span class="csum" id="sum-defi">載入中…</span><span class="chev">▾</span></summary>
     <div id="defi"><div class="box empty">資金動向載入中…</div></div>
   </details>
+
+  <details class="ccard" open>
+    <summary><span class="ctitle">💵 穩定幣總供應</span><span class="csum" id="sum-stable">載入中…</span><span class="chev">▾</span></summary>
+    <div id="stablecoins"><div class="box empty">穩定幣總供應載入中…</div></div>
+  </details>
 </div></div>
 <script>
 const C={bull:'#3fb950',bear:'#f85149',neutral:'#8b949e'};
@@ -528,6 +533,45 @@ async function loadRadar(){
     renderHero(m, coins, conv);
     setSum('sum-radar', `<b style="color:${vcol}">${(m.verdict||'').slice(0,18)}</b> ｜ 恐懼貪婪 ${m.fear_greed??'—'} ⟷ 聰明錢 ${m.smart_avg!=null?(m.smart_avg*100).toFixed(0)+'%':'—'} ｜ 背離 ${m.n_div??'—'} 幣`);
   }catch(e){document.getElementById('radar').innerHTML='<div class="box empty">分歧雷達載入失敗：'+e+'</div>';}
+}
+// 💵 穩定幣總供應：完整歷史走勢＋近1月/近1年/全部切換（增發=資金進場、縮減=撤離）
+let SC_ALL=[], SC_RANGE='1y', SC_ERR=null;
+function setSCRange(rg){ SC_RANGE=rg; renderStable(); }
+async function loadStablecoins(){
+  try{
+    const r=await (await fetch('/stablecoins')).json();
+    SC_ALL=(r.history||[]).map(x=>({t:x.t, v:x.v})); SC_ERR=r.error||null;
+    renderStable();
+  }catch(e){document.getElementById('stablecoins').innerHTML='<div class="box empty">穩定幣載入失敗：'+e+'</div>';}
+}
+function renderStable(){
+  const all=SC_ALL||[];
+  const toggle=`<span class="rtoggle">
+    <button class="${SC_RANGE==='1m'?'on':''}" onclick="setSCRange('1m')">近1月</button>
+    <button class="${SC_RANGE==='1y'?'on':''}" onclick="setSCRange('1y')">近1年</button>
+    <button class="${SC_RANGE==='all'?'on':''}" onclick="setSCRange('all')">全部</button></span>`;
+  if(all.length<2){
+    document.getElementById('stablecoins').innerHTML='<div class="box"><div class="row" style="justify-content:flex-end">'+toggle+'</div><div class="meta">'+(SC_ERR?('DefiLlama 暫時取不到（'+SC_ERR+'）'):'載入中…')+'</div></div>';
+    setSum('sum-stable','—');return;}
+  const now=Date.now()/1000;
+  const cutoff = SC_RANGE==='1m'?now-30*86400 : SC_RANGE==='1y'?now-365*86400 : 0;
+  let pts=all.filter(p=>p.t>=cutoff);
+  if(pts.length<2) pts=all.slice(-Math.min(all.length, SC_RANGE==='1m'?31:366));  // 資料未及該區間→退回可得的最近段
+  const first=pts[0], last=pts[pts.length-1];
+  const d=last.v-first.v, pct=first.v?d/first.v:0;
+  const rn = SC_RANGE==='1m'?'近1月':SC_RANGE==='1y'?'近1年':'全區間';
+  const bil=x=>'$'+(x/1e9).toFixed(1)+'B';
+  let concl;
+  if(pct>0.005) concl={t:`${rn} 穩定幣總供應 <b>+${bil(d)}</b>（增發）→ 新錢進場、場邊乾火藥變多＝<b>結構性偏多</b>`,c:'#2ea043'};
+  else if(pct<-0.005) concl={t:`${rn} 穩定幣總供應 <b>-${bil(-d)}</b>（縮減）→ 贖回、資金撤出加密＝<b>結構性偏空/留意</b>`,c:'#da3633'};
+  else concl={t:`${rn} 穩定幣總供應大致持平（${d>=0?'+':''}${bil(d)}）→ 資金無明顯進出`,c:'#8b949e'};
+  document.getElementById('stablecoins').innerHTML=`<div class="box">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><span class="meta">💵 全市場穩定幣總市值（DefiLlama·2017至今日頻）</span>${toggle}</div>
+    <div class="vline" style="border-left-color:${concl.c}">📍 現在：${concl.t}</div>
+    <div class="meta">最新總供應 <b style="color:#c9d1d9">${bil(last.v)}</b>｜穩定幣＝場邊「乾火藥」：<b style="color:#3fb950">增發=資金準備進場</b>、<b style="color:#f85149">縮減=資金撤離</b>。線往上＝資金流入加密、往下＝流出。</div>
+    ${lineChart(pts,{color:concl.c==='#8b949e'?'#58a6ff':concl.c, tip:p=>'總供應 $'+(p.v/1e9).toFixed(1)+'B'})}
+  </div>`;
+  setSum('sum-stable', `${concl.t.replace(/<[^>]+>/g,'')}`.slice(0,42));
 }
 async function loadDefi(){
   try{
@@ -863,7 +907,7 @@ function renderWhaleChart(){
   setSum('sum-whale', `最新 ${bias} $${(Math.abs(net)/1e6).toFixed(1)}M（${last.count} 帳號）${flip?'·剛'+flip:''}`);
 }
 async function refresh(){
-  loadRadar(); loadDefi(); loadPositioning(); loadSmartBTC(); loadWhaleChart(); loadOnchainWhale();
+  loadRadar(); loadDefi(); loadPositioning(); loadSmartBTC(); loadWhaleChart(); loadOnchainWhale(); loadStablecoins();
   await loadMacro();
   let decisions=[], hlcoins=[], scores={};
   try{ decisions=(await (await fetch('/decisions')).json()).decisions||[]; }catch(e){}

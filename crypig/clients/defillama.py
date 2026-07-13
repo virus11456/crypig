@@ -59,5 +59,29 @@ class DefiLlamaClient:
             return out
         return self._cache or {}
 
+    def stablecoin_history(self, ttl: float = 21600.0) -> list[dict]:
+        """穩定幣總供應完整日頻歷史（2017 至今），供區間可選走勢圖。回 [{t,v}] 由舊到新。
+
+        日資料，預設快取 6 小時省流量。失敗回上次快取。
+        """
+        now = time.time()
+        hit = getattr(self, "_sc_hist", None)
+        if hit and now - hit[0] < ttl:
+            return hit[1]
+        try:
+            sc = self._client.get("https://stablecoins.llama.fi/stablecoincharts/all").json()
+        except Exception:
+            return hit[1] if hit else []
+        if not isinstance(sc, list):
+            return hit[1] if hit else []
+
+        def mc(x):
+            v = x.get("totalCirculatingUSD")
+            return sum(float(a) for a in v.values()) if isinstance(v, dict) else float(v or 0)
+
+        out = [{"t": int(x["date"]), "v": round(mc(x), 0)} for x in sc if x.get("date")]
+        self._sc_hist = (now, out)
+        return out
+
     def close(self) -> None:
         self._client.close()
