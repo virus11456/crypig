@@ -544,6 +544,19 @@ async function loadStablecoins(){
     renderStable();
   }catch(e){document.getElementById('stablecoins').innerHTML='<div class="box empty">穩定幣載入失敗：'+e+'</div>';}
 }
+// 30 天滾動淨流入/流出：某日供應 − 30 天前供應（正=淨增發/流入、負=贖回/流出）
+function scNetFlow(all){
+  const secs=30*86400, out=[];
+  for(let i=0;i<all.length;i++){
+    const target=all[i].t-secs; let j=-1,a=0,b=i;
+    while(a<=b){const m=(a+b)>>1; if(all[m].t<=target){j=m;a=m+1;}else b=m-1;}
+    if(j>=0) out.push({t:all[i].t, v:all[i].v-all[j].v});
+  }
+  return out;
+}
+function downsample(arr, cap){ if(arr.length<=cap) return arr;
+  const k=Math.ceil(arr.length/cap), out=[]; for(let i=0;i<arr.length;i+=k) out.push(arr[i]);
+  if(out[out.length-1]!==arr[arr.length-1]) out.push(arr[arr.length-1]); return out; }
 function renderStable(){
   const all=SC_ALL||[];
   const toggle=`<span class="rtoggle">
@@ -556,20 +569,24 @@ function renderStable(){
   const now=Date.now()/1000;
   const cutoff = SC_RANGE==='1m'?now-30*86400 : SC_RANGE==='1y'?now-365*86400 : 0;
   let pts=all.filter(p=>p.t>=cutoff);
-  if(pts.length<2) pts=all.slice(-Math.min(all.length, SC_RANGE==='1m'?31:366));  // 資料未及該區間→退回可得的最近段
-  const first=pts[0], last=pts[pts.length-1];
-  const d=last.v-first.v, pct=first.v?d/first.v:0;
-  const rn = SC_RANGE==='1m'?'近1月':SC_RANGE==='1y'?'近1年':'全區間';
+  if(pts.length<2) pts=all.slice(-Math.min(all.length, SC_RANGE==='1m'?31:366));
+  const last=pts[pts.length-1];
   const bil=x=>'$'+(x/1e9).toFixed(1)+'B';
+  // 結論用「當前 30 天淨流入/流出」(全序列最後一筆，最能反映此刻資金進出)
+  const flowAll=scNetFlow(all), curFlow=flowAll.length?flowAll[flowAll.length-1].v:0;
   let concl;
-  if(pct>0.005) concl={t:`${rn} 穩定幣總供應 <b>+${bil(d)}</b>（增發）→ 新錢進場、場邊乾火藥變多＝<b>結構性偏多</b>`,c:'#2ea043'};
-  else if(pct<-0.005) concl={t:`${rn} 穩定幣總供應 <b>-${bil(-d)}</b>（縮減）→ 贖回、資金撤出加密＝<b>結構性偏空/留意</b>`,c:'#da3633'};
-  else concl={t:`${rn} 穩定幣總供應大致持平（${d>=0?'+':''}${bil(d)}）→ 資金無明顯進出`,c:'#8b949e'};
+  if(curFlow>1e8) concl={t:`近30天穩定幣<b>淨流入 +${bil(curFlow)}</b> → 資金正流入加密、乾火藥變多＝<b>偏多</b>`,c:'#2ea043'};
+  else if(curFlow<-1e8) concl={t:`近30天穩定幣<b>淨流出 -${bil(-curFlow)}</b> → 贖回、資金撤離加密＝<b>偏空/留意</b>`,c:'#da3633'};
+  else concl={t:`近30天穩定幣淨流入流出趨近 0（${curFlow>=0?'+':''}${bil(curFlow)}）→ 資金無明顯進出`,c:'#8b949e'};
+  // 下圖：淨流入/流出，依區間篩選＋降採樣(避免全區間上千根)
+  const flow=downsample(flowAll.filter(p=>p.t>=cutoff), 400);
   document.getElementById('stablecoins').innerHTML=`<div class="box">
-    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><span class="meta">💵 全市場穩定幣總市值（DefiLlama·2017至今日頻）</span>${toggle}</div>
-    <div class="vline" style="border-left-color:${concl.c}">📍 現在：${concl.t}</div>
-    <div class="meta">最新總供應 <b style="color:#c9d1d9">${bil(last.v)}</b>｜穩定幣＝場邊「乾火藥」：<b style="color:#3fb950">增發=資金準備進場</b>、<b style="color:#f85149">縮減=資金撤離</b>。線往上＝資金流入加密、往下＝流出。</div>
-    ${lineChart(pts,{color:concl.c==='#8b949e'?'#58a6ff':concl.c, tip:p=>'總供應 $'+(p.v/1e9).toFixed(1)+'B'})}
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><span class="meta">💵 穩定幣總供應 ＆ 淨流入流出（DefiLlama·2017至今）</span>${toggle}</div>
+    <div class="vline" style="border-left-color:${concl.c}">📍 現在：${concl.t}｜最新總供應 <b>${bil(last.v)}</b></div>
+    <div class="meta" style="margin-top:6px">① 總市值走勢（線往上＝資金流入加密）</div>
+    ${lineChart(pts,{color:'#58a6ff', tip:p=>'總供應 $'+(p.v/1e9).toFixed(1)+'B'})}
+    <div class="meta" style="margin-top:10px">② 30 天淨流入/流出（<b style="color:#3fb950">綠=淨增發/流入</b>、<b style="color:#f85149">紅=贖回/流出</b>）</div>
+    ${flow.length>=2?barChart(flow,{up:'#3fb950',down:'#f85149',tip:p=>(p.v>=0?'淨流入 +':'淨流出 ')+(p.v/1e9).toFixed(1)+'B'}):'<span class="meta">此區間資料不足</span>'}
   </div>`;
   setSum('sum-stable', `${concl.t.replace(/<[^>]+>/g,'')}`.slice(0,42));
 }
