@@ -183,9 +183,9 @@ INDEX_HTML = r"""<!doctype html>
   .combo{background:linear-gradient(180deg,#161b22,#11161d);border:1px solid;border-left-width:5px;
          border-radius:12px;padding:13px 16px;font-size:14px;line-height:1.55}
   .combo .ct{font-weight:800;margin-right:6px;white-space:nowrap}
-  .rtoggle{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .rtoggle{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;flex:none}
   .rtoggle button{background:#0d1117;color:var(--mut);font-weight:600;font-size:12px;
-        padding:5px 12px;border:0;border-radius:0}
+        padding:5px 12px;border:0;border-radius:0;white-space:nowrap}
   .rtoggle button.on{background:var(--accent);color:#0d1117}
   .vsec{font-size:12px;color:var(--mut);font-weight:700;margin:16px 0 8px;
         border-top:1px solid var(--line);padding-top:12px}
@@ -226,7 +226,8 @@ INDEX_HTML = r"""<!doctype html>
   details.ccard[open]>summary .chev{transform:rotate(180deg)}
   /* 卡內沿用既有渲染，但去掉內層 box 的框/底色避免雙重邊框 */
   details.ccard .box{background:transparent;border:0;border-radius:0;padding:14px 18px 18px}
-  details.ccard .box>h2:first-child{display:none}   /* 標題已在卡頭，內層 h2 隱藏免重複 */
+  details.ccard .box>h2:first-child,
+  details.ccard .box .row>h2{display:none}   /* 標題已在卡頭，內層 h2 隱藏免重複(含幣別總表包在 .row 裡的) */
   details.ccard .box.empty{padding:28px;display:block}
   @media (max-width:560px){
     .wrap{padding:12px 12px}
