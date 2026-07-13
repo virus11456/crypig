@@ -163,8 +163,9 @@ INDEX_HTML = r"""<!doctype html>
         padding:6px 12px;font-size:13px;white-space:nowrap}
   .opps{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:14px}
   .opp{background:#0d1117;border:1px solid var(--line);border-radius:10px;padding:12px;cursor:default}
-  .opp .ot{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-  .opp .osym{font-size:16px;font-weight:800}
+  .opp .ot{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 6px;margin-bottom:8px}
+  .opp .osym{font-size:16px;font-weight:800;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .opp .ot .chip{flex:none;white-space:nowrap}
   .vs{display:flex;align-items:center;gap:6px;font-size:12px;margin:7px 0}
   .vs .lab{width:38px;color:var(--mut)}
   .vsbar{flex:1;height:7px;background:#21262d;border-radius:999px;position:relative;overflow:hidden}
