@@ -266,6 +266,56 @@ def divergence_study(smart_by_coin: dict[str, list[dict]],
             "now": _now_by_coin(sig_by_coin, _DIV_BUCKETS)}
 
 
+# 逐幣『散戶共識過熱(擁擠交易)』分桶（crowd = 散戶費率正規化淨方向 -1..+1）
+# 兩端極端＝一面倒＝反指標候選：沒人可再加倉→易反轉。與背離不同，這只看散戶自己。
+_CONSENSUS_BUCKETS = [
+    ("擁擠做多·過熱 ≥0.5", 0.5, 9),
+    ("偏擁擠多 0.15–0.5", 0.15, 0.5),
+    ("分歧/中性 -0.15–0.15", -0.15, 0.15),
+    ("偏擁擠空 -0.5–-0.15", -0.5, -0.15),
+    ("擁擠做空·過冷 <-0.5", -9, -0.5),
+]
+
+
+def consensus_study(crowd_by_coin: dict[str, list[dict]],
+                    price_by_coin: dict[str, list[tuple[int, float]]],
+                    horizon_hours: tuple[int, ...] = (24, 72)) -> dict:
+    """逐幣『散戶共識過熱(擁擠交易)』→ 該幣前瞻報酬。
+
+    市場共識過高的陷阱：散戶費率一面倒(net 極端)時，多空已擠滿、沒人能再加倉，
+    往往是反指標。這是純散戶擁擠度訊號，與『背離』互補(不需大戶端)。若某極端桶
+    歷史勝率偏低，edge 會自動判成「該避開」——反指標即被量化出來。隨累積變強。
+    """
+    sig_by_coin: dict[str, list[tuple[int, float]]] = {}
+    for coin, rows in crowd_by_coin.items():
+        pts = []
+        for r in rows:
+            t = _iso_ms(r.get("ts", ""))
+            n = r.get("net")
+            if t is not None and n is not None:
+                pts.append((t, float(n)))
+        if pts:
+            sig_by_coin[coin] = sorted(pts)
+
+    horizons = {}
+    for h in horizon_hours:
+        pooled: list[tuple[float, float]] = []
+        by_coin: dict[str, dict] = {}
+        for coin, pts in sig_by_coin.items():
+            series = price_by_coin.get(coin)
+            if not series:
+                continue
+            pairs = _forward_pairs(pts, series, h * 3600_000)
+            if pairs:
+                pooled += pairs
+                by_coin[coin] = _stats([r for _, r in pairs])
+        horizons[f"{h}h"] = _horizon(
+            pooled, _CONSENSUS_BUCKETS,
+            by_coin=dict(sorted(by_coin.items(), key=lambda kv: -(kv[1]["n"] or 0))))
+    return {"signal": "consensus", "coins": len(sig_by_coin), "horizons": horizons,
+            "now": _now_by_coin(sig_by_coin, _CONSENSUS_BUCKETS)}
+
+
 # 大戶『變化率』分桶（delta = 近 window 內 net 的變化；正=翻多/加碼）
 _MOM_BUCKETS = [
     ("大幅翻多 ≥0.3", 0.3, 9),

@@ -207,7 +207,7 @@ def validate_signals() -> dict:
     """
     import time
     from ..validate import (fear_greed_study, radar_study, positioning_study,
-                            momentum_study, divergence_study)
+                            momentum_study, divergence_study, consensus_study)
     orc = orchestrator()
     cached = _validate_cache["data"]
     # 只把「F&G 已有資料」的結果當有效快取——避免暖機未抓到 F&G 時把空結果快取 30 分
@@ -251,6 +251,7 @@ def validate_signals() -> dict:
         "fear_greed": fear_greed_study(fg_hist, daily),
         "radar": radar_study(radar_hist, hourly),
         "divergence": divergence_study(smart_hist, crowd_hist, price_by_coin),
+        "consensus": consensus_study(crowd_hist, price_by_coin),
         "pos_smart": positioning_study(smart_hist, price_by_coin, cohort="smart"),
         "pos_whale": positioning_study(whale_hist, price_by_coin, cohort="whale"),
         "mom_smart": momentum_study(smart_hist, price_by_coin, cohort="smart"),

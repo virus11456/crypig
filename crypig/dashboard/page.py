@@ -1185,6 +1185,7 @@ async function loadValidate(){
       ${sig(v.fear_greed,'30d','😱 散戶恐懼貪婪 → BTC','日線近'+(pw.daily_bars||0)+'天',curFG,'恐懼貪婪')}
       <div class="vsec">⏳ 累積中（逐幣訊號，部署後才開始記，需數週＋含漲跌行情）</div>
       ${sig(v.divergence,'24h','⭐ 逐幣背離（大戶 vs 散戶·命題核心）','小時線')}
+      ${sig(v.consensus,'24h','🔥 散戶共識過熱（擁擠交易·反指標）','小時線')}
       ${sig(v.pos_smart,'24h','🧠 聰明錢逐幣淨多空','小時線')}
       ${sig(v.pos_whale,'24h','🐋 巨鯨逐幣淨多空','小時線')}
       ${sig(v.mom_smart,'24h','⚡ 聰明錢變化率（翻倉/加碼）','小時線')}
