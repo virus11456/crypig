@@ -1,0 +1,140 @@
+# 更新日誌
+
+本檔記錄 Crypig 的重要變更。日期格式 YYYY-MM-DD。
+
+## [Unreleased]
+
+### 2026-06-25（巨鯨改為獨立全市場淨值前 N）
+
+#### 變更
+- **巨鯨改成全市場淨值前 N（獨立於聰明錢）**：原本巨鯨是「聰明錢池內淨值前 N」
+  ＝聰明錢的子集（兩面板幾乎一模一樣）。現改用 leaderboard 全 39k 帳號的
+  `accountValue` 取前 N，與獲利/聰明錢無關＝真正「錢很多的人」。
+- **過濾 HLP/做市金庫**：排除淨值 > $1.5B 的超大非個人帳號（汙染方向訊號）。
+- 兩群現為獨立母體、會「量測」重疊人數（實測重疊 0）；面板顯示重疊人數並提示
+  「聰明錢 vs 巨鯨方向相反＝分歧訊號」。鯨魚淨多空、BTC 持倉時間軸都改抓真鯨魚。
+- `whale_full_market=False` 可退回舊版（聰明錢內淨值前 N）。
+
+### 2026-06-25（聰明錢改用近期勝率＋獲利、排除做市商）
+
+#### 變更
+- **聰明錢定義改為「近 100 筆平倉勝率＋獲利最佳者」**（原為 allTime PnL 榜）：
+  候選池取近月獲利前 250 名，打 `userFills` 算每人近 100 筆平倉勝率與獲利，
+  勝率/獲利各正規化取平均分排序取前 N。fills 每 6 小時重算並長快取（勝率短期
+  穩定），持倉仍每輪更新——單輪不變慢。
+- **排除做市商/高頻**：近 100 筆平倉需橫跨 ≥24 小時，剔除「幾小時內刷上百筆、
+  多空中性」的做市商（其方向訊號無意義）。實測純勝率前幾名都是 0–2h 刷完的 MM。
+- 大玩家決心面板顯示**近 100 筆勝率中位數**；聰明錢標題改「近100筆勝率+獲利前N」。
+- `rank_by_fills=False` 可退回舊的 allTime PnL 榜。
+
+### 2026-06-25（策略頁三件套：新聞 / 雷達時間軸 / 雷達寫進 Obsidian）
+
+#### 新增
+- **新聞分析版**（策略頁）：6 家加密媒體 RSS，關鍵字利多/利空＋影響幣標記，
+  彙整成整體新聞情緒、最受關注幣的新聞淨情緒（⚠ 標與聰明錢分歧＝反指標），
+  呈現結論而非生標題牆。`clients/news.py`、`GET /news`。
+- **分歧雷達時間軸**：每輪記市場背離量 gap(群眾−聰明錢)、背離幣數，逐輪累積；
+  趨近 0＝收斂＝反轉接近，並自動判讀「收斂中/擴大中/持平」給進場時機提示。
+  `radar_hist` 表、`GET /radar_history`。
+- **雷達結論寫進 Obsidian Journal**：每日快照加「🎯 分歧雷達結論」——市場判讀、
+  背離量、收斂判讀、Alpha 候選幣（[[Coins/X]] 雙向連結進 Graph View）。
+
+#### 變更
+- **圖表升級**為平滑漸層面積圖（Catmull-Rom 曲線、niceStep 整數格線、8 個依跨度
+  自動格式的時間刻度、末點圓點、零軸虛線），對齊參考樣式。
+
+### 2026-06-25（鯨魚持倉時間軸 / 圖表可讀性）
+
+#### 變更
+- **鯨魚持倉圖改抓 Hyperliquid**：從 bitcoin-data 鏈上 ≥100BTC（每小時 10 次
+  額度、會被燒光）改為 **HL 巨鯨(淨值前N大戶) BTC 合約淨持倉**，逐輪累積成
+  時間軸——無額度限制、重用聰明錢那輪已抓的持倉，零額外呼叫；零軸參考線，
+  穿越零軸＝大戶部位翻多/翻空（進場時機）。
+- **大戶持倉時間序列落地**（`storage/pos_series.py`）：每輪把 whale/smart 對
+  BTC/ETH/SOL/HYPE 的多空名目存 sqlite（落 `CRYPIG_DATA_DIR` volume 持久化）。
+
+#### 修正
+- **圖表時間/縱軸標清楚**：`lineChart` 加上/中/下三條格線＋數值（縱軸刻度）；
+  x 軸依跨度自動選刻度——<2 天顯示時:分、<400 天月/日、逾 400 天年/月（修正
+  恐懼貪婪全區間 2018至今因 `fmtD` 砍年份、8 年圖看起來像 5 個月）。
+- 鯨魚歷史「暫無」根因：舊 `/whale_history` 每次請求新建 client 直打 API、
+  快取綁實例每次失效，幾次重整就燒光額度——已隨改用 HL 一併解決。
+
+### 2026-06-24（中台擴充：全市場掃描 / 大戶持倉 / 情緒 / Obsidian）
+
+#### 新增
+- **兩頁式中台**：📊 市場看板 / 🧠 策略·Obsidian，頂部 nav 切換。
+- **大玩家決心**：聰明錢(獲利前N)/鯨魚(帳戶淨值前N)各幣淨多空、**20 分鐘變化
+  delta**、多空人數/比例/槓桿摘要面板（看決心）。
+- **全市場 230 幣輕量評分**：用整批 HL 資料（聰明錢持倉+資金費率擁擠+日線背離）
+  幫所有幣算判斷/分數/信心，零額外 API。
+- **全幣日線量價背離**（底/頂，並發抓 HL 日線）；**整輪優化 39s→13s**（並發化）。
+- **鏈上 BTC 鯨魚每日持倉折線圖**（bitcoin-data 歷史，≥100BTC 大戶）。
+- **宏觀/資金**：全市場 OI-Cap、Vol-Cap、各幣市值（CoinGecko Demo 金鑰）；
+  **DefiLlama** 資金動向（TVL/穩定幣/各鏈）。
+- **情緒層（取代推特）**：恐懼貪婪指數（alternative.me，免費）、**Reddit 散戶
+  討論熱度/情緒**（官方唯讀 OAuth）、LunarCrush（需付費）整合預留。
+- **幣別總表**：合併決策+宏觀+持倉+背離+費率為單一可排序/可搜尋全市場表。
+- **資金費率異常**（過熱/偏擁擠/空方擁擠）+ Hyperliquid 全市場費率掃描。
+- **Obsidian 知識庫匯出** `/vault.zip`：Coins/Journal/KOL/Strategies markdown
+  （frontmatter + 雙向連結），在 Graph View 連成個人交易知識圖找 alpha。
+
+#### 變更
+- 卡片式詳情移除（全市場總表已涵蓋）；費率合併單欄（採完整的 HL 場內）。
+- 所有外部源改背景每輪抓一次並快取，請求端只讀（CoinGecko 從每次刷新→20分鐘
+  3 支，符合免費額度、避免雲端 IP 被封）。
+
+#### 修正
+- CoinGecko 雲端 IP 限流：背景快取 + Demo 金鑰（`x-cg-demo-api-key`）；失敗沿用快取。
+- Hyperliquid 並發抓取調節（16→8）避免一次抓太多。
+
+### 2026-06-24（基礎：決策層 / 看板 / 回測 / 部署）
+
+#### 新增
+- **線上部署（Railway）**：`railway.toml` / `Procfile`（綁 `$PORT`），Nixpacks
+  自動建置；公開網址 https://web-production-f997d.up.railway.app 。
+- **CI/CD 自動部署**：service 連結 GitHub repo，push 到部署分支即自動重部署。
+- **背景排程**：看板 app 加 FastAPI lifespan，部署後每 `CRYPIG_INTERVAL_MIN`
+  分鐘自動跑一輪累積決策（`CRYPIG_SCHEDULER=0` 可關），單輪失敗不拖垮排程。
+- **環境變數覆寫**：`USE_MOCK`（切真實源）、`CRYPIG_DATA_DIR`（sqlite/知識圖譜
+  落到掛載 volume 以跨部署持久化）、`CRYPIG_SCHEDULER`、`CRYPIG_INTERVAL_MIN`。
+- **回測引擎**（`crypig/backtest.py`）：對每筆非中性決策跟隨訊號方向進出，輸出
+  方向命中率、平均/累積損益、損益曲線、信心度分層表現；尚未到期計為 pending。
+- **真實價歷史回測**：`OHLCVPriceHistory` 從 OKX 拉 K 線、依決策時間對齊進/出
+  場價，免等系統跑滿即可回測既有決策（`price_source=ohlcv`）。
+- **決策持久化**（`crypig/storage/decisions.py`）：每輪決策（含當下價）落地
+  sqlite，供看板與回測；含舊表 `price` 欄遷移。
+- **視覺化看板**：`GET /` 自帶 HTML 看板（零前端建置）——方向標籤、分數量表、
+  信心度、操作建議、理由、各訊號貢獻明細、分數 sparkline；頂部回測面板。
+- 看板/API 端點：`/decisions`、`/decisions/history`、`/backtest`。
+
+#### 變更
+- **綜合決策層**（`aggregate.py`）：從單純加權分數升級為完整決策——加入信心度
+  （覆蓋率 × 方向一致度 × 表態力度）、多空共識佔比、衝突偵測（訊號分歧）、
+  主導訊號理由、操作建議。
+- **鯨魚 Agent**：由「全市場衍生品 OI」改為**真正的鯨魚錢包持倉**——用
+  bitcoin-data `wallet-bands` 追蹤 ≥100 BTC 大戶鏈上總持倉的跨輪變化（增=累積
+  偏多、減=分配偏空）；非 BTC 退回 OI+資金費率以保留多資產覆蓋。
+- **長期持有者（LTH）Agent**：改用真正的 `long-term-hodler-supply-btc`（≥155天）
+  取代 illiquid-supply 代理，更貼近「超過 151 天即長期」。
+- **requirements**：移除未用的 `ccxt`（改 httpx 直打 OKX）加快部署；`anthropic`
+  標註僅 `provider=claude` 時需要。
+
+#### 修正
+- sqlite 跨執行緒：`SnapshotStore` / `DecisionStore` 連線加 `check_same_thread=False`
+  （FastAPI 端點在 worker thread 執行）。
+- `divergence` 觀察補帶 `price`，mock 種子加時間桶讓價格隨輪次漂移（否則回測
+  報酬恆為 0）。
+- 回測 `horizon_hours=0` 被當 falsy 忽略的問題。
+
+### 2026-06-23
+
+#### 新增
+- **專案骨架**：多 agent 量化分析中台 + 自我學習 RAG 知識圖譜。
+- **聰明錢 Agent**：接 Hyperliquid 真實多空持倉。
+- **量價背離 Agent**：接 OKX 真實 OHLCV，RSI 背離 + 量能輔助。
+- **長期持有者（LTH）Agent**：接 bitcoin-data.com 真實鏈上資料（免費源）。
+
+#### 變更
+- 全市場持倉改用 CoinGecko 跨所聚合 OI（真正的「整個市場」）。
+- LTH client 增強健壯性（`/last` 404 退回 base、時序陣列取末筆、`value_key`）。
