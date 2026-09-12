@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import logging
+import copy
 import threading
 import time
 from datetime import datetime, timezone
@@ -16,6 +17,7 @@ from .storage.models import Observation
 from .storage.decisions import DecisionStore
 from .storage.pos_series import PosSeriesStore
 from .storage.quotes import QuoteStore
+from .storage.analysis import AnalysisStore, FIELDS
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,19 @@ class Orchestrator:
         self._dl = None
         self._rd = None
         self._nc = None
+        self.snapshot_decisions = []
+        self._analysis_store = AnalysisStore(Path(self.config.decisions_db).parent / "analysis_snapshot.json", self.config)
+        self._published = None
+        self._analysis_restored = False
+        self._analysis_persist_failed = False
+        self._empty_state = {key: copy.deepcopy(getattr(self, key)) for key in FIELDS}
+        saved = self._analysis_store.load()
+        if saved:
+            self._published = saved
+            self._cycle_finished_at = saved["completed_at"]
+            self._analysis_restored = True
+            for key, value in saved["state"].items():
+                setattr(self, key, copy.deepcopy(value))
         self.agents = []
         a = self.config.agents
         if a.smart_money.enabled:
@@ -74,20 +89,52 @@ class Orchestrator:
             result = self._run_cycle_locked()
             self.last_result = result
             self._cycle_finished_at = datetime.now(timezone.utc).isoformat()
+            self.snapshot_decisions = self.decisions.latest()
+            state = {key: copy.deepcopy(getattr(self, key)) for key in FIELDS}
+            # Publish one pointer only after every computation has completed.
+            saved = self._analysis_store.validate({"version": 1, "config": self._analysis_store.signature,
+                         "completed_at": self._cycle_finished_at, "state": state})
+            self._published = saved
+            self._analysis_restored = False
+            try:
+                self._analysis_store.save(state, saved["completed_at"])
+                self._analysis_persist_failed = False
+            except (OSError, ValueError, TypeError):
+                self._analysis_persist_failed = True
+                logger.exception("Analysis snapshot persistence failed")
             self._cycle_failed = False
             return result
         except Exception:
             self._cycle_failed = True
+            # A failed partial attempt must not become the next comparison baseline.
+            for key, value in (self._published["state"] if self._published else self._empty_state).items():
+                setattr(self, key, copy.deepcopy(value))
             raise
         finally:
             self._cycle_duration = round(time.monotonic() - started, 3)
             self._cycle_lock.release()
 
+    def dashboard_state(self):
+        """Pin a completed generation for an entire API response, never the working state."""
+        view = copy.copy(self)
+        published = self._published
+        for key, value in (published["state"] if published else self._empty_state).items():
+            setattr(view, key, value)
+        view.cycle_status = self.cycle_status
+        return view
+
     def cycle_status(self) -> dict:
+        published = self._published
+        completed = published["completed_at"] if published else None
+        age = max(0, time.time()-datetime.fromisoformat(completed).timestamp()) if completed else None
         return {"quotes": self.quotes.read()[1],
                 "refreshing": self._cycle_lock.locked(),
                 "started_at": self._cycle_started_at,
-                "last_success_at": self._cycle_finished_at,
+                "last_success_at": completed,
+                "analysis": {"completed_at": completed, "age_seconds": round(age, 1) if age is not None else None,
+                             "stale": age is None or age > 2400,
+                             "restored": self._analysis_restored,
+                             "persist_failed": self._analysis_persist_failed},
                 "duration_seconds": self._cycle_duration,
                 "last_cycle_failed": self._cycle_failed,
                 "note": "Cycle completion is not the upstream observation timestamp."}

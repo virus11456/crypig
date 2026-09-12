@@ -130,3 +130,12 @@ test('address cohort panel separates holders and skips multi-day gaps',()=>{
  assert.match(html,/缺少對照日/);assert.doesNotMatch(html,/"t":259200/);
  assert.match(html,/"v":1/);assert.match(html,/"v":2/);
 });
+test('restored analysis keeps its age and discloses refresh failures and persistence failures',()=>{
+ const h=setup();
+ h.run("LASTUP=Date.now()-7200000; ANALYSIS_META={analysis:{completed_at:new Date(LASTUP).toISOString(),restored:true}}; renderLastUp()");
+ assert.match(h.elements.get('ts').textContent,/已讀回上次分析/);
+ assert.match(h.elements.get('ts').textContent,/分析延遲/);
+ h.run("ANALYSIS_META.last_cycle_failed=true; ANALYSIS_META.analysis.persist_failed=true; renderLastUp()");
+ assert.match(h.elements.get('ts').textContent,/分析更新失敗，保留上次結果/);
+ assert.match(h.elements.get('ts').textContent,/分析保存失敗/);
+});

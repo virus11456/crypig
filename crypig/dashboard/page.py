@@ -956,7 +956,7 @@ function renderWhaleChart(){
   setSum('sum-whale', `${wc.t.replace(/<[^>]+>/g,'')}`.slice(0,40));
 }
 
-let QUOTE_META=null, VALUATION_META=null;
+let QUOTE_META=null, VALUATION_META=null, ANALYSIS_META=null;
 let REFRESH_TASK=null, TABLE_STATE={decisions:[],hlcoins:[],scores:{}}, TABLE_ERRORS=new Set();
 function renderMarketState(){
   const {decisions,hlcoins,scores}=TABLE_STATE;
@@ -991,7 +991,7 @@ function refresh(){
         const data=await apiJSON(url);
         if(!valid(data[field])) throw new Error('資料格式不符');
         TABLE_STATE[key]=data[field]; TABLE_ERRORS.delete(key);
-        if(key==='hlcoins'){ QUOTE_META=data.meta?.quotes||null; VALUATION_META=data.meta?.valuations||null; }
+        if(key==='hlcoins'){ ANALYSIS_META=data.meta||null; QUOTE_META=data.meta?.quotes||null; VALUATION_META=data.meta?.valuations||null; }
         if(key==='decisions'){
           const times=data[field].map(d=>Date.parse(d.ts)).filter(Number.isFinite);
           LASTUP=times.length?Math.min(...times):0;
@@ -1015,6 +1015,12 @@ function renderLastUp(){
   const quotes=quoteTs?'行情取得：'+new Date(quoteTs).toLocaleTimeString()+'（'+age(quoteTs)+'）'+(stale?' ⚠ 行情延遲':''):'行情取得時間未知';
   const decisions=LASTUP?'分析資料：'+new Date(LASTUP).toLocaleTimeString()+'（'+age(LASTUP)+'）':'分析資料準備中';
   el.textContent=(TABLE_ERRORS.size?'部分資料更新失敗｜':'')+quotes+'｜'+decisions;
+  const completed=Date.parse(ANALYSIS_META?.analysis?.completed_at||'');
+  if(ANALYSIS_META?.last_cycle_failed) el.textContent+=' ⚠ 分析更新失敗，保留上次結果';
+  else if(ANALYSIS_META?.refreshing) el.textContent+='（分析更新中，顯示上次結果）';
+  else if(ANALYSIS_META?.analysis?.restored) el.textContent+='（已讀回上次分析）';
+  if(completed && Date.now()-completed>2400000) el.textContent+=' ⚠ 分析延遲';
+  if(ANALYSIS_META?.analysis?.persist_failed) el.textContent+=' ⚠ 分析保存失敗';
   if(VALUATION_META){
     const parts=[['market_caps','市值'],['aggregate_oi','跨所 OI']].map(([key,label])=>{
       const ts=VALUATION_META[key]?.fetched_at*1000;

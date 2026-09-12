@@ -49,6 +49,10 @@ def orchestrator() -> Orchestrator:
     return _orc
 
 
+def dashboard_state():
+    return orchestrator().dashboard_state()
+
+
 def _safe_cycle() -> None:
     try:
         orchestrator().run_cycle()
@@ -191,14 +195,14 @@ def run_cycle(authorization: str | None = Header(default=None)) -> dict:
 
 @app.get("/signal")
 def signal() -> dict:
-    return require_snapshot(orchestrator().last_result).get("signals", {})
+    return require_snapshot(dashboard_state().last_result).get("signals", {})
 
 
 @app.get("/decisions")
 def decisions() -> dict:
     """只讀已落地的最新決策；首次暖機回 503，不在請求內採集。"""
-    orc = orchestrator()
-    rows = orc.decisions.latest()
+    orc = dashboard_state()
+    rows = orc.snapshot_decisions
     return {"decisions": require_snapshot(rows)}
 
 
@@ -218,7 +222,7 @@ def backtest_report(horizon_hours: float | None = None,
       ohlcv      用交易所真實 K 線歷史依決策時間對齊（免等，可立刻回測）
     預設：mock 模式用 decisions、真實模式用 ohlcv；可用查詢參數覆寫。
     """
-    orc = orchestrator()
+    orc = dashboard_state()
     h = orc.config.backtest_horizon_hours if horizon_hours is None else horizon_hours
     src = price_source or ("decisions" if orc.config.use_mock else "ohlcv")
     price_fn = None
@@ -242,7 +246,7 @@ def validate_signals() -> dict:
     import time
     from ..validate import (fear_greed_study, radar_study, positioning_study,
                             momentum_study, divergence_study, consensus_study)
-    orc = orchestrator()
+    orc = dashboard_state()
     cached = _validate_cache["data"]
     # 只把「F&G 已有資料」的結果當有效快取——避免暖機未抓到 F&G 時把空結果快取 30 分
     if (cached and time.time() - _validate_cache["ts"] < 1800
@@ -373,7 +377,7 @@ def _mock_macro(syms: list[str]) -> dict:
 @app.get("/macro")
 def macro() -> dict:
     """全市場宏觀。讀每輪背景算好的快取（請求端不打 CoinGecko，避免被封）。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         return {"global": _mock_macro(orc.config.symbols)["global"]}
     return {"global": require_snapshot(orc.macro)}
@@ -382,7 +386,7 @@ def macro() -> dict:
 @app.get("/positioning")
 def positioning() -> dict:
     """前N名交易者多空人數/比例/槓桿（看決心）。mock 回合成。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         return {"overlap": 0,
                 "smart": {"total": 48, "long": 18, "short": 12, "flat": 18,
@@ -398,7 +402,7 @@ def positioning() -> dict:
 @app.get("/whale_history")
 def whale_history(symbol: str = "BTC", cohort: str = Query("whale", pattern="^(whale|smart)$"), limit: int = Query(400, ge=1, le=5000)) -> dict:
     """HL 巨鯨(淨值前N)對某幣的合約淨持倉時間序列——逐輪累積，看部位翻轉=進場時機。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         import math
         from datetime import datetime, timedelta, timezone
@@ -542,7 +546,7 @@ def vault_zip():
     from pathlib import Path
     from ..obsidian import export_vault
 
-    orc = orchestrator()
+    orc = dashboard_state()
     if not orc.config.use_mock:
         require_snapshot(orc.all_scores)
     data = _build_vault_data(orc)
@@ -561,7 +565,7 @@ def vault_zip():
 @app.get("/radar")
 def radar() -> dict:
     """分歧雷達：群眾(情緒/費率) vs 大戶(聰明錢/鯨魚) 反向 = alpha。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         return {"market": {"fear_greed": 30, "fg_label": "Fear", "fg_percentile": 20,
                            "smart_avg": -0.3, "crowd_dir": "恐懼偏空", "smart_dir": "偏空",
@@ -575,7 +579,7 @@ def radar() -> dict:
 @app.get("/radar_history")
 def radar_history(limit: int = Query(400, ge=1, le=5000)) -> dict:
     """市場背離時間軸：群眾 vs 聰明錢的背離量逐輪累積，趨 0=收斂=反轉接近。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         import math
         from datetime import datetime, timedelta, timezone
@@ -596,7 +600,7 @@ def radar_history(limit: int = Query(400, ge=1, le=5000)) -> dict:
 @app.get("/social")
 def social() -> dict:
     """社群/市場情緒：恐懼貪婪指數(免費) + LunarCrush 各幣情緒(需付費金鑰)。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         import math
         import time
@@ -614,7 +618,7 @@ def social() -> dict:
 @app.get("/reddit")
 def reddit_buzz() -> dict:
     """Reddit 散戶討論熱度/情緒（公開 RSS，免 app 憑證）。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         return {"enabled": True, "total_posts": 200, "subs": 4, "source": "reddit_rss",
                 "coins": {"BTC": {"mentions": 31, "bull": 9, "bear": 4, "net": 5, "sentiment": 69.0},
@@ -628,7 +632,7 @@ def reddit_buzz() -> dict:
 @app.get("/news")
 def news() -> dict:
     """加密新聞分析：整體利多/利空、各幣新聞淨情緒、標題清單（含影響幣）。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         return {"total": 5, "summary": {
             "bull": 2, "bear": 1, "neutral": 2, "net": 1, "bias": "中性", "sources": 6,
@@ -646,7 +650,7 @@ def news() -> dict:
 @app.get("/defi")
 def defi() -> dict:
     """DefiLlama 資金動向：DeFi 總 TVL、穩定幣總市值、各鏈 TVL（免費）。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         import math
         import time
@@ -664,7 +668,7 @@ def defi() -> dict:
 @app.get("/scores")
 def scores() -> dict:
     """全市場各幣輕量決策（聰明錢持倉 + 資金費率擁擠）。只讀背景快取。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if not orc.config.use_mock:
         require_snapshot(orc.all_scores)
     return {"scores": orc.all_scores}
@@ -677,7 +681,7 @@ def hl_market() -> dict:
     跨平台整合：HL（標記價、資金費率、溢價、OI 後備）＋ CoinGecko（市值、量、
     跨所聚合 OI）。OI 優先用跨所聚合、否則 HL；市值優先採明確 ID，未指定 ID 的代號配對保留候選標記。
     """
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         coins = _mock_hl_scan()
         return {"count": len(coins), "coins": coins}

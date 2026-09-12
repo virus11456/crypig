@@ -50,10 +50,11 @@ def client(monkeypatch):
     fake = SimpleNamespace(config=SimpleNamespace(use_mock=False), last_result=None,
         macro=None, trader_summary={}, radar={}, all_scores={}, hl_scan=[],
         social={}, fear_greed={}, reddit={}, news={}, defi={}, market_caps={}, deriv_agg={},
-        decisions=SimpleNamespace(latest=lambda: []),
+        snapshot_decisions=[], decisions=SimpleNamespace(latest=lambda: []),
         pos_series=SimpleNamespace(history=lambda *a, **kw: [], radar_history=lambda **kw: []),
         run_cycle=Mock(side_effect=AssertionError("GET triggered collection")),
         cycle_status=lambda: {"refreshing": False})
+    fake.dashboard_state = lambda: fake
     fake.quotes = SimpleNamespace(read=lambda: (__import__('copy').deepcopy(fake.hl_scan), {}))
     monkeypatch.setattr(api, '_orc', fake)
     # Deliberately do not start scheduler or make any upstream calls.
@@ -390,3 +391,89 @@ def test_manual_collection_cannot_be_triggered_anonymously(client, monkeypatch):
     fake.run_cycle.assert_not_called()
     fake.run_cycle.side_effect=None;fake.run_cycle.return_value={'ok':True}
     assert c.post('/cycle',headers={'Authorization':'Bearer test-only-token'}).json()=={'ok':True}
+
+
+def analysis_orchestrator(tmp_path):
+    from crypig.config import Config
+    from crypig.orchestrator import Orchestrator
+    cfg = Config(use_mock=False, decisions_db=str(tmp_path/'decisions.db'),
+                 snapshot_db=str(tmp_path/'snapshots.db'), posseries_db=str(tmp_path/'positions.db'),
+                 kg={'path': str(tmp_path/'kg.json')},
+                 agents={k: {'enabled': False} for k in ['smart_money','whales','divergence','lth']})
+    return Orchestrator(cfg)
+
+
+def complete_test_analysis(orc, value):
+    from datetime import datetime, timezone
+    orc.all_scores = {'BTC': {'score': value}}
+    orc.radar = {'market': {'gap': value}}
+    orc.macro = {'market_cap': value}
+    orc.trader_summary = {'smart': {'count': value}}
+    return {'ts': datetime.now(timezone.utc).isoformat(), 'signals': {'BTC': {'score': value}}}
+
+
+def test_completed_analysis_restores_without_upstream_and_keeps_time(tmp_path, monkeypatch):
+    orc = analysis_orchestrator(tmp_path)
+    monkeypatch.setattr(orc, '_run_cycle_locked', lambda: complete_test_analysis(orc, 1))
+    orc.run_cycle()
+    restored = analysis_orchestrator(tmp_path)
+    assert restored.cycle_status()['last_success_at'] == orc.cycle_status()['last_success_at']
+    assert restored.cycle_status()['analysis']['restored']
+    monkeypatch.setattr(restored, 'run_cycle', Mock(side_effect=AssertionError('Unexpected collection')))
+    monkeypatch.setattr(api, '_orc', restored)
+    c = TestClient(api.app)
+    for route in ['/signal','/scores','/macro','/radar','/positioning']:
+        assert c.get(route).status_code == 200
+    assert c.get('/scores').json()['scores']['BTC']['score'] == 1
+
+
+def test_analysis_readers_keep_completed_generation_during_failed_cycle(tmp_path, monkeypatch):
+    orc = analysis_orchestrator(tmp_path)
+    monkeypatch.setattr(orc, '_run_cycle_locked', lambda: complete_test_analysis(orc, 1))
+    orc.run_cycle()
+    previous = orc.dashboard_state()
+    def fail():
+        complete_test_analysis(orc, 2)
+        assert orc.dashboard_state().all_scores['BTC']['score'] == 1
+        assert orc.cycle_status()['refreshing']
+        raise RuntimeError('Interrupted source')
+    monkeypatch.setattr(orc, '_run_cycle_locked', fail)
+    with pytest.raises(RuntimeError): orc.run_cycle()
+    assert orc.dashboard_state().radar['market']['gap'] == 1
+    assert orc.cycle_status()['last_cycle_failed']
+    monkeypatch.setattr(orc, '_run_cycle_locked', lambda: complete_test_analysis(orc, 3))
+    orc.run_cycle()
+    assert previous.all_scores['BTC']['score'] == 1
+    assert orc.dashboard_state().all_scores['BTC']['score'] == 3
+    assert not orc.cycle_status()['last_cycle_failed']
+
+
+def test_analysis_disk_failure_keeps_previous_disk_and_publishes_valid_memory(tmp_path, monkeypatch):
+    from pathlib import Path
+    orc = analysis_orchestrator(tmp_path)
+    monkeypatch.setattr(orc, '_run_cycle_locked', lambda: complete_test_analysis(orc, 1))
+    orc.run_cycle()
+    monkeypatch.setattr(Path, 'replace', Mock(side_effect=OSError('Disk full')))
+    monkeypatch.setattr(orc, '_run_cycle_locked', lambda: complete_test_analysis(orc, 2))
+    orc.run_cycle()
+    assert orc.dashboard_state().all_scores['BTC']['score'] == 2
+    assert orc.cycle_status()['analysis']['persist_failed']
+    assert analysis_orchestrator(tmp_path).dashboard_state().all_scores['BTC']['score'] == 1
+
+
+def test_analysis_rejects_corrupt_incompatible_and_future_cache(tmp_path, monkeypatch):
+    import json
+    from datetime import datetime, timezone, timedelta
+    orc = analysis_orchestrator(tmp_path)
+    monkeypatch.setattr(orc, '_run_cycle_locked', lambda: complete_test_analysis(orc, 1))
+    orc.run_cycle()
+    p = orc._analysis_store.path
+    valid = json.loads(p.read_text())
+    for key, value in [('version', 99), ('config', 'other'), ('completed_at', (datetime.now(timezone.utc)+timedelta(days=1)).isoformat()), ('state', {})]:
+        p.write_text(json.dumps({**valid, key: value}))
+        assert analysis_orchestrator(tmp_path).dashboard_state().last_result is None
+    p.write_text('{truncated')
+    assert analysis_orchestrator(tmp_path).dashboard_state().last_result is None
+    valid['completed_at'] = (datetime.now(timezone.utc)-timedelta(hours=2)).isoformat()
+    p.write_text(json.dumps(valid))
+    assert analysis_orchestrator(tmp_path).cycle_status()['analysis']['stale']
