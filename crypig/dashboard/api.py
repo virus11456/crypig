@@ -661,7 +661,7 @@ def defi() -> dict:
                                "history": [{"v": 314e9 + 4e9 * math.sin(t + i / 6)} for i in range(60)]},
                 "chains": [{"name": "Ethereum", "tvl": 37e9}, {"name": "Solana", "tvl": 4.7e9},
                            {"name": "BSC", "tvl": 5e9}, {"name": "Base", "tvl": 4.1e9}]}
-    require_snapshot(orc.defi)
+    require_snapshot(any(orc.defi.get(key) for key in ("tvl", "chains", "stablecoin")) or None)
     return orc.defi
 
 

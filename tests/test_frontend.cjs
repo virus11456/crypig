@@ -139,3 +139,10 @@ test('restored analysis keeps its age and discloses refresh failures and persist
  assert.match(h.elements.get('ts').textContent,/分析更新失敗，保留上次結果/);
  assert.match(h.elements.get('ts').textContent,/分析保存失敗/);
 });
+test('DeFi source dates disclose partial failure and remove unsupported net-flow claims',async()=>{
+ const d=fixture('/defi');d.sources={tvl:{fetched_at:Date.now()/1000,observed_at:Date.now()/1000-259200},stablecoin:{fetched_at:123,refresh_failed:true}};
+ const h=setup(async()=>response(d)); await h.run('loadDefi()');
+ const html=h.elements.get('defi').innerHTML;
+ assert.match(html,/資料日期/);assert.match(html,/更新失敗/);assert.match(html,/更新延遲/);
+ assert.match(html,/包含資產價格與涵蓋範圍/);assert.doesNotMatch(html,/資金正流入|穩定幣增發中/);
+});

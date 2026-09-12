@@ -629,18 +629,31 @@ function renderStable(){
   </div>`;
   setSum('sum-stable', `${concl.t.replace(/<[^>]+>/g,'')}`.slice(0,42));
 }
+function defiSourceStatus(sources){
+  return [['tvl','TVL'],['stablecoin','穩定幣'],['chains','各鏈 TVL']].map(([key,label])=>{
+    const m=sources?.[key]||{}, now=Date.now()/1000;
+    const fetched=Number.isFinite(m.fetched_at)?m.fetched_at:null;
+    const observed=Number.isFinite(m.observed_at)?m.observed_at:null;
+    const delayed=fetched==null || now-fetched>2400 || (observed!=null && now-observed>172800);
+    return label+'：'+(observed?'資料日期 '+new Date(observed*1000).toISOString().slice(0,10)+'（UTC）；':'')+
+      (fetched?'取得 '+new Date(fetched*1000).toLocaleString():'取得時間未知')+
+      (m.refresh_failed?' ⚠ 更新失敗，保留上次有效資料／無資料':delayed?' ⚠ 更新延遲或時間未知':'');
+  }).join(' ｜ ');
+}
 async function loadDefi(){
   try{
     const d=await apiJSON('/defi');
     const tvl=d.tvl||{}, sc=d.stablecoin||{}, chains=d.chains||[];
     const chg=(x)=>x==null?'—':`<b style="color:${x>=0?'#3fb950':'#f85149'}">${(x*100).toFixed(1)}%</b>`;
-    const chainHtml=chains.map(c=>`<span style="margin-right:14px">${c.name} <b>$${(c.tvl/1e9).toFixed(1)}B</b></span>`).join('');
+    const chainHtml=chains.map(c=>`<span style="margin-right:14px">${String(c.name).replace(/[&<>"']/g, x=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[x]))} <b>$${(c.tvl/1e9).toFixed(1)}B</b></span>`).join('');
     const t7=tvl.chg_7d;
     const dc=t7==null?null:{
-      t:`TVL 7天 <b>${(t7*100).toFixed(1)}%</b> → ${t7>0.02?'資金正流入鏈上、<b>風險偏好上升</b>':t7<-0.02?'資金撤離、<b>轉趨保守</b>':'盤整、無明顯進出'}${sc.chg_30d>0.01?'；穩定幣增發中＝場邊乾火藥變多（潛在買盤）':sc.chg_30d<-0.01?'；穩定幣縮減＝乾火藥減少':''}`,
-      c:t7>0.02?'#3fb950':t7<-0.02?'#f85149':'#8b949e'};
+      t:`TVL 近7天美元估值變化 <b>${(t7*100).toFixed(1)}%</b>；變化包含資產價格與涵蓋範圍，不能直接當作資金淨流入或流出。`,
+      c:'#8b949e'};
     document.getElementById('defi').innerHTML=`<div class="box">
-      <h2>💰 資金動向（DefiLlama）<small>TVL=風險偏好；穩定幣=場邊乾火藥</small></h2>
+      <h2>💰 鏈上資產估值（DefiLlama）<small>TVL 與穩定幣市值變化</small></h2>
+      <div class="meta">${defiSourceStatus(d.sources)}</div>
+      <div class="meta">7／30 天變化按 UTC 日期對照，缺少對照日顯示 —。穩定幣美元市值也包含價格與匯率影響，不能直接等同增發或買盤。</div>
       ${dc?`<div class="vline" style="border-left-color:${dc.c}">📍 現在：${dc.t}</div>`:''}
       <div class="kpis">
         <div class="kpi"><div class="v">$${tvl.value?(tvl.value/1e9).toFixed(1):'—'}B</div><div class="k">DeFi 總 TVL</div></div>
@@ -652,7 +665,7 @@ async function loadDefi(){
       <div class="meta" style="margin-top:8px">前 6 大鏈 TVL：${chainHtml}</div>
       <div class="meta">${lineChart((tvl.history||[]).map(h=>({t:h.t,v:h.v})), {color:'#58a6ff'})}</div>
     </div>`;
-    setSum('sum-defi', `DeFi TVL $${tvl.value?(tvl.value/1e9).toFixed(1):'—'}B ｜ 穩定幣 $${sc.value?(sc.value/1e9).toFixed(0):'—'}B（場邊乾火藥）`);
+    setSum('sum-defi', `DeFi TVL $${tvl.value?(tvl.value/1e9).toFixed(1):'—'}B ｜ 穩定幣 $${sc.value?(sc.value/1e9).toFixed(0):'—'}B`);
   }catch(e){document.getElementById('defi').innerHTML='<div class="box empty">資金動向載入失敗：'+e+'</div>';}
 }
 async function loadPositioning(){

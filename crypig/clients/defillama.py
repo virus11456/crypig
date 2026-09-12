@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import time
+import copy
+import math
 
 import httpx
 
@@ -17,47 +19,92 @@ class DefiLlamaClient:
         self._cache: dict | None = None
         self._ts: float = 0.0
 
-    def snapshot(self, ttl: float = 600.0) -> dict:
+    @staticmethod
+    def daily_summary(rows, value):
+        if not isinstance(rows, list):
+            raise ValueError("Invalid daily history")
+        points = {}
+        for row in rows:
+            try:
+                ts = int(row["date"])
+                raw = value(row)
+                if isinstance(raw, bool):
+                    continue
+                amount = float(raw)
+                if not 0 < ts <= time.time()+60 or not math.isfinite(amount) or amount <= 0:
+                    continue
+            except (KeyError, TypeError, ValueError):
+                continue
+            if ts in points and points[ts] != amount:
+                raise ValueError("Conflicting daily observations")
+            points[ts] = amount
+        if not points:
+            raise ValueError("No valid daily observations")
+        # Keep the last observation for each UTC calendar day.
+        days = {}
+        for ts in sorted(points):
+            days[ts//86400] = {"t": ts, "v": points[ts]}
+        latest = days[max(days)]
+        out = {"value": latest["v"], "observed_at": latest["t"],
+               "history": list(days.values())[-60:]}
+        for length in (7, 30):
+            reference = days.get(max(days)-length)
+            out[f"chg_{length}d"] = latest["v"]/reference["v"]-1 if reference else None
+        return out
+
+    @staticmethod
+    def circulating(row):
+        values = row["totalCirculatingUSD"]
+        if isinstance(values, dict):
+            numbers = list(values.values())
+            if not numbers or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 for v in numbers):
+                raise ValueError("Invalid circulating value")
+            return sum(numbers)
+        return values
+
+    @staticmethod
+    def top_chains(rows):
+        if not isinstance(rows, list):
+            raise ValueError("Invalid chain response")
+        out = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            name, value = row.get("name"), row.get("tvl")
+            if isinstance(name, str) and name and not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value) and value >= 0:
+                out.append({"name": name, "tvl": value})
+        if not out:
+            raise ValueError("No valid chains")
+        return sorted(out, key=lambda row: -row["tvl"])[:6]
+
+    def snapshot(self, ttl: float = 600.0, previous=None) -> dict:
         if self._cache is not None and time.time() - self._ts < ttl:
             return self._cache
-        out: dict = {}
-        try:
-            tvl = self._client.get("https://api.llama.fi/v2/historicalChainTvl").json()
-            if isinstance(tvl, list) and len(tvl) > 31:
-                cur = tvl[-1]["tvl"]
-                out["tvl"] = {
-                    "value": cur,
-                    "chg_7d": (cur - tvl[-8]["tvl"]) / tvl[-8]["tvl"],
-                    "chg_30d": (cur - tvl[-31]["tvl"]) / tvl[-31]["tvl"],
-                    "history": [{"v": x["tvl"], "t": x.get("date")} for x in tvl[-60:]],
-                }
-        except Exception:
-            pass
-        try:
-            chains = self._client.get("https://api.llama.fi/v2/chains").json()
-            if isinstance(chains, list):
-                top = sorted(chains, key=lambda x: -(x.get("tvl") or 0))[:6]
-                out["chains"] = [{"name": x.get("name"), "tvl": x.get("tvl")} for x in top]
-        except Exception:
-            pass
-        try:
-            sc = self._client.get("https://stablecoins.llama.fi/stablecoincharts/all").json()
-            if isinstance(sc, list) and len(sc) > 31:
-                def mc(x):
-                    v = x.get("totalCirculatingUSD")
-                    return sum(v.values()) if isinstance(v, dict) else (v or 0)
-                cur = mc(sc[-1])
-                out["stablecoin"] = {
-                    "value": cur,
-                    "chg_30d": (cur - mc(sc[-31])) / mc(sc[-31]) if mc(sc[-31]) else 0,
-                    "history": [{"v": mc(x)} for x in sc[-60:]],
-                }
-        except Exception:
-            pass
-        if out:
-            self._cache, self._ts = out, time.time()
-            return out
-        return self._cache or {}
+        out = copy.deepcopy(self._cache if self._cache is not None else previous or {})
+        sources = out.setdefault("sources", {})
+        jobs = [
+            ("tvl", "https://api.llama.fi/v2/historicalChainTvl", lambda rows: self.daily_summary(rows, lambda row: row["tvl"])),
+            ("chains", "https://api.llama.fi/v2/chains", self.top_chains),
+            ("stablecoin", "https://stablecoins.llama.fi/stablecoincharts/all", lambda rows: self.daily_summary(rows, self.circulating)),
+        ]
+        for key, url, normalize in jobs:
+            prior = sources.get(key, {})
+            attempted = time.time()
+            try:
+                response = self._client.get(url)
+                response.raise_for_status()
+                data = normalize(response.json())
+                observed = data.get("observed_at") if isinstance(data, dict) else None
+                if observed and prior.get("observed_at") and observed < prior["observed_at"]:
+                    raise ValueError("Source moved backwards")
+                out[key] = data
+                sources[key] = {"fetched_at": time.time(), "observed_at": observed,
+                                "attempted_at": attempted, "refresh_failed": False}
+            except Exception:
+                # A failed component keeps its own last good data and original time.
+                sources[key] = {**prior, "attempted_at": attempted, "refresh_failed": True}
+        self._cache, self._ts = out, time.time()
+        return out
 
     def stablecoin_history(self, ttl: float = 21600.0) -> list[dict]:
         """穩定幣總供應完整日頻歷史（2017 至今），供區間可選走勢圖。回 [{t,v}] 由舊到新。

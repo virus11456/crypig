@@ -392,7 +392,7 @@ class Orchestrator:
             if self._dl is None:
                 from .clients.defillama import DefiLlamaClient
                 self._dl = DefiLlamaClient()
-            snap = self._dl.snapshot()
+            snap = self._dl.snapshot(previous=self.defi)
             if snap:
                 self.defi = snap
         except Exception:

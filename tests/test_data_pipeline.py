@@ -477,3 +477,47 @@ def test_analysis_rejects_corrupt_incompatible_and_future_cache(tmp_path, monkey
     valid['completed_at'] = (datetime.now(timezone.utc)-timedelta(hours=2)).isoformat()
     p.write_text(json.dumps(valid))
     assert analysis_orchestrator(tmp_path).cycle_status()['analysis']['stale']
+
+
+def test_defi_changes_use_calendar_days_and_reject_invalid_observations():
+    rows = [{'date':86400*i,'tvl':i*10} for i in (1,2,4,9)]
+    result = DefiLlamaClient.daily_summary(list(reversed(rows))+[{'date':86400*10,'tvl':float('nan')}],lambda r:r['tvl'])
+    assert result['value'] == 90
+    assert result['chg_7d'] == 3.5
+    assert result['chg_30d'] is None
+    missing = DefiLlamaClient.daily_summary([rows[0],rows[-1]],lambda r:r['tvl'])
+    assert missing['chg_7d'] is None
+    with pytest.raises(ValueError):
+        DefiLlamaClient.daily_summary([rows[0],{**rows[0],'tvl':99}],lambda r:r['tvl'])
+
+
+def test_defi_partial_failure_keeps_each_component_and_original_time():
+    previous={'tvl':{'value':100},'chains':[{'name':'Old','tvl':20}],
+              'stablecoin':{'value':300},'sources':{k:{'fetched_at':10,'observed_at':86400} for k in ['tvl','chains','stablecoin']}}
+    def handler(request):
+        if request.url.path=='/v2/chains':
+            return httpx.Response(200,json=[{'name':'New','tvl':25}])
+        return httpx.Response(503,json={'error':'temporarily unavailable'})
+    client=DefiLlamaClient();client._client.close();client._client=httpx.Client(transport=httpx.MockTransport(handler))
+    try:
+        result=client.snapshot(ttl=0,previous=previous)
+        assert result['tvl']['value']==100 and result['stablecoin']['value']==300
+        assert result['chains'][0]['name']=='New'
+        assert result['sources']['tvl']['refresh_failed']
+        assert result['sources']['tvl']['fetched_at']==10
+        assert result['sources']['chains']['fetched_at']>10
+        assert not result['sources']['chains']['refresh_failed']
+        assert previous['chains'][0]['name']=='Old'
+    finally: client.close()
+
+
+def test_defi_source_regression_does_not_replace_newer_data():
+    previous={'tvl':{'value':100},'sources':{'tvl':{'fetched_at':10,'observed_at':86400*4}}}
+    client=DefiLlamaClient();client._client.close()
+    client._client=httpx.Client(transport=httpx.MockTransport(lambda r:httpx.Response(200,json=[{'date':86400,'tvl':5}])))
+    try:
+        result=client.snapshot(previous=previous)
+        assert result['tvl']['value']==100
+        assert result['sources']['tvl']['fetched_at']==10
+        assert result['sources']['tvl']['refresh_failed']
+    finally: client.close()
