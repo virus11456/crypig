@@ -181,3 +181,11 @@ test('LTH failure does not block the other behavior analyses',async()=>{
  assert.match(h.elements.get('smartbtc').innerHTML,/21 個帳號/);
  assert.match(h.elements.get('onchainwhale').innerHTML,/BTC/);
 });
+test('qualification coverage distinguishes fallback accounts from verified positions',async()=>{
+ const h=setup(async url=>response({smart:{total:2,long_pct:1,short_pct:0},whale:{total:0},qualification:{selected:3,qualified:2,pnl_only:1,positions_received:2,positions_qualified:1,positions_pnl_only:1,selected_at:1789227100,oldest_verified_at:1789220000}}));
+ await h.run('loadPositioning()');
+ const text=h.elements.get('pos').innerHTML;
+ assert.match(text,/已驗證 2 個、僅歷史獲利補入 1 個/);
+ assert.match(text,/實際取得持倉 2 個（已驗證 1、補入 1）/);
+ assert.match(text,/新資格結果下一輪套用/);
+});

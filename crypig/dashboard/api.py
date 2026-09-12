@@ -91,6 +91,10 @@ async def lifespan(app: FastAPI):
         logger.info("背景排程啟動，每 %s 分鐘跑一輪（首輪延遲 %ss 暖機）", interval, warmup_delay)
     yield
     _history_cache.close()
+    if _orc is not None:
+        for agent in _orc.agents:
+            if hasattr(agent, "qualification_status"):
+                agent.close()
     if _sched:
         _sched.shutdown(wait=False)
 

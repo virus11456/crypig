@@ -89,6 +89,9 @@ class Orchestrator:
         self._cycle_steps = {}
         self._cycle_started_at = datetime.now(timezone.utc).isoformat()
         try:
+            for agent in self.agents:
+                if isinstance(agent, SmartMoneyAgent):
+                    agent.begin_cycle()
             result = self._run_cycle_locked()
             self.last_result = result
             self._cycle_finished_at = datetime.now(timezone.utc).isoformat()
@@ -114,6 +117,9 @@ class Orchestrator:
                 setattr(self, key, copy.deepcopy(value))
             raise
         finally:
+            for agent in self.agents:
+                if isinstance(agent, SmartMoneyAgent):
+                    agent.end_cycle()
             self._cycle_duration = round(time.monotonic() - started, 3)
             self._cycle_lock.release()
 
@@ -140,6 +146,8 @@ class Orchestrator:
                              "persist_failed": self._analysis_persist_failed},
                 "duration_seconds": self._cycle_duration,
                 "steps": dict(self._cycle_steps),
+                "qualification": next((a.qualification_status() for a in self.agents
+                                       if hasattr(a,"qualification_status")), None),
                 "last_cycle_failed": self._cycle_failed,
                 "note": "Cycle completion is not the upstream observation timestamp."}
 

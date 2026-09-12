@@ -13,6 +13,8 @@ from __future__ import annotations
 import logging
 import random
 import time
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 
 from .base import Agent
 from ..clients.hyperliquid import HyperliquidClient
@@ -29,6 +31,7 @@ class SmartMoneyAgent(Agent):
         self._client: HyperliquidClient | None = None
         # 每輪只統計一次，多個標的共用（避免重複打 API）
         self._agg: dict[str, dict] | None = None
+        self._cycle_pinned = False
         self._agg_ts: float = 0.0
         self._trader_count: int = 0
         self._whale_count: int = 0
@@ -36,6 +39,12 @@ class SmartMoneyAgent(Agent):
         self._smart_sel: list[dict] | None = None   # 本輪取出的聰明錢(前 max_traders)
         self._smart_pool: dict | None = None         # 跨輪累積的合格帳號池(持久化)
         self._smart_offset: int = 0                  # 候選輪轉位移(每輪抓不同一段)
+        self._qualification_lock = Lock()
+        self._qualification_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="qualification")
+        self._qualification_future = None
+        self._qualification_state = {"refreshing": False, "last_attempt_at": None,
+                                     "completed_at": None, "failed": False}
+        self._selection_meta = {}
         self._store = None                           # PosSeriesStore(累積池持久化)
 
     @staticmethod
@@ -68,13 +77,84 @@ class SmartMoneyAgent(Agent):
             self._store = PosSeriesStore(self.config.posseries_db)
         return self._store
 
-    def _select_smart_money(self, cfg) -> list[dict]:
-        """聰明錢＝近 N 筆平倉「勝率＋獲利」最佳者，採『跨輪累積』避免被限流。
+    def begin_cycle(self):
+        self._agg = None
+        self._cycle_pinned = True
 
-        每輪只抓 fills_batch 個帳號的成交（節流 fills_rate_per_min），存活者(剔除做市)
-        併進持久化的累積池 smart_pool；候選母體輪轉，幾輪後自然滾到 max_traders。
-        池內條目超過 smart_pool_ttl_hours 汰舊（靠輪轉回頭重新驗證刷新），故會持續更新。
-        """
+    def end_cycle(self):
+        self._cycle_pinned = False
+
+    def qualification_status(self):
+        with self._qualification_lock:
+            return dict(self._qualification_state)
+
+    def close(self):
+        self._qualification_executor.shutdown(wait=False, cancel_futures=True)
+
+    def _schedule_qualification(self, cfg):
+        """One bounded worker; position collection never waits for fills."""
+        if not getattr(cfg, "rank_by_fills", True):
+            return
+        with self._qualification_lock:
+            now = time.time()
+            state = self._qualification_state
+            if state["refreshing"] or now-(state["last_attempt_at"] or 0) < 90:
+                return
+            self._qualification_state = {**state, "refreshing":True, "last_attempt_at":now}
+            self._qualification_future = self._qualification_executor.submit(self._refresh_qualification, cfg)
+
+    def _refresh_qualification(self, cfg):
+        from ..storage.pos_series import PosSeriesStore
+        started = time.monotonic()
+        client = store = None
+        try:
+            # Separate connections prevent cache races and shared SQLite transactions.
+            client = HyperliquidClient()
+            store = PosSeriesStore(self.config.posseries_db)
+            cands = list(dict.fromkeys(a for a,_ in client.top_traders(
+                window=cfg.candidate_window, pnl_threshold=0.0, limit=cfg.candidate_pool)))
+            if not cands:
+                raise ValueError("No qualification candidates")
+            batch = min(getattr(cfg,"fills_batch",80), len(cands))
+            off = self._smart_offset % len(cands)
+            window = [cands[(off+i)%len(cands)] for i in range(batch)]
+            self._smart_offset = (off+batch)%len(cands)
+            results = client.winrate_bulk(window, cfg.fills_lookback, workers=3,
+                                          rate_per_min=getattr(cfg,"fills_rate_per_min",50))
+            if not results:
+                raise ValueError("No usable qualification observations")
+            now = time.time()
+            fresh, rejected = {}, []
+            for addr,wr in results.items():
+                if addr not in window or not wr:
+                    continue
+                if (wr["trades"] >= cfg.fills_min_trades and wr["recent_pnl"] > 0
+                        and wr.get("span_hours",0) >= getattr(cfg,"fills_min_span_hours",24)):
+                    fresh[addr] = {**wr,"ts":now}
+                else:
+                    rejected.append(addr)
+            store.publish_smart_pool(fresh, rejected, cfg.smart_pool_ttl_hours*3600, now)
+            with self._qualification_lock:
+                self._qualification_state = {**self._qualification_state,
+                    "refreshing":False, "completed_at":now, "failed":False,
+                    "duration_seconds":round(time.monotonic()-started,3),
+                    "requested":len(window), "observed":len(results),
+                    "qualified":len(fresh), "rejected":len(rejected),
+                    "unavailable":len(window)-len(results)}
+        except Exception:
+            logger.exception("Background account qualification failed; valid prior entries retain original dates")
+            with self._qualification_lock:
+                self._qualification_state = {**self._qualification_state,
+                    "refreshing":False, "failed":True,
+                    "duration_seconds":round(time.monotonic()-started,3)}
+        finally:
+            if client is not None:
+                client.close()
+            if store is not None:
+                store.close()
+
+    def _select_smart_money(self, cfg) -> list[dict]:
+        """Select from unexpired verified entries; disclose PnL-only fallback accounts."""
         def fallback() -> list[dict]:
             traders = self._client.top_traders(
                 window=cfg.window, pnl_threshold=cfg.pnl_threshold_usd, limit=cfg.max_traders)
@@ -82,40 +162,17 @@ class SmartMoneyAgent(Agent):
                     for a, p in traders]
 
         if not getattr(cfg, "rank_by_fills", True):
-            return fallback()
+            result = fallback()
+            self._selection_meta = {"selected_at":time.time(), "selected":len(result),
+                "qualified":0, "pnl_only":len(result), "oldest_verified_at":None,
+                "newest_verified_at":None, "valid_for_hours":None}
+            return result
 
         now = time.time()
         ttl = getattr(cfg, "smart_pool_ttl_hours", 8) * 3600
-        store = self._pool_store()
-        if self._smart_pool is None:               # 首次：從磁碟載入累積池(跨重啟保留)
-            self._smart_pool = store.load_smart_pool(ttl, now)
-
-        # 候選母體輪轉：每輪抓不同一段 fills_batch
-        cands = [a for a, _ in self._client.top_traders(
-            window=cfg.candidate_window, pnl_threshold=0.0, limit=cfg.candidate_pool)]
-        if cands:
-            batch = getattr(cfg, "fills_batch", 80)
-            off = self._smart_offset % len(cands)
-            window = cands[off:off + batch]
-            if len(window) < batch:                # 繞回頭
-                window += cands[:batch - len(window)]
-            self._smart_offset = (off + batch) % len(cands)
-            wr_by = self._client.winrate_bulk(
-                window, cfg.fills_lookback, workers=3,
-                rate_per_min=getattr(cfg, "fills_rate_per_min", 50))
-            min_span = getattr(cfg, "fills_min_span_hours", 24)
-            fresh = {}
-            for addr, wr in wr_by.items():
-                if (wr and wr["trades"] >= cfg.fills_min_trades and wr["recent_pnl"] > 0
-                        and wr.get("span_hours", 0) >= min_span):   # 剔除做市/高頻
-                    self._smart_pool[addr] = {**wr, "ts": now}
-                    fresh[addr] = self._smart_pool[addr]
-            if fresh:
-                store.upsert_smart_pool(fresh)
-
-        # 汰除過舊（記憶體＋磁碟），保持新鮮
-        self._smart_pool = {a: v for a, v in self._smart_pool.items() if now - v["ts"] < ttl}
-        store.prune_smart_pool(ttl, now)
+        # Freeze this selection before starting the worker. New qualifications apply next cycle.
+        self._smart_pool = self._pool_store().load_smart_pool(ttl, now)
+        self._schedule_qualification(cfg)
 
         # 累積池(已驗證的方向贏家)排序取前 max_traders
         items = list(self._smart_pool.items())
@@ -144,6 +201,12 @@ class SmartMoneyAgent(Agent):
                     have.add(a)
                     if len(result) >= cfg.max_traders:
                         break
+        stamps = [x["ts"] for x in result if x.get("ts") is not None]
+        self._selection_meta = {"selected_at":now, "selected":len(result),
+            "qualified":len(stamps), "pnl_only":len(result)-len(stamps),
+            "oldest_verified_at":min(stamps) if stamps else None,
+            "newest_verified_at":max(stamps) if stamps else None,
+            "valid_for_hours":ttl/3600}
         self._smart_sel = result
         logger.info("聰明錢累積池 %d 人(已驗證)→面板 %d(其餘 PnL 榜暫補)",
                     len(items), len(result))
@@ -153,7 +216,7 @@ class SmartMoneyAgent(Agent):
         """從 Hyperliquid 取聰明錢(近期勝率/獲利最佳)的持倉，聚合成 coin -> 多空名目。"""
         cfg = self.config.agents.smart_money
         # 90 秒內重用，足夠涵蓋一輪多標的
-        if self._agg is not None and time.time() - self._agg_ts < 90:
+        if self._agg is not None and (self._cycle_pinned or time.time() - self._agg_ts < 90):
             return self._agg
 
         if self._client is None:
@@ -206,6 +269,10 @@ class SmartMoneyAgent(Agent):
                 b["whale_count"] += 1
 
         self._trader_summary = self._summarize_traders(smart_accounts, whale_accounts)
+        self._trader_summary["qualification"] = {**self._selection_meta,
+            "positions_received":len(smart_accounts),
+            "positions_qualified":sum(a.get("win_rate") is not None for a in smart_accounts),
+            "positions_pnl_only":sum(a.get("win_rate") is None for a in smart_accounts)}
         self._trader_summary["overlap"] = len(set(smart_addrs) & whale_set)  # 兩群重疊人數
         self._agg = agg
         self._agg_ts = time.time()
@@ -245,8 +312,7 @@ class SmartMoneyAgent(Agent):
         stance = "偏多" if direction == "bull" else "偏空" if direction == "bear" else "中性"
 
         summary = (
-            f"聰明錢（{raw['trader_count']} 位 {raw['window']} 獲利>"
-            f"{raw['threshold_usd']/1e6:.0f}M 交易者）對 {symbol} {stance}，"
+            f"聰明錢規則追蹤樣本（{raw['trader_count']} 個 Hyperliquid 合約帳號）對 {symbol} {stance}，"
             f"淨多空比 {net:+.0%}（多 ${longs/1e6:.1f}M / 空 ${shorts/1e6:.1f}M）。"
         )
         return Observation(

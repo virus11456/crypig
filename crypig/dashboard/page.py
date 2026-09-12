@@ -689,7 +689,8 @@ async function loadPositioning(){
     document.getElementById('pos').innerHTML=`<div class="box">
       <h2>🧭 合約帳號部位比較 <small>多空人數＋帳號槓桿</small></h2>
       ${pc?`<div class="vline" style="border-left-color:${pc.c}">📍 現在：${pc.t}</div>`:''}
-      ${posRow('🧠 聰明錢', '近100筆勝率+獲利', p.smart, '#58a6ff')}
+      ${posRow('🧠 聰明錢', '交易資格篩選＋歷史獲利補入', p.smart, '#58a6ff')}
+      ${p.qualification?`<p class="meta">本輪名單 ${p.qualification.selected} 個：已驗證 ${p.qualification.qualified} 個、僅歷史獲利補入 ${p.qualification.pnl_only} 個。實際取得持倉 ${p.qualification.positions_received} 個（已驗證 ${p.qualification.positions_qualified}、補入 ${p.qualification.positions_pnl_only}）。<br>名單選定：${new Date(p.qualification.selected_at*1000).toLocaleString()}${p.qualification.oldest_verified_at?'｜最早資格檢查：'+new Date(p.qualification.oldest_verified_at*1000).toLocaleString():''}。新資格結果下一輪套用。</p>`:''}
       ${posRow('🐋 合約大額帳號', '候選樣本淨值前N', p.whale, '#d29922')}
       <div class="meta">註：兩群依不同規則篩選、可能重疊；聰明錢含近期交易資格篩選與歷史獲利補入，大額帳號依候選帳號淨值排序${p.overlap!=null?`（目前重疊 <b>${p.overlap}</b> 人）`:''}；不代表全市場投資人。觀望=此平台無持倉；表態傾向只計有開倉者。<br>👉 聰明錢與巨鯨方向相反時＝值得注意的分歧訊號。</div>
     </div>`;
@@ -1078,6 +1079,10 @@ function renderLastUp(){
   const decisions=LASTUP?'分析資料：'+new Date(LASTUP).toLocaleTimeString()+'（'+age(LASTUP)+'）':'分析資料準備中';
   el.textContent=(TABLE_ERRORS.size?'部分資料更新失敗｜':'')+quotes+'｜'+decisions;
   const completed=Date.parse(ANALYSIS_META?.analysis?.completed_at||'');
+  const qualification=ANALYSIS_META?.qualification;
+  if(qualification?.refreshing) el.textContent+='｜帳號資格背景檢查中（不阻塞持倉）';
+  else if(qualification?.failed) el.textContent+='｜帳號資格更新失敗；未過期資格保留原時間';
+  else if(qualification?.completed_at) el.textContent+='｜資格檢查完成'+(qualification.unavailable?'（部分帳號無可用資料）':'');
   if(ANALYSIS_META?.last_cycle_failed) el.textContent+=' ⚠ 分析更新失敗，保留上次結果';
   else if(ANALYSIS_META?.refreshing) el.textContent+='（分析更新中，顯示上次結果）';
   else if(ANALYSIS_META?.analysis?.restored) el.textContent+='（已讀回上次分析）';
