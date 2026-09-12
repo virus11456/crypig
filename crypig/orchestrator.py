@@ -54,6 +54,7 @@ class Orchestrator:
         self._dl = None
         self._rd = None
         self._nc = None
+        self.valuation_times = {}
         self.snapshot_decisions = []
         self._analysis_store = AnalysisStore(Path(self.config.decisions_db).parent / "analysis_snapshot.json", self.config)
         self._published = None
@@ -364,10 +365,12 @@ class Orchestrator:
                 val = fn()
                 if name == "deriv" and val:
                     self.deriv_agg = val
+                    self.valuation_times["aggregate_oi"] = self._md._deriv_ts
                 elif name == "macro" and val:
                     self.macro = val
                 elif name == "caps" and val:
                     self.market_caps = val
+                    self.valuation_times["market_caps"] = self._md._top_ts
             except Exception:
                 logger.warning("CoinGecko %s 抓取失敗，沿用上次快取", name)
         # 恐懼貪婪指數（免費、無金鑰、全市場情緒）—— 全區間歷史(2018至今)

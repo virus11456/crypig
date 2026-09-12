@@ -719,10 +719,9 @@ def hl_market() -> dict:
         c["market_cap_updated_at"] = info.get("source_updated_at") if info else None
         c["open_interest_usd"] = oi
         c["oi_cap"] = (oi / cap) if (cap and oi is not None) else None
-    md = getattr(orc, "_md", None)
     valuations = {}
-    for name, attr in (("market_caps", "_top_ts"), ("aggregate_oi", "_deriv_ts")):
-        fetched = getattr(md, attr, 0) or None
+    for name in ("market_caps", "aggregate_oi"):
+        fetched = orc.valuation_times.get(name) or None
         age = max(0, time.time() - fetched) if fetched else None
         valuations[name] = {"fetched_at": fetched, "age_seconds": age,
                             "stale": age is None or age > 2400}

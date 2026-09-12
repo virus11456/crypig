@@ -50,7 +50,7 @@ def client(monkeypatch):
     fake = SimpleNamespace(config=SimpleNamespace(use_mock=False), last_result=None,
         macro=None, trader_summary={}, radar={}, all_scores={}, hl_scan=[],
         social={}, fear_greed={}, reddit={}, news={}, defi={}, market_caps={}, deriv_agg={},
-        snapshot_decisions=[], decisions=SimpleNamespace(latest=lambda: []),
+        valuation_times={}, snapshot_decisions=[], decisions=SimpleNamespace(latest=lambda: []),
         pos_series=SimpleNamespace(history=lambda *a, **kw: [], radar_history=lambda **kw: []),
         run_cycle=Mock(side_effect=AssertionError("GET triggered collection")),
         cycle_status=lambda: {"refreshing": False})
@@ -265,7 +265,7 @@ def test_delisted_contexts_are_excluded_without_shifting_symbol_alignment():
 def test_valuation_age_with_warm_market_data(client):
     c, fake = client
     fake.hl_scan = [{'symbol':'BTC','open_interest_usd':100}]
-    fake._md = SimpleNamespace(_top_ts=time.time()-2500, _deriv_ts=time.time()-10)
+    fake.valuation_times = {"market_caps":time.time()-2500, "aggregate_oi":time.time()-10}
     response = c.get('/hl_market')
     assert response.status_code == 200
     meta = response.json()['meta']['valuations']
@@ -415,8 +415,10 @@ def complete_test_analysis(orc, value):
 def test_completed_analysis_restores_without_upstream_and_keeps_time(tmp_path, monkeypatch):
     orc = analysis_orchestrator(tmp_path)
     monkeypatch.setattr(orc, '_run_cycle_locked', lambda: complete_test_analysis(orc, 1))
+    orc.valuation_times = {'market_caps':time.time()-2500,'aggregate_oi':time.time()-100}
     orc.run_cycle()
     restored = analysis_orchestrator(tmp_path)
+    assert restored.dashboard_state().valuation_times == orc.valuation_times
     assert restored.cycle_status()['last_success_at'] == orc.cycle_status()['last_success_at']
     assert restored.cycle_status()['analysis']['restored']
     monkeypatch.setattr(restored, 'run_cycle', Mock(side_effect=AssertionError('Unexpected collection')))

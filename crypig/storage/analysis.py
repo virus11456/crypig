@@ -11,7 +11,7 @@ FIELDS = {
     'last_result': dict, 'macro': (dict, type(None)), 'market_caps': dict,
     'deriv_agg': dict, 'social': dict, 'fear_greed': dict, 'defi': dict,
     'reddit': dict, 'hl_scan': list, 'news': dict, '_prev_pos': dict,
-    'snapshot_decisions': list,
+    'snapshot_decisions': list, 'valuation_times': dict,
 }
 
 
@@ -27,6 +27,7 @@ class AnalysisStore:
         if ts.tzinfo is None or not 0 < ts.timestamp() <= datetime.now(timezone.utc).timestamp()+60:
             raise ValueError('Invalid completion time')
         state = saved['state']
+        state.setdefault('valuation_times', {})  # Older snapshots have unknown source times.
         if any(not isinstance(state[k], typ) for k, typ in FIELDS.items()):
             raise ValueError('Invalid analysis fields')
         if not state['last_result'].get('ts') or not isinstance(state['last_result'].get('signals'), dict):
