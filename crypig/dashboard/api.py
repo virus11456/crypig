@@ -443,49 +443,20 @@ def _load_stablecoins() -> dict:
 
 
 def _load_onchain_whale() -> dict:
-    """鏈上巨鯨 BTC 現貨持幣量時序（bitcoin-data wallet-bands 的大型級距 whale+humpback）。
-
-    與 HL 合約持倉不同：這是真實鏈上持有的 BTC（搬走=吸籌移除供給、增加=派發/出貨）。
-    日資料、bitcoin-data 每小時限 10 次，client 自帶 6 小時快取。
-    """
+    """BTC-denominated address cohorts; separate from LTH and derivatives."""
     global _btcdata
+    from ..clients.btc_cohorts import fetch_cohorts, build_cohorts
     if orchestrator().config.use_mock:
-        import math
         from datetime import date, timedelta
-        base = date.today() - timedelta(days=31)
-        out = []
-        for i in range(32):
-            btc = 5.10e6 - 6000 * i + 4000 * math.sin(i / 4)   # 緩降＝派發示意
-            out.append({"date": (base + timedelta(days=i)).isoformat(),
-                        "btc": round(btc, 1), "whale": round(btc * 0.39, 1),
-                        "humpback": round(btc * 0.61, 1), "price": 60000})
-        return {"history": out, "bands": "whale+humpback(大型持有者)"}
-    try:
-        if _btcdata is None:
-            from ..clients.bitcoin_data import BitcoinDataClient
-            _btcdata = BitcoinDataClient()
-        rows = _btcdata.fetch_history("wallet-bands", ttl=0)
-    except Exception as e:
-        return {"history": [], "error": str(e)}
-    out = []
-    import math
-    from datetime import date
-    for r in rows:
-        d = r.get("theDate") or r.get("d")
-        try:
-            w = float(r["whaleBtc"])
-            h = float(r["humpbackBtc"])
-            d = date.fromisoformat(str(d)[:10]).isoformat()
-            if not all(math.isfinite(v) and v >= 0 for v in (w, h)):
-                continue
-        except (KeyError, TypeError, ValueError):
-            continue
-        if d and (w or h):
-            out.append({"date": d, "btc": round(w + h, 1),
-                        "whale": round(w, 1), "humpback": round(h, 1),
-                        "price": r.get("priceUsd")})
-    unique = {row["date"]: row for row in out}
-    return {"history": [unique[d] for d in sorted(unique)], "bands": "whale+humpback(大型持有者)"}
+        days = [(date.today()-timedelta(days=31-i)).isoformat() for i in range(32)]
+        data = build_cohorts([{d:4200000-i*100 for i,d in enumerate(days)},
+                              {d:3000000+i*150 for i,d in enumerate(days)}])
+        data['note'] = '示範資料，非真實鏈上資料。'
+        return data
+    if _btcdata is None:
+        from ..clients.bitcoin_data import BitcoinDataClient
+        _btcdata = BitcoinDataClient()
+    return fetch_cohorts(_btcdata)
 
 
 def history_response(key, loader):
@@ -502,7 +473,7 @@ def stablecoins() -> dict:
 
 @app.get("/onchain_whale")
 def onchain_whale() -> dict:
-    return history_response("onchain_whale", _load_onchain_whale)
+    return history_response("onchain_btc_cohorts_v1", _load_onchain_whale)
 
 
 def _build_vault_data(orc) -> dict:

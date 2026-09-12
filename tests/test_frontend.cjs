@@ -120,3 +120,13 @@ test('valuation timestamps distinguish older market caps from fresh quotes',()=>
  assert.match(h.elements.get('ts').textContent,/市值取得.*延遲/);
  assert.match(h.elements.get('ts').textContent,/跨所 OI準備中/);
 });
+test('address cohort panel separates holders and skips multi-day gaps',()=>{
+ const h=setup();
+ h.run(`OC_ALL=[{t:86400,btc:30,whale:10,humpback:20},{t:259200,btc:28,whale:8,humpback:20},{t:345600,btc:31,whale:9,humpback:22}];
+ OC_INFO={note:'來源限制',changes_btc:{'1':3,'7':null,'30':null},cohorts:[{id:'whale',label:'1,000–10,000 BTC 地址',balance_btc:9,changes_btc:{'1':1,'7':null,'30':null}},{id:'humpback',label:'>10,000 BTC 地址',balance_btc:22,changes_btc:{'1':2,'7':null,'30':null}}]};
+ barChart=pts=>JSON.stringify(pts);renderOnchain();`);
+ const html=h.elements.get('onchainwhale').innerHTML;
+ assert.match(html,/長期持有者按持有時間/);assert.match(html,/缺日 1 段/);
+ assert.match(html,/缺少對照日/);assert.doesNotMatch(html,/"t":259200/);
+ assert.match(html,/"v":1/);assert.match(html,/"v":2/);
+});

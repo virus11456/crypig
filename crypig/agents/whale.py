@@ -61,20 +61,10 @@ class WhaleAgent(Agent):
                 "prev_open_interest_usd": oi * rng.uniform(0.9, 1.1)}
 
     def _fetch_whale_wallets(self, symbol: str, cfg) -> dict:
-        if self._btc is None:
-            self._btc = BitcoinDataClient()
-        try:
-            data = self._btc.fetch_raw("wallet-bands")
-        except RateLimited:
-            return {"mode": "whale_wallet", "whale_btc": None,
-                    "note": "bitcoin-data.com 每小時額度用完，沿用前次快照"}
-        bands = {b: float(data.get(b, 0.0)) for b in cfg.whale_bands}
-        whale_btc = sum(bands.values())
-        counts = {k: data.get(k) for k in ("whaleCount", "humpbackCount", "megaWhaleCount")}
-        prev = self._store.latest(self.name, symbol, "whale_btc")
-        return {"mode": "whale_wallet", "whale_btc": whale_btc, "bands": bands,
-                "counts": counts, "as_of": data.get("theDate"),
-                "prev_whale_btc": prev[1] if prev else None}
+        # The legacy wallet-bands series has unverified semantics. Do not let
+        # it contribute directional votes or contaminate historical baselines.
+        return {"mode": "whale_wallet", "whale_btc": None,
+                "note": "舊 wallet-bands 來源待核實，暫停此方向訊號；現貨地址餘額請看獨立分組面板"}
 
     def _fetch_market(self, symbol: str) -> dict:
         if self._client is None:

@@ -282,7 +282,7 @@ INDEX_HTML = r"""<!doctype html>
   </details>
 
   <details class="ccard" open>
-    <summary><span class="ctitle">🪙 大型持有者 BTC 餘額變化 <small style="opacity:.7">鏈上現貨</small></span><span class="csum" id="sum-onchain">載入中…</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle">🪙 BTC 現貨地址餘額分組 <small style="opacity:.7">鏈上現貨</small></span><span class="csum" id="sum-onchain">載入中…</span><span class="chev">▾</span></summary>
     <div id="onchainwhale"><div class="box empty">鏈上巨鯨持幣量載入中…</div></div>
   </details>
 
@@ -786,15 +786,16 @@ function lineOut(id){ ctipHide(); const m=document.getElementById('lm-'+id); if(
 let SB_VERDICT=null, OC_VERDICT=null;
 function renderBigMoney(){
   const el=document.getElementById('bigmoney'); if(!el) return;
-  el.innerHTML='<div class="combo"><span class="ct">🐋 大戶資料解讀</span><span>合約圖為淨持倉名目金額變化，鏈上圖為大型持有者餘額變化；兩者均不能單獨證明實際買賣或假突破。</span></div>';
+  el.innerHTML='<div class="combo"><span class="ct">🐋 大戶資料解讀</span><span>聰明錢／巨鯨合約樣本來自 Hyperliquid，不代表 BTC 現貨持有；鏈上地址按餘額分組，長期持有者按時間分類，三者不能混用。</span></div>';
 }
 // 🪙 鏈上巨鯨 BTC 現貨持倉量：每日買/賣量柱狀（綠囤幣/紅出貨）＋近30天/近7天切換
-let OC_ALL=[], OC_RANGE='30d', OC_BANDS='大型持有者', OC_ERR=null;
+let OC_ALL=[], OC_RANGE='30d', OC_BANDS='大型持有者', OC_ERR=null, OC_INFO=null;
 function setOCRange(rg){ OC_RANGE=rg; renderOnchain(); }
 async function loadOnchainWhale(){
   try{
     const r=await apiJSON('/onchain_whale');
-    OC_ALL=(r.history||[]).map(x=>({t:Date.parse(x.date)/1000, btc:x.btc}));
+    OC_INFO=r;
+    OC_ALL=(r.history||[]).map(x=>({t:Date.parse(x.date)/1000, btc:x.btc, whale:x.whale, humpback:x.humpback}));
     OC_BANDS=r.bands||'大型持有者'; OC_ERR=r.meta?.stale?'來源更新延遲，顯示上次資料':null;
     renderOnchain();
   }catch(e){OC_ERR='更新失敗，稍後重試';renderOnchain();}
@@ -806,25 +807,27 @@ function renderOnchain(){
     document.getElementById('onchainwhale').innerHTML='<div class="box"><div class="meta">'+(OC_ERR?('bitcoin-data 暫時取不到（'+OC_ERR+'），下輪重試。'):'資料載入中…')+'</div></div>';
     setSum('sum-onchain','—');return;
   }
-  // 每日變化（流入/流出）：綠=當天淨買進、紅=當天淨賣出
-  const deltas=[]; for(let i=1;i<all.length;i++) deltas.push({t:all[i].t, v:all[i].btc-all[i-1].btc});
-  const last=all[all.length-1].btc;
-  const window=onchainWindow(all,7), base=window[0].btc, k=Math.round((all[all.length-1].t-window[0].t)/86400), dBtc=last-base, pctc=base?dBtc/base:0;
-  let concl;
-  if(pctc>0.002) concl={t:`▲ 巨鯨<b>鏈上持幣量增加</b>（近 ${k} 天鏈上多了 <b>${Math.round(dBtc).toLocaleString()}</b> 顆）；餘額增加不等於成交買入`,c:'#2ea043'};
-  else if(pctc<-0.002) concl={t:`▼ 巨鯨<b>鏈上持幣量減少</b>（近 ${k} 天鏈上少了 <b>${Math.round(-dBtc).toLocaleString()}</b> 顆）；餘額減少不等於成交賣出`,c:'#da3633'};
-  else concl={t:`巨鯨持幣量<b>大致持平</b>（近 ${k} 天 ${dBtc>=0?'+':''}${Math.round(dBtc).toLocaleString()} 顆）；這是持幣規模分組，並非按持有時間分類`,c:'#8b949e'};
-  OC_VERDICT={dir: pctc>0.002?'buy':pctc<-0.002?'sell':'flat'}; renderBigMoney();
   const days=OC_RANGE==='7d'?7:30;
-  const bars=deltas.filter(p=>p.t>all[all.length-1].t-days*86400);
+  const signed=v=>v==null?'缺少對照日':(v>0?'+':'')+Math.round(v).toLocaleString()+' BTC';
+  const rows=OC_INFO?.cohorts||[];
+  const table=rows.length?`<table><thead><tr><th>BTC 地址持有量</th><th>目前餘額</th><th>近1天</th><th>近7天</th><th>近30天</th></tr></thead><tbody>${rows.map(c=>`<tr><td>${c.label}</td><td>${Math.round(c.balance_btc).toLocaleString()} BTC</td>${[1,7,30].map(n=>`<td>${signed(c.changes_btc[String(n)])}</td>`).join('')}</tr>`).join('')}<tr><td>兩組合計</td><td>${Math.round(all[all.length-1].btc).toLocaleString()} BTC</td>${[1,7,30].map(n=>`<td>${signed(OC_INFO.changes_btc[String(n)])}</td>`).join('')}</tr></tbody></table>`:'';
+  const charts=(rows.length?rows:[{id:'btc',label:OC_BANDS}]).map(c=>{
+    const bars=[];let gaps=0;
+    for(let i=1;i<all.length;i++){
+      if(all[i].t<=all[all.length-1].t-days*86400)continue;
+      if(all[i].t-all[i-1].t!==86400){gaps++;continue;}
+      const v=all[i][c.id]-all[i-1][c.id];if(Number.isFinite(v))bars.push({t:all[i].t,v});
+    }
+    return `<div class="meta">${c.label}｜每日餘額差額${gaps?'｜缺日 '+gaps+' 段，不畫成單日變化':''}</div>${barChart(bars,{up:'#3fb950',down:'#f85149',tip:p=>(p.v>=0?'餘額增加 ':'餘額減少 ')+signed(p.v)})}`;
+  }).join('');
   document.getElementById('onchainwhale').innerHTML=`<div class="box">
-    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><span class="meta">🪙 ${OC_BANDS} 真實鏈上持幣（bitcoin-data 日頻）</span>${toggle}</div>
-    <div class="vline" style="border-left-color:${concl.c}">📍 現在：${concl.t}</div>
-    <div class="meta">${OC_ERR||''}</div>
-    <div class="meta">最新持有 <b>${Math.round(last).toLocaleString()} BTC</b>｜資料截至 ${new Date(all[all.length-1].t*1000).toISOString().slice(0,10)}，圖表為截至該日近 ${days} 天。每根柱為大型持有者分組餘額變化，可能受轉帳及地址跨分組影響，不能直接判定現貨買賣；大型持有者也不等於長期持有者。</div>
-    ${barChart(bars,{up:'#3fb950',down:'#f85149',tip:p=>(p.v>=0?'餘額增加 +':'餘額減少 ')+Math.round(p.v).toLocaleString()+' BTC'})}
-  </div>`;
-  setSum('sum-onchain', `${concl.t.replace(/<[^>]+>/g,'')}`.slice(0,40));
+    <div class="row" style="justify-content:space-between"><span>BTC 現貨地址餘額分組</span>${toggle}</div>
+    <p class="meta">${OC_ERR||''} 資料截至 ${new Date(all[all.length-1].t*1000).toISOString().slice(0,10)}。${OC_INFO?.note||'地址餘額變化不等於成交買賣。'}</p>
+    <p>巨鯨按持有量分類；長期持有者按持有時間分類；聰明錢按追蹤規則分類。三者不等同，本圖不判定抄底或拋售。</p>
+    <div style="overflow-x:auto">${table}</div><p class="meta">綠＝餘額增加，紅＝餘額減少。轉帳、交易所託管與跨分組均可能影響數值。</p>${charts}
+    <p class="meta">來源：<a href="https://bitcoin-data.com/v1/coins-addr-10K-1K-BTC" target="_blank" rel="noopener">1,000–10,000 BTC</a> ／ <a href="https://bitcoin-data.com/v1/coins-addr-10K-BTC" target="_blank" rel="noopener">超過10,000 BTC</a>；已替換待核實的 wallet-bands。</p></div>`;
+  setSum('sum-onchain','BTC 地址分組｜近7天合計 '+signed(OC_INFO?.changes_btc?.['7']));
+
 }
 // 柱狀圖：從零軸長出垂直柱，綠(正)/紅(負)，附 Y 格線與時間刻度
 function barChart(pts, opts){

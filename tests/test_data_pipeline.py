@@ -152,13 +152,28 @@ def test_stablecoins_reject_bad_response_and_keep_unrounded_sorted_history():
 
 
 def test_onchain_does_not_treat_missing_band_as_zero(client, monkeypatch):
-    _, _ = client
-    monkeypatch.setattr(api, '_btcdata', SimpleNamespace(fetch_history=lambda *a, **k:[
-        {'theDate':'2026-09-02','whaleBtc':10,'humpbackBtc':20},
-        {'theDate':'2026-09-01','whaleBtc':10},
-        {'theDate':'2026-09-03','whaleBtc':'NaN','humpbackBtc':20}]))
-    assert api._load_onchain_whale()['history'] == [
-        {'date':'2026-09-02','btc':30,'whale':10,'humpback':20,'price':None}]
+    from crypig.clients.btc_cohorts import normalize, build_cohorts
+    a = normalize([{'d':'2026-09-02','v':10}, {'d':'2026-09-01'},
+                   {'d':'2026-09-03','v':'NaN'}], 'v')
+    data = build_cohorts([a, {'2026-09-01':20, '2026-09-02':20}])
+    assert data['history'] == [{'date':'2026-09-02','btc':30,'whale':10,'humpback':20}]
+    assert data['changes_btc']['1'] is None
+
+
+def test_cohort_changes_use_exact_calendar_dates():
+    from crypig.clients.btc_cohorts import build_cohorts
+    a = {'2026-08-12':100, '2026-09-04':110, '2026-09-10':120, '2026-09-11':115}
+    b = {'2026-08-12':200, '2026-09-04':210, '2026-09-10':220, '2026-09-11':225}
+    d = build_cohorts([a,b])
+    assert d['changes_btc'] == {'1':0, '7':20, '30':40}
+    assert d['cohorts'][0]['changes_btc']['1'] == -5
+    assert d['cohorts'][1]['changes_btc']['1'] == 5
+
+
+def test_unverified_wallet_series_cannot_vote(client):
+    from crypig.agents.whale import WhaleAgent
+    a = object.__new__(WhaleAgent)
+    assert a._fetch_whale_wallets('BTC', None)['whale_btc'] is None
 
 
 def test_quote_store_retains_valid_snapshot_and_reloads_after_restart(tmp_path):
