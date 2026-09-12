@@ -11,11 +11,19 @@
 """
 from __future__ import annotations
 
+from pathlib import Path
+from ..radar_presentation import describe_radar, convergence_note
 import logging
+import math
+import secrets
+import time
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Query, Header
+from fastapi.middleware.gzip import GZipMiddleware
+from threading import Lock
+from .cache import SnapshotCache
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -28,13 +36,22 @@ logger = logging.getLogger(__name__)
 _orc: Orchestrator | None = None
 _last: dict | None = None
 _sched = None
+_orc_lock = Lock()
+_history_cache = SnapshotCache(directory=Path(os.environ["CRYPIG_DATA_DIR"]) / "history_cache"
+                               if os.getenv("CRYPIG_DATA_DIR") else None)
 
 
 def orchestrator() -> Orchestrator:
     global _orc
     if _orc is None:
-        _orc = Orchestrator()
+        with _orc_lock:
+            if _orc is None:
+                _orc = Orchestrator()
     return _orc
+
+
+def dashboard_state():
+    return orchestrator().dashboard_state()
 
 
 def _safe_cycle() -> None:
@@ -42,6 +59,12 @@ def _safe_cycle() -> None:
         orchestrator().run_cycle()
     except Exception:                       # 單輪失敗（如真實 API 限流）不可拖垮排程
         logger.exception("背景排程跑一輪失敗")
+
+
+def _safe_quotes() -> None:
+    orc = orchestrator()
+    if not orc.config.use_mock:
+        orc.quotes.refresh()
 
 
 @asynccontextmanager
@@ -62,14 +85,35 @@ async def lifespan(app: FastAPI):
         _sched.add_job(_safe_cycle, id="warmup",
                        next_run_time=datetime.now() + timedelta(seconds=warmup_delay))
         _sched.add_job(_safe_cycle, "interval", minutes=interval, id="cycle")
+        _sched.add_job(_safe_quotes, "interval", seconds=60, id="quotes",
+                       next_run_time=datetime.now() + timedelta(seconds=5),
+                       max_instances=1, coalesce=True)
         _sched.start()
         logger.info("背景排程啟動，每 %s 分鐘跑一輪（首輪延遲 %ss 暖機）", interval, warmup_delay)
     yield
+    _history_cache.close()
+    if _orc is not None:
+        for agent in _orc.agents:
+            if hasattr(agent, "qualification_status"):
+                agent.close()
     if _sched:
         _sched.shutdown(wait=False)
 
 
 app = FastAPI(title="Crypig", version="0.1.0", lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+
+def require_snapshot(value):
+    if value is None or value == {} or value == []:
+        raise HTTPException(503, "資料尚未就緒，背景更新中", headers={"Retry-After": "30"})
+    return value
+
+
+@app.get("/data_status")
+def data_status() -> dict:
+    return orchestrator().cycle_status()
+
 
 # PWA 靜態資源（圖示）—— 直接讀檔回傳，不依賴 StaticFiles/aiofiles，部署最穩
 from pathlib import Path as _Path
@@ -143,7 +187,12 @@ def index() -> HTMLResponse:
 
 
 @app.post("/cycle")
-def run_cycle() -> dict:
+def run_cycle(authorization: str | None = Header(default=None)) -> dict:
+    token = os.getenv("CRYPIG_ADMIN_TOKEN")
+    if not token:
+        raise HTTPException(status_code=404, detail="Manual collection is disabled")
+    if not authorization or not secrets.compare_digest(authorization.encode(), ("Bearer " + token).encode()):
+        raise HTTPException(status_code=401, detail="Unauthorized")
     global _last
     _last = orchestrator().run_cycle()
     return _last
@@ -151,25 +200,19 @@ def run_cycle() -> dict:
 
 @app.get("/signal")
 def signal() -> dict:
-    global _last
-    if _last is None:
-        _last = orchestrator().run_cycle()
-    return _last["signals"]
+    return require_snapshot(dashboard_state().last_result).get("signals", {})
 
 
 @app.get("/decisions")
 def decisions() -> dict:
-    """各幣最新決策。表為空（尚未跑過）時先跑一輪。"""
-    orc = orchestrator()
-    rows = orc.decisions.latest()
-    if not rows:
-        orc.run_cycle()
-        rows = orc.decisions.latest()
-    return {"decisions": rows}
+    """只讀已落地的最新決策；首次暖機回 503，不在請求內採集。"""
+    orc = dashboard_state()
+    rows = orc.snapshot_decisions
+    return {"decisions": require_snapshot(rows)}
 
 
 @app.get("/decisions/history")
-def decisions_history(symbol: str = "BTC", limit: int = 50) -> dict:
+def decisions_history(symbol: str = "BTC", limit: int = Query(50, ge=1, le=2000)) -> dict:
     return {"symbol": symbol,
             "history": orchestrator().decisions.history(symbol, limit)}
 
@@ -184,7 +227,7 @@ def backtest_report(horizon_hours: float | None = None,
       ohlcv      用交易所真實 K 線歷史依決策時間對齊（免等，可立刻回測）
     預設：mock 模式用 decisions、真實模式用 ohlcv；可用查詢參數覆寫。
     """
-    orc = orchestrator()
+    orc = dashboard_state()
     h = orc.config.backtest_horizon_hours if horizon_hours is None else horizon_hours
     src = price_source or ("decisions" if orc.config.use_mock else "ohlcv")
     price_fn = None
@@ -208,7 +251,7 @@ def validate_signals() -> dict:
     import time
     from ..validate import (fear_greed_study, radar_study, positioning_study,
                             momentum_study, divergence_study, consensus_study)
-    orc = orchestrator()
+    orc = dashboard_state()
     cached = _validate_cache["data"]
     # 只把「F&G 已有資料」的結果當有效快取——避免暖機未抓到 F&G 時把空結果快取 30 分
     if (cached and time.time() - _validate_cache["ts"] < 1800
@@ -339,18 +382,16 @@ def _mock_macro(syms: list[str]) -> dict:
 @app.get("/macro")
 def macro() -> dict:
     """全市場宏觀。讀每輪背景算好的快取（請求端不打 CoinGecko，避免被封）。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         return {"global": _mock_macro(orc.config.symbols)["global"]}
-    if orc.macro is None:
-        orc.run_cycle()
-    return {"global": orc.macro}
+    return {"global": require_snapshot(orc.macro)}
 
 
 @app.get("/positioning")
 def positioning() -> dict:
     """前N名交易者多空人數/比例/槓桿（看決心）。mock 回合成。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         return {"overlap": 0,
                 "smart": {"total": 48, "long": 18, "short": 12, "flat": 18,
@@ -359,15 +400,14 @@ def positioning() -> dict:
                 "whale": {"total": 100, "long": 22, "short": 18, "flat": 60,
                           "short_pct": 0.45, "long_pct": 0.55, "winrate_median": None,
                           "lev_median": 2.8, "lev_avg": 3.0, "lev_max": 7.0}}
-    if not orc.trader_summary:
-        orc.run_cycle()
-    return orc.trader_summary
+    require_snapshot(orc.trader_summary)
+    return {**orc.trader_summary, "qualification_check": orchestrator().cycle_status().get("qualification")}
 
 
 @app.get("/whale_history")
-def whale_history(symbol: str = "BTC", cohort: str = "whale", limit: int = 400) -> dict:
+def whale_history(symbol: str = "BTC", cohort: str = Query("whale", pattern="^(whale|smart)$"), limit: int = Query(400, ge=1, le=5000)) -> dict:
     """HL 巨鯨(淨值前N)對某幣的合約淨持倉時間序列——逐輪累積，看部位翻轉=進場時機。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         import math
         from datetime import datetime, timedelta, timezone
@@ -381,17 +421,6 @@ def whale_history(symbol: str = "BTC", cohort: str = "whale", limit: int = 400) 
                         "net_usd": lo - sh, "net": (lo - sh) / (lo + sh), "count": 12})
         return {"symbol": symbol, "cohort": cohort, "history": out}
     series = orc.pos_series.history(cohort, symbol, limit=limit)
-    if not series:
-        # 第一輪還沒落地任何點：立即跑一輪把當下這筆寫進去（之後逐輪累積）
-        try:
-            if not orc.all_scores:
-                orc.run_cycle()
-            else:
-                from datetime import datetime, timezone
-                orc._record_positioning(datetime.now(timezone.utc).isoformat())
-            series = orc.pos_series.history(cohort, symbol, limit=limit)
-        except Exception as e:
-            return {"symbol": symbol, "cohort": cohort, "error": str(e), "history": []}
     return {"symbol": symbol, "cohort": cohort, "history": series}
 
 
@@ -399,8 +428,7 @@ _btcdata = None
 _defi_hist = None
 
 
-@app.get("/stablecoins")
-def stablecoins() -> dict:
+def _load_stablecoins() -> dict:
     """穩定幣總供應完整歷史（DefiLlama，2017 至今日頻）——場邊乾火藥/資金進出的宏觀訊號。
 
     增發＝新錢進場（結構性偏多）、縮減＝贖回撤離（偏空）。client 自帶 6 小時快取。
@@ -417,51 +445,65 @@ def stablecoins() -> dict:
         if _defi_hist is None:
             from ..clients.defillama import DefiLlamaClient
             _defi_hist = DefiLlamaClient()
-        hist = _defi_hist.stablecoin_history()
+        hist = _defi_hist.stablecoin_history(ttl=0)
     except Exception as e:
         return {"history": [], "error": str(e)}
     return {"history": hist}
 
 
+def _load_onchain_whale() -> dict:
+    """BTC-denominated address cohorts; separate from LTH and derivatives."""
+    global _btcdata
+    from ..clients.btc_cohorts import fetch_cohorts, build_cohorts
+    if orchestrator().config.use_mock:
+        from datetime import date, timedelta
+        days = [(date.today()-timedelta(days=31-i)).isoformat() for i in range(32)]
+        data = build_cohorts([{d:4200000-i*100 for i,d in enumerate(days)},
+                              {d:3000000+i*150 for i,d in enumerate(days)}])
+        data['note'] = '示範資料，非真實鏈上資料。'
+        return data
+    if _btcdata is None:
+        from ..clients.bitcoin_data import BitcoinDataClient
+        _btcdata = BitcoinDataClient()
+    return fetch_cohorts(_btcdata)
+
+
+def history_response(key, loader):
+    if orchestrator().config.use_mock:
+        return loader()
+    data, meta = _history_cache.read(key, loader, ttl=21600)
+    return {**require_snapshot(data), "meta": meta}
+
+
+@app.get("/stablecoins")
+def stablecoins() -> dict:
+    return history_response("stablecoins", _load_stablecoins)
+
+
+def _load_lth_history() -> dict:
+    from ..clients.lth_history import build_lth, SLUG
+    if orchestrator().config.use_mock:
+        from datetime import date, timedelta
+        data = build_lth([{"d":(date.today()-timedelta(days=31-i)).isoformat(),
+                           "longTermHodlerSupplyBtc":16000000+i*100} for i in range(32)])
+        data["note"] = "示範資料，非真實鏈上資料。" + data["note"]
+        return data
+    from ..clients.bitcoin_data import BitcoinDataClient
+    client = BitcoinDataClient()
+    try:
+        return build_lth(client.fetch_history(SLUG, ttl=0))
+    finally:
+        client.close()
+
+
+@app.get("/lth_history")
+def lth_history() -> dict:
+    return history_response("lth_daily_supply_v1", _load_lth_history)
+
+
 @app.get("/onchain_whale")
 def onchain_whale() -> dict:
-    """鏈上巨鯨 BTC 現貨持幣量時序（bitcoin-data wallet-bands 的大型級距 whale+humpback）。
-
-    與 HL 合約持倉不同：這是真實鏈上持有的 BTC（搬走=吸籌移除供給、增加=派發/出貨）。
-    日資料、bitcoin-data 每小時限 10 次，client 自帶 6 小時快取。
-    """
-    global _btcdata
-    if orchestrator().config.use_mock:
-        import math
-        from datetime import date, timedelta
-        base = date.today() - timedelta(days=31)
-        out = []
-        for i in range(32):
-            btc = 5.10e6 - 6000 * i + 4000 * math.sin(i / 4)   # 緩降＝派發示意
-            out.append({"date": (base + timedelta(days=i)).isoformat(),
-                        "btc": round(btc, 1), "whale": round(btc * 0.39, 1),
-                        "humpback": round(btc * 0.61, 1), "price": 60000})
-        return {"history": out, "bands": "whale+humpback(大型持有者)"}
-    try:
-        if _btcdata is None:
-            from ..clients.bitcoin_data import BitcoinDataClient
-            _btcdata = BitcoinDataClient()
-        rows = _btcdata.fetch_history("wallet-bands")
-    except Exception as e:
-        return {"history": [], "error": str(e)}
-    out = []
-    for r in rows:
-        d = r.get("theDate") or r.get("d")
-        try:
-            w = float(r.get("whaleBtc") or 0)
-            h = float(r.get("humpbackBtc") or 0)
-        except (TypeError, ValueError):
-            continue
-        if d and (w or h):
-            out.append({"date": d, "btc": round(w + h, 1),
-                        "whale": round(w, 1), "humpback": round(h, 1),
-                        "price": r.get("priceUsd")})
-    return {"history": out, "bands": "whale+humpback(大型持有者)"}
+    return history_response("onchain_btc_cohorts_v1", _load_onchain_whale)
 
 
 def _build_vault_data(orc) -> dict:
@@ -497,20 +539,14 @@ def _build_vault_data(orc) -> dict:
         pass
 
     # 分歧雷達結論＋收斂判讀（寫進 Journal）
-    radar = orc.radar or {}
+    radar = describe_radar(orc.radar)
     sa = (radar.get("market") or {}).get("smart_avg")
     if sa is not None:
         overall["sm_net_pct"] = f"{sa*100:+.0f}%"
     radar_conv = None
     try:
         rh = orc.pos_series.radar_history(limit=400)
-        if len(rh) >= 4:
-            k = min(5, len(rh) // 2)
-            am = lambda a: (sum(abs(x["gap"] or 0) for x in a) / len(a)) if a else 0
-            rA, pA = am(rh[-k:]), am(rh[-2 * k:-k])
-            radar_conv = ("背離收斂中 → 群眾向聰明錢靠攏，接近反轉/進場時機" if rA < pA - 0.03
-                          else "背離擴大中 → 分歧加劇，反轉時機未到" if rA > pA + 0.03
-                          else "背離持平 → 僵持，等收斂訊號")
+        radar_conv = convergence_note(rh)
     except Exception:
         pass
 
@@ -530,9 +566,9 @@ def vault_zip():
     from pathlib import Path
     from ..obsidian import export_vault
 
-    orc = orchestrator()
-    if not orc.all_scores and not orc.config.use_mock:
-        orc.run_cycle()
+    orc = dashboard_state()
+    if not orc.config.use_mock:
+        require_snapshot(orc.all_scores)
     data = _build_vault_data(orc)
     tmp = tempfile.mkdtemp()
     export_vault(data, tmp + "/CrypigVault")
@@ -549,22 +585,21 @@ def vault_zip():
 @app.get("/radar")
 def radar() -> dict:
     """分歧雷達：群眾(情緒/費率) vs 大戶(聰明錢/鯨魚) 反向 = alpha。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
-        return {"market": {"fear_greed": 30, "fg_label": "Fear", "fg_percentile": 20,
+        return describe_radar({"market": {"crowd_m": -0.4, "fear_greed": 30, "fg_label": "Fear", "fg_percentile": 20,
                            "smart_avg": -0.3, "crowd_dir": "恐懼偏空", "smart_dir": "偏空",
                            "verdict": "群眾與聰明錢同向（恐懼偏空＋聰明錢偏空）→ 順勢偏空", "diverging": False},
                 "coins": [{"symbol": "DEMO", "crowd": 0.6, "smart": -0.4, "whale": -0.3,
-                           "funding_ann": 0.3, "type": "頂部反指標", "bias": "看空", "score": 1.0}]}
-    if not orc.radar:
-        orc.run_cycle()
-    return orc.radar
+                           "funding_ann": 0.3, "type": "頂部反指標", "bias": "看空", "score": 1.0}]})
+    require_snapshot(orc.radar)
+    return describe_radar(orc.radar)
 
 
 @app.get("/radar_history")
-def radar_history(limit: int = 400) -> dict:
+def radar_history(limit: int = Query(400, ge=1, le=5000)) -> dict:
     """市場背離時間軸：群眾 vs 聰明錢的背離量逐輪累積，趨 0=收斂=反轉接近。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         import math
         from datetime import datetime, timedelta, timezone
@@ -579,24 +614,13 @@ def radar_history(limit: int = 400) -> dict:
                       "diverging": abs(gap) > 0.2})
         return {"history": h}
     h = orc.pos_series.radar_history(limit=limit)
-    if not h:
-        try:
-            if not orc.radar:
-                orc.run_cycle()
-            else:
-                from datetime import datetime, timezone
-                orc.pos_series.record_radar(datetime.now(timezone.utc).isoformat(),
-                                            orc.radar.get("market", {}))
-            h = orc.pos_series.radar_history(limit=limit)
-        except Exception as e:
-            return {"error": str(e), "history": []}
     return {"history": h}
 
 
 @app.get("/social")
 def social() -> dict:
     """社群/市場情緒：恐懼貪婪指數(免費) + LunarCrush 各幣情緒(需付費金鑰)。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         import math
         import time
@@ -606,8 +630,7 @@ def social() -> dict:
                                "label": "Fear" if hist[-1]["v"] < 45 else "Greed",
                                "history": hist},
                 "lunarcrush_enabled": False, "social": {}}
-    if not orc.fear_greed and not orc.social:
-        orc.run_cycle()
+    require_snapshot((orc.fear_greed if orc.fear_greed.get("value") is not None else None) or orc.social)
     return {"fear_greed": orc.fear_greed,
             "lunarcrush_enabled": bool(orc.social), "social": orc.social}
 
@@ -615,22 +638,21 @@ def social() -> dict:
 @app.get("/reddit")
 def reddit_buzz() -> dict:
     """Reddit 散戶討論熱度/情緒（公開 RSS，免 app 憑證）。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         return {"enabled": True, "total_posts": 200, "subs": 4, "source": "reddit_rss",
                 "coins": {"BTC": {"mentions": 31, "bull": 9, "bear": 4, "net": 5, "sentiment": 69.0},
                           "ETH": {"mentions": 18, "bull": 5, "bear": 3, "net": 2, "sentiment": 62.0},
                           "SOL": {"mentions": 12, "bull": 6, "bear": 2, "net": 4, "sentiment": 75.0},
                           "PEPE": {"mentions": 6, "bull": 3, "bear": 1, "net": 2, "sentiment": 80.0}}}
-    if not orc.reddit:
-        orc.run_cycle()
+    require_snapshot(orc.reddit)
     return {"enabled": bool(orc.reddit), **(orc.reddit or {})}
 
 
 @app.get("/news")
 def news() -> dict:
     """加密新聞分析：整體利多/利空、各幣新聞淨情緒、標題清單（含影響幣）。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         return {"total": 5, "summary": {
             "bull": 2, "bear": 1, "neutral": 2, "net": 1, "bias": "中性", "sources": 6,
@@ -641,15 +663,14 @@ def news() -> dict:
                  "link": "#", "source": "Cointelegraph", "ts": None, "sentiment": "bull", "net": 2, "coins": ["BTC"]},
                 {"title": "SEC lawsuit pressures altcoins amid market fear",
                  "link": "#", "source": "Decrypt", "ts": None, "sentiment": "bear", "net": -2, "coins": ["ETH"]}]}
-    if not orc.news:
-        orc.run_cycle()
+    require_snapshot(orc.news)
     return orc.news or {"total": 0, "summary": {}, "items": []}
 
 
 @app.get("/defi")
 def defi() -> dict:
     """DefiLlama 資金動向：DeFi 總 TVL、穩定幣總市值、各鏈 TVL（免費）。"""
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         import math
         import time
@@ -660,17 +681,16 @@ def defi() -> dict:
                                "history": [{"v": 314e9 + 4e9 * math.sin(t + i / 6)} for i in range(60)]},
                 "chains": [{"name": "Ethereum", "tvl": 37e9}, {"name": "Solana", "tvl": 4.7e9},
                            {"name": "BSC", "tvl": 5e9}, {"name": "Base", "tvl": 4.1e9}]}
-    if not orc.defi:
-        orc.run_cycle()
+    require_snapshot(any(orc.defi.get(key) for key in ("tvl", "chains", "stablecoin")) or None)
     return orc.defi
 
 
 @app.get("/scores")
 def scores() -> dict:
-    """全市場各幣輕量決策（聰明錢持倉 + 資金費率擁擠）。表為空時先跑一輪。"""
-    orc = orchestrator()
-    if not orc.all_scores and not orc.config.use_mock:
-        orc.run_cycle()
+    """全市場各幣輕量決策（聰明錢持倉 + 資金費率擁擠）。只讀背景快取。"""
+    orc = dashboard_state()
+    if not orc.config.use_mock:
+        require_snapshot(orc.all_scores)
     return {"scores": orc.all_scores}
 
 
@@ -679,37 +699,53 @@ def hl_market() -> dict:
     """Hyperliquid 全市場（全部永續幣）資金費率掃描 + 跨平台補市值/OI-Cap/Vol-Cap。
 
     跨平台整合：HL（標記價、資金費率、溢價、OI 後備）＋ CoinGecko（市值、量、
-    跨所聚合 OI）。OI 優先用跨所聚合、否則 HL；市值對得上的幣才有(同名取最大市值)。
+    跨所聚合 OI）。OI 優先用跨所聚合、否則 HL；市值優先採明確 ID，未指定 ID 的代號配對保留候選標記。
     """
-    orc = orchestrator()
+    orc = dashboard_state()
     if orc.config.use_mock:
         coins = _mock_hl_scan()
         return {"count": len(coins), "coins": coins}
-    if not orc.hl_scan and not orc.all_scores:   # 首次：先跑一輪把掃描/市值快取算好
-        orc.run_cycle()
-    # 優先用背景每輪快取的掃描（扛 HL 瞬斷不讓整表變空）；真的沒有才即時打一次
-    import copy
-    coins = copy.deepcopy(orc.hl_scan) if orc.hl_scan else None
-    if coins is None:
-        try:
-            coins = hl().funding_scan()
-        except Exception as e:
-            return {"error": str(e), "count": 0, "coins": []}
+    snapshot, quote_meta = orc.quotes.read()
+    coins = require_snapshot(snapshot)
     tm = orc.market_caps                     # 讀每輪背景快取，不打 CoinGecko
     deriv = orc.deriv_agg
     for c in coins:
         s = c["symbol"]
         info = tm.get(s)
+        def price_matches(reference):
+            price = c.get("price")
+            return all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v > 0
+                       for v in (reference, price)) and abs(reference / price - 1) <= 0.2
+        cap_matches = info is not None and price_matches(info.get("reference_price"))
+        c["valuation_check"] = "price_consistent_candidate" if cap_matches else "missing_or_price_mismatch"
+        if not cap_matches:
+            info = None
         cap = info["market_cap"] if info else None
         vol = info["volume_24h"] if info else None
         c["market_cap"] = cap
         c["volume_24h"] = vol
-        c["vol_cap"] = (vol / cap) if (cap and vol) else None
+        c["vol_cap"] = (vol / cap) if (cap and vol is not None) else None
         agg = deriv.get(s)
+        if agg and not price_matches(agg.get("reference_price")):
+            agg = None
+        c["oi_contracts"] = agg.get("contracts") if agg else None
+        c["oi_coverage"] = agg.get("coverage") if agg else "hyperliquid_only"
         oi = agg["open_interest_usd"] if (agg and agg.get("open_interest_usd")) else c["open_interest_usd"]
+        c["hl_open_interest_usd"] = c["open_interest_usd"]
+        c["open_interest_source"] = "coingecko_aggregated" if agg and agg.get("open_interest_usd") else "hyperliquid"
+        c["market_cap_source"] = "coingecko" if info else None
+        c["market_cap_match"] = info.get("match_method", "symbol_candidate") if info else None
+        c["market_cap_asset_id"] = info.get("asset_id") if info else None
+        c["market_cap_updated_at"] = info.get("source_updated_at") if info else None
         c["open_interest_usd"] = oi
-        c["oi_cap"] = (oi / cap) if (cap and oi) else None
-    return {"count": len(coins), "coins": coins}
+        c["oi_cap"] = (oi / cap) if (cap and oi is not None) else None
+    valuations = {}
+    for name in ("market_caps", "aggregate_oi"):
+        fetched = orc.valuation_times.get(name) or None
+        age = max(0, time.time() - fetched) if fetched else None
+        valuations[name] = {"fetched_at": fetched, "age_seconds": age,
+                            "stale": age is None or age > 2400}
+    return {"count": len(coins), "coins": coins, "meta": {**orc.cycle_status(), "quotes": quote_meta, "valuations": valuations}}
 
 
 @app.post("/ask")

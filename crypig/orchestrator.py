@@ -1,8 +1,11 @@
 """協調中台：跑所有 agent → 餵知識圖譜 → 算綜合評分。"""
 from __future__ import annotations
 
+from pathlib import Path
 import logging
+import copy
 import threading
+import time
 from datetime import datetime, timezone
 
 from .config import Config, get_config
@@ -13,6 +16,8 @@ from .kg import SelfLearningRAG
 from .storage.models import Observation
 from .storage.decisions import DecisionStore
 from .storage.pos_series import PosSeriesStore
+from .storage.quotes import QuoteStore
+from .storage.analysis import AnalysisStore, FIELDS
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +28,17 @@ class Orchestrator:
         self.rag = SelfLearningRAG(self.config)
         self.decisions = DecisionStore(self.config.decisions_db)
         self.pos_series = PosSeriesStore(self.config.posseries_db)
+        self.quotes = QuoteStore(Path(self.config.decisions_db).parent / "market_quotes.json")
         self.all_scores: dict[str, dict] = {}   # 全市場各幣輕量決策(聰明錢+資金費率)
         self.radar: dict = {}                   # 分歧雷達：群眾(情緒/費率) vs 大戶(聰明錢/鯨魚)
         self._prev_pos: dict[str, dict] = {}    # 上一輪各幣 聰明錢/鯨魚 淨多空(算20分鐘變化)
         self.trader_summary: dict = {}          # 前N名交易者多空人數/比例/槓桿(看決心)
+        self.last_result: dict | None = None
+        self._cycle_started_at = None
+        self._cycle_finished_at = None
+        self._cycle_duration = None
+        self._cycle_failed = False
+        self._cycle_steps = {}
         self._cycle_lock = threading.Lock()     # 避免並發跑輪(請求端各自觸發會互相覆蓋+打爆 HL)
         # 以下 CoinGecko 資料只在每輪(背景)抓一次並快取，請求端只讀不打 API（避免被封）
         self.macro: dict | None = None          # 全市場宏觀
@@ -43,6 +55,20 @@ class Orchestrator:
         self._dl = None
         self._rd = None
         self._nc = None
+        self.valuation_times = {}
+        self.snapshot_decisions = []
+        self._analysis_store = AnalysisStore(Path(self.config.decisions_db).parent / "analysis_snapshot.json", self.config)
+        self._published = None
+        self._analysis_restored = False
+        self._analysis_persist_failed = False
+        self._empty_state = {key: copy.deepcopy(getattr(self, key)) for key in FIELDS}
+        saved = self._analysis_store.load()
+        if saved:
+            self._published = saved
+            self._cycle_finished_at = saved["completed_at"]
+            self._analysis_restored = True
+            for key, value in saved["state"].items():
+                setattr(self, key, copy.deepcopy(value))
         self.agents = []
         a = self.config.agents
         if a.smart_money.enabled:
@@ -59,15 +85,91 @@ class Orchestrator:
         if not self._cycle_lock.acquire(blocking=False):
             logger.info("已有一輪在跑，略過本次觸發")
             return {"skipped": True}
+        started = time.monotonic()
+        self._cycle_steps = {}
+        self._cycle_started_at = datetime.now(timezone.utc).isoformat()
         try:
-            return self._run_cycle_locked()
+            for agent in self.agents:
+                if isinstance(agent, SmartMoneyAgent):
+                    agent.begin_cycle()
+            result = self._run_cycle_locked()
+            self.last_result = result
+            self._cycle_finished_at = datetime.now(timezone.utc).isoformat()
+            self.snapshot_decisions = self.decisions.latest()
+            state = {key: copy.deepcopy(getattr(self, key)) for key in FIELDS}
+            # Publish one pointer only after every computation has completed.
+            saved = self._analysis_store.validate({"version": 1, "config": self._analysis_store.signature,
+                         "completed_at": self._cycle_finished_at, "state": state})
+            self._published = saved
+            self._analysis_restored = False
+            try:
+                self._analysis_store.save(state, saved["completed_at"])
+                self._analysis_persist_failed = False
+            except (OSError, ValueError, TypeError):
+                self._analysis_persist_failed = True
+                logger.exception("Analysis snapshot persistence failed")
+            self._cycle_failed = False
+            return result
+        except Exception:
+            self._cycle_failed = True
+            # A failed partial attempt must not become the next comparison baseline.
+            for key, value in (self._published["state"] if self._published else self._empty_state).items():
+                setattr(self, key, copy.deepcopy(value))
+            raise
         finally:
+            for agent in self.agents:
+                if isinstance(agent, SmartMoneyAgent):
+                    agent.end_cycle()
+            self._cycle_duration = round(time.monotonic() - started, 3)
             self._cycle_lock.release()
+
+    def dashboard_state(self):
+        """Pin a completed generation for an entire API response, never the working state."""
+        view = copy.copy(self)
+        published = self._published
+        for key, value in (published["state"] if published else self._empty_state).items():
+            setattr(view, key, value)
+        view.cycle_status = self.cycle_status
+        return view
+
+    def cycle_status(self) -> dict:
+        published = self._published
+        completed = published["completed_at"] if published else None
+        age = max(0, time.time()-datetime.fromisoformat(completed).timestamp()) if completed else None
+        return {"quotes": self.quotes.read()[1],
+                "refreshing": self._cycle_lock.locked(),
+                "started_at": self._cycle_started_at,
+                "last_success_at": completed,
+                "analysis": {"completed_at": completed, "age_seconds": round(age, 1) if age is not None else None,
+                             "stale": age is None or age > 2400,
+                             "restored": self._analysis_restored,
+                             "persist_failed": self._analysis_persist_failed},
+                "duration_seconds": self._cycle_duration,
+                "steps": dict(self._cycle_steps),
+                "qualification": next((a.qualification_status() for a in self.agents
+                                       if hasattr(a,"qualification_status")), None),
+                "last_cycle_failed": self._cycle_failed,
+                "note": "Cycle completion is not the upstream observation timestamp."}
+
+    def _timed(self, name, fn, *args, **kwargs):
+        """Wall-clock timing only: returning may include cached/partial upstream data."""
+        started = time.monotonic()
+        self._cycle_steps[name] = {"state": "running", "duration_seconds": None}
+        state = "returned"
+        try:
+            return fn(*args, **kwargs)
+        except Exception:
+            state = "raised"
+            raise
+        finally:
+            duration = round(time.monotonic() - started, 3)
+            self._cycle_steps[name] = {"state": state, "duration_seconds": duration}
+            logger.info("collection_step %s %s %.3fs", name, state, duration)
 
     def _run_cycle_locked(self) -> dict:
         observations: list[Observation] = []
         for agent in self.agents:
-            obs = agent.run()
+            obs = self._timed("agent." + agent.name, agent.run)
             logger.info("agent %s 產出 %d 筆觀察", agent.name, len(obs))
             observations.extend(obs)
 
@@ -76,8 +178,8 @@ class Orchestrator:
         prices = self._prices(observations)
         ts = datetime.now(timezone.utc).isoformat()
         saved = self.decisions.record_cycle(signals, ts, prices)
-        self.all_scores = self._compute_all_scores()      # 全市場各幣輕量決策
-        self._record_positioning(ts)                       # 大戶持倉逐輪落地成時間軸
+        self.all_scores = self._timed("scores", self._compute_all_scores)      # 全市場各幣輕量決策
+        self._timed("position_history", self._record_positioning, ts)                       # 大戶持倉逐輪落地成時間軸
         self._refresh_market_data()                       # 背景抓一次 CoinGecko 並快取
         self.radar = self._divergence_radar()             # 群眾 vs 大戶 分歧雷達
         try:                                               # 背離逐輪落地成時間軸(看何時收斂=進場時機)
@@ -141,8 +243,8 @@ class Orchestrator:
                     source="whale_flow", symbol=coin, signal_type="funding",
                     direction=fdir, magnitude=fmag,
                     summary=f"{coin} 資金費率年化 {fa*100:+.1f}%"))
-            ddir, dmag, dnote = div.get(coin, ("neutral", 0.0, ""))
-            if ddir != "neutral":                         # 日線量價背離訊號
+            ddir, dmag, dnote = div.get(coin, (None, 0.0, ""))
+            if ddir in ("bull", "bear"):                         # 日線量價背離訊號
                 obs.append(Observation(
                     source="divergence", symbol=coin, signal_type="divergence",
                     direction=ddir, magnitude=dmag, summary=dnote))
@@ -248,31 +350,34 @@ class Orchestrator:
 
         # 市場層級：恐懼貪婪(群眾) vs 聰明錢整體
         sms = [s["sm_net"] for s in (self.all_scores or {}).values() if s.get("sm_net") is not None]
-        smart_avg = sum(sms) / len(sms) if sms else 0.0
+        smart_avg = sum(sms) / len(sms) if sms else None
         fg = self.fear_greed or {}
-        fgv = fg.get("value")
-        crowd_m = (fgv - 50) / 50 if fgv is not None else 0.0   # 貪婪=+1群眾多 / 恐懼=-1群眾空
-        gap = crowd_m - smart_avg                                # 群眾 vs 聰明錢 背離量(收斂趨 0=反轉接近)
+        from .clients.fear_greed import available
+        fgv = fg.get("value") if available(fg) else None
+        crowd_m = (fgv - 50) / 50 if fgv is not None else None   # 貪婪=+1群眾多 / 恐懼=-1群眾空
+        gap = crowd_m - smart_avg if crowd_m is not None and smart_avg is not None else None                                # 群眾 vs 聰明錢 背離量(收斂趨 0=反轉接近)
         n_top = sum(1 for c in coins if c["type"] == "頂部反指標")
         n_bottom = sum(1 for c in coins if c["type"] == "底部機會")
         market = {"fear_greed": fgv, "fg_label": fg.get("label"),
                   "fg_percentile": fg.get("percentile"),
-                  "smart_avg": round(smart_avg, 3), "crowd_m": round(crowd_m, 3),
-                  "gap": round(gap, 3), "n_div": len(coins), "n_top": n_top, "n_bottom": n_bottom,
-                  "crowd_dir": "貪婪偏多" if crowd_m > 0.1 else "恐懼偏空" if crowd_m < -0.1 else "中性",
-                  "smart_dir": "偏多" if smart_avg > 0.05 else "偏空" if smart_avg < -0.05 else "中性"}
-        if crowd_m > 0.1 and smart_avg < -0.05:
+                  "smart_avg": round(smart_avg, 3) if smart_avg is not None else None, "crowd_m": round(crowd_m, 3) if crowd_m is not None else None,
+                  "gap": round(gap, 3) if gap is not None else None, "n_div": len(coins), "n_top": n_top, "n_bottom": n_bottom,
+                  "crowd_dir": "資料不足或更新異常" if crowd_m is None else "貪婪偏多" if crowd_m > 0.1 else "恐懼偏空" if crowd_m < -0.1 else "中性",
+                  "smart_dir": "資料不足" if smart_avg is None else "偏多" if smart_avg > 0.05 else "偏空" if smart_avg < -0.05 else "中性"}
+        if crowd_m is None or smart_avg is None:
+            market["verdict"] = "資料不足或更新異常，暫不判定市場背離"
+            market["diverging"] = None
+        elif crowd_m > 0.1 and smart_avg < -0.05:
             market["verdict"] = "🔺 群眾貪婪、聰明錢做空 → 頂部反指標，偏空"
             market["diverging"] = True
         elif crowd_m < -0.1 and smart_avg > 0.05:
             market["verdict"] = "🔻 群眾恐懼、聰明錢做多 → 底部機會，偏多"
             market["diverging"] = True
         else:
-            align = "偏空" if smart_avg < 0 else "偏多"
-            market["verdict"] = (f"群眾與聰明錢同向（{market['crowd_dir']}＋聰明錢{market['smart_dir']}）"
-                                 f"→ 順勢{align}，尚無反轉背離（盯聰明錢何時翻向）")
+            market["verdict"] = "未達市場背離門檻；情緒與合約部位不代表現貨買賣"
             market["diverging"] = False
-        return {"market": market, "coins": coins[:20]}
+        from .radar_presentation import describe_radar
+        return describe_radar({"market": market, "coins": coins[:20]})
 
     def _refresh_market_data(self) -> None:
         """每輪(背景)抓一次 CoinGecko：全市場宏觀、各幣市值、跨所聚合 OI。
@@ -286,38 +391,25 @@ class Orchestrator:
                          ("macro", self._md.global_macro),
                          ("caps", self._md.top_markets)):
             try:
-                val = fn()
+                val = self._timed("market." + name, fn)
                 if name == "deriv" and val:
                     self.deriv_agg = val
+                    self.valuation_times["aggregate_oi"] = self._md._deriv_ts
                 elif name == "macro" and val:
                     self.macro = val
                 elif name == "caps" and val:
                     self.market_caps = val
+                    self.valuation_times["market_caps"] = self._md._top_ts
             except Exception:
                 logger.warning("CoinGecko %s 抓取失敗，沿用上次快取", name)
-        # 恐懼貪婪指數（免費、無金鑰、全市場情緒）—— 全區間歷史(2018至今)
-        try:
-            r = self._md._client.get("https://api.alternative.me/fng/?limit=0")
-            d = r.json().get("data") if r.status_code == 200 else None
-            if isinstance(d, list) and d:
-                vals = [int(x["value"]) for x in d]
-                cur = int(d[0]["value"])
-                below = sum(1 for v in vals if v < cur)
-                self.fear_greed = {
-                    "value": cur,
-                    "label": d[0]["value_classification"],
-                    "percentile": round(below / len(vals) * 100),   # 歷史百分位(越低=越罕見的恐懼)
-                    "hist_min": min(vals), "hist_max": max(vals), "days": len(vals),
-                    "history": [{"v": int(x["value"]), "t": x["timestamp"]} for x in reversed(d)],
-                }
-        except Exception:
-            logger.warning("Fear&Greed 抓取失敗")
+        from .clients.fear_greed import snapshot as sentiment_snapshot
+        self.fear_greed = self._timed("sentiment", sentiment_snapshot, self.fear_greed)
         # DefiLlama 資金動向（免費）
         try:
             if self._dl is None:
                 from .clients.defillama import DefiLlamaClient
                 self._dl = DefiLlamaClient()
-            snap = self._dl.snapshot()
+            snap = self._timed("defillama", self._dl.snapshot, previous=self.defi)
             if snap:
                 self.defi = snap
         except Exception:
@@ -327,7 +419,7 @@ class Orchestrator:
             if self._rd is None:
                 from .clients.reddit import RedditClient
                 self._rd = RedditClient()
-            buzz = self._rd.crypto_buzz()
+            buzz = self._timed("reddit", self._rd.crypto_buzz)
             if buzz:
                 self.reddit = buzz
         except Exception:
@@ -337,7 +429,7 @@ class Orchestrator:
             if self._nc is None:
                 from .clients.news import NewsClient
                 self._nc = NewsClient()
-            nz = self._nc.analyze()
+            nz = self._timed("news", self._nc.analyze)
             if nz and nz.get("total"):
                 self.news = nz
         except Exception:
@@ -348,7 +440,7 @@ class Orchestrator:
                 from .clients.lunarcrush import LunarCrushClient
                 self._lc = LunarCrushClient()
             if self._lc.enabled:
-                soc = self._lc.fetch_coins_sentiment()
+                soc = self._timed("lunarcrush", self._lc.fetch_coins_sentiment)
                 if soc:
                     self.social = soc
         except Exception:

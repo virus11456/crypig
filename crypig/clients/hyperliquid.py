@@ -52,6 +52,7 @@ class HyperliquidClient:
         self._state_cache: dict[str, tuple[float, dict]] = {}
         self._mc_cache: tuple[float, dict] | None = None
         self._mc_ttl = 120.0
+        self._daily_cache: dict = {}
 
     def close(self) -> None:
         self._client.close()
@@ -157,28 +158,40 @@ class HyperliquidClient:
         """抓帳號持倉、『即時抽出精簡欄位就丟掉原始 state』（避免大戶 state JSON
         累積吃爆記憶體）。回 {av, lev, net, pos:[(coin, side, notional)]}。"""
         state = self._post_info({"type": "clearinghouseState", "user": address})
-        ms = state.get("marginSummary") or {}
-        try:
-            av = float(ms.get("accountValue", 0.0) or 0.0)
-            ntl = float(ms.get("totalNtlPos", 0.0) or 0.0)
-        except (TypeError, ValueError):
-            av = ntl = 0.0
+        if not isinstance(state, dict) or not isinstance(state.get("marginSummary"), dict) or not isinstance(state.get("assetPositions"), list):
+            raise ValueError("Invalid account state")
+        import math
+        def number(value):
+            if isinstance(value, bool):
+                raise ValueError("Invalid account number")
+            n = float(value)
+            if not math.isfinite(n):
+                raise ValueError("Non-finite account number")
+            return n
+        ms = state["marginSummary"]
+        av = number(ms["accountValue"])
+        ntl = number(ms["totalNtlPos"])
+        if ntl < 0:
+            raise ValueError("Negative gross position value")
         net = 0.0
         pos: list[tuple] = []
-        for ap in state.get("assetPositions", []):
-            p = ap.get("position", {})
+        for ap in state["assetPositions"]:
+            if not isinstance(ap, dict) or not isinstance(ap.get("position"), dict):
+                raise ValueError("Invalid position")
+            p = ap["position"]
             coin = p.get("coin")
-            if not coin:
-                continue
-            try:
-                szi = float(p.get("szi", 0.0))
-                nv = abs(float(p.get("positionValue", 0.0)))
-            except (TypeError, ValueError):
-                continue
+            if not isinstance(coin, str) or not coin.strip():
+                raise ValueError("Missing position coin")
+            szi = number(p["szi"])
+            nv = abs(number(p["positionValue"]))
+            if (szi == 0) != (nv == 0):
+                raise ValueError("Inconsistent position size and value")
             side = 1 if szi > 0 else -1 if szi < 0 else 0
             if side:
                 net += nv * side
                 pos.append((coin, side, nv))
+        if not math.isfinite(net):
+            raise ValueError("Invalid net position")
         return {"av": av, "lev": ntl / av if av > 0 else 0.0, "net": net, "pos": pos}
 
     def slim_accounts_bulk(self, addresses: list[str], workers: int = 6) -> dict[str, dict]:
@@ -200,15 +213,17 @@ class HyperliquidClient:
         """單帳號最近成交（最多 2000 筆，含每筆平倉 closedPnl）。不快取原始成交
         （數百帳號×2000 筆會吃爆記憶體導致容器 OOM；勝率結果由上層快取）。"""
         data = self._post_info({"type": "userFills", "user": address})
-        return data if isinstance(data, list) else []
+        if not isinstance(data, list):
+            raise ValueError("Invalid fills response")
+        return data
 
-    def winrate_bulk(self, addresses: list[str], lookback: int = 100,
+    def qualification_bulk(self, addresses: list[str], lookback: int = 100,
                      workers: int = 4, rate_per_min: float = 0.0) -> dict[str, dict]:
         """並發抓各帳號成交、『即時算完勝率就丟掉原始成交』，只回小量統計。
 
         記憶體安全：同時最多 workers 份原始成交在記憶體（非全部 N×2000）。
         rate_per_min>0 時全域節流 dispatch 速率（userFills 權重高，避免觸發 HL 限流）。
-        回 {address: {trades, win_rate, recent_pnl, span_hours}}。
+        回各帳號 status 與成功時的 stats；空紀錄、無非零損益、限流、讀取失敗及格式異常分開。
         """
         import threading
         interval = 60.0 / rate_per_min if rate_per_min and rate_per_min > 0 else 0.0
@@ -224,9 +239,19 @@ class HyperliquidClient:
                 if wait:
                     time.sleep(wait)
             try:
-                return addr, self.fills_winrate(self.user_fills(addr), lookback)
+                fills = self.user_fills(addr)
+                if not fills:
+                    return addr, {"status":"no_fills"}
+                stats = self.fills_winrate(fills, lookback)
+                return addr, {"status":"ok", "stats":stats} if stats else {"status":"no_scored_closes"}
+            except httpx.HTTPStatusError as exc:
+                return addr, {"status":"rate_limited" if exc.response.status_code==429 else "request_failed"}
+            except httpx.RequestError:
+                return addr, {"status":"request_failed"}
+            except (ValueError, TypeError, KeyError, OverflowError):
+                return addr, {"status":"invalid_data"}
             except Exception:
-                return addr, None
+                return addr, {"status":"request_failed"}
         out: dict[str, dict] = {}
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
             for addr, wr in ex.map(fetch, addresses):
@@ -234,16 +259,29 @@ class HyperliquidClient:
                     out[addr] = wr
         return out
 
+    def winrate_bulk(self, addresses, lookback=100, workers=4, rate_per_min=0.0):
+        """Compatibility view for callers that only need valid statistics."""
+        return {a:r["stats"] for a,r in self.qualification_bulk(
+            addresses,lookback,workers,rate_per_min).items() if r["status"]=="ok"}
+
     @staticmethod
     def fills_winrate(fills: list[dict], lookback: int = 100) -> dict | None:
         """從成交算近 lookback 筆平倉的勝率、獲利、時間跨度。無足夠平倉回 None。
 
         span_hours：近 lookback 筆平倉橫跨幾小時——用來剔除『幾小時內刷完上百筆』
-        的高頻/做市商（他們多空中性，方向訊號無意義）。fills 為新到舊排列。
+        的高頻/做市商（他們多空中性，方向訊號無意義）。採樣前依時間由新到舊排序。
         """
-        closes = [x for x in fills if (x.get("closedPnl") not in (None, "0", "0.0")
-                                       and float(x.get("closedPnl") or 0) != 0.0)]
-        closes = closes[:lookback]
+        import math
+        closes = []
+        for x in fills:
+            if not isinstance(x,dict) or "closedPnl" not in x or "time" not in x:
+                raise ValueError("Malformed fill")
+            pnl, stamp = float(x["closedPnl"]), float(x["time"])
+            if isinstance(x["closedPnl"],bool) or isinstance(x["time"],bool) or not math.isfinite(pnl) or not math.isfinite(stamp) or stamp<=0:
+                raise ValueError("Invalid fill values")
+            if pnl != 0:
+                closes.append(x)
+        closes = sorted(closes,key=lambda x:float(x["time"]),reverse=True)[:lookback]
         if not closes:
             return None
         pnls = [float(x.get("closedPnl") or 0) for x in closes]
@@ -268,8 +306,13 @@ class HyperliquidClient:
         resp = self._client.post(INFO_URL, json={"type": "metaAndAssetCtxs"})
         resp.raise_for_status()
         meta, ctxs = resp.json()
+        universe = meta.get("universe", [])
+        if not universe or len(universe) != len(ctxs):
+            raise ValueError("Incomplete market contexts")
         out: dict[str, dict] = {}
-        for u, ctx in zip(meta.get("universe", []), ctxs):
+        for u, ctx in zip(universe, ctxs):
+            if u.get("isDelisted"):
+                continue
             name = u.get("name")
             if not name:
                 continue
@@ -309,19 +352,37 @@ class HyperliquidClient:
         """
         now = int(time.time() * 1000)
         start = now - days * 24 * 3600 * 1000
+        day = now // 86400000
+        # Only completed UTC daily candles: shared by scans within the same day.
+        # Evict the previous day so memory stays bounded as the symbol universe changes.
+        self._daily_cache = {k: v for k, v in self._daily_cache.items() if k[2] == day}
 
         def fetch(coin: str):
+            key = (coin, days, day)
+            if key in self._daily_cache:
+                return coin, self._daily_cache[key]
             try:
                 r = self._client.post(INFO_URL, json={
                     "type": "candleSnapshot",
                     "req": {"coin": coin, "interval": "1d",
                             "startTime": start, "endTime": now}})
+                r.raise_for_status()
                 data = r.json()
                 if not isinstance(data, list):
                     return coin, None
-                closes = [float(c["c"]) for c in data]
-                vols = [float(c["v"]) for c in data]
-                return coin, (closes, vols)
+                import math
+                candles = {}
+                for c in data:
+                    t = int(c["t"])
+                    close, volume = float(c["c"]), float(c["v"])
+                    if t + 86400000 <= now and t >= start and close > 0 and volume >= 0 and math.isfinite(close) and math.isfinite(volume):
+                        candles[t] = (close, volume)
+                times = sorted(candles)
+                if len(times) < 31 or times[-1] != (day - 1) * 86400000 or any(b - a != 86400000 for a, b in zip(times, times[1:])):
+                    return coin, None
+                result = ([candles[t][0] for t in times], [candles[t][1] for t in times])
+                self._daily_cache[key] = result
+                return coin, result
             except Exception:
                 return coin, None
 
