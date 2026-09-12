@@ -324,29 +324,31 @@ class Orchestrator:
 
         # 市場層級：恐懼貪婪(群眾) vs 聰明錢整體
         sms = [s["sm_net"] for s in (self.all_scores or {}).values() if s.get("sm_net") is not None]
-        smart_avg = sum(sms) / len(sms) if sms else 0.0
+        smart_avg = sum(sms) / len(sms) if sms else None
         fg = self.fear_greed or {}
-        fgv = fg.get("value")
-        crowd_m = (fgv - 50) / 50 if fgv is not None else 0.0   # 貪婪=+1群眾多 / 恐懼=-1群眾空
-        gap = crowd_m - smart_avg                                # 群眾 vs 聰明錢 背離量(收斂趨 0=反轉接近)
+        from .clients.fear_greed import available
+        fgv = fg.get("value") if available(fg) else None
+        crowd_m = (fgv - 50) / 50 if fgv is not None else None   # 貪婪=+1群眾多 / 恐懼=-1群眾空
+        gap = crowd_m - smart_avg if crowd_m is not None and smart_avg is not None else None                                # 群眾 vs 聰明錢 背離量(收斂趨 0=反轉接近)
         n_top = sum(1 for c in coins if c["type"] == "頂部反指標")
         n_bottom = sum(1 for c in coins if c["type"] == "底部機會")
         market = {"fear_greed": fgv, "fg_label": fg.get("label"),
                   "fg_percentile": fg.get("percentile"),
-                  "smart_avg": round(smart_avg, 3), "crowd_m": round(crowd_m, 3),
-                  "gap": round(gap, 3), "n_div": len(coins), "n_top": n_top, "n_bottom": n_bottom,
-                  "crowd_dir": "貪婪偏多" if crowd_m > 0.1 else "恐懼偏空" if crowd_m < -0.1 else "中性",
-                  "smart_dir": "偏多" if smart_avg > 0.05 else "偏空" if smart_avg < -0.05 else "中性"}
-        if crowd_m > 0.1 and smart_avg < -0.05:
+                  "smart_avg": round(smart_avg, 3) if smart_avg is not None else None, "crowd_m": round(crowd_m, 3) if crowd_m is not None else None,
+                  "gap": round(gap, 3) if gap is not None else None, "n_div": len(coins), "n_top": n_top, "n_bottom": n_bottom,
+                  "crowd_dir": "資料不足或更新異常" if crowd_m is None else "貪婪偏多" if crowd_m > 0.1 else "恐懼偏空" if crowd_m < -0.1 else "中性",
+                  "smart_dir": "資料不足" if smart_avg is None else "偏多" if smart_avg > 0.05 else "偏空" if smart_avg < -0.05 else "中性"}
+        if crowd_m is None or smart_avg is None:
+            market["verdict"] = "資料不足或更新異常，暫不判定市場背離"
+            market["diverging"] = None
+        elif crowd_m > 0.1 and smart_avg < -0.05:
             market["verdict"] = "🔺 群眾貪婪、聰明錢做空 → 頂部反指標，偏空"
             market["diverging"] = True
         elif crowd_m < -0.1 and smart_avg > 0.05:
             market["verdict"] = "🔻 群眾恐懼、聰明錢做多 → 底部機會，偏多"
             market["diverging"] = True
         else:
-            align = "偏空" if smart_avg < 0 else "偏多"
-            market["verdict"] = (f"群眾與聰明錢同向（{market['crowd_dir']}＋聰明錢{market['smart_dir']}）"
-                                 f"→ 順勢{align}，尚無反轉背離（盯聰明錢何時翻向）")
+            market["verdict"] = "未達市場背離門檻；情緒與合約部位不代表現貨買賣"
             market["diverging"] = False
         return {"market": market, "coins": coins[:20]}
 
@@ -373,23 +375,8 @@ class Orchestrator:
                     self.valuation_times["market_caps"] = self._md._top_ts
             except Exception:
                 logger.warning("CoinGecko %s 抓取失敗，沿用上次快取", name)
-        # 恐懼貪婪指數（免費、無金鑰、全市場情緒）—— 全區間歷史(2018至今)
-        try:
-            r = self._md._client.get("https://api.alternative.me/fng/?limit=0")
-            d = r.json().get("data") if r.status_code == 200 else None
-            if isinstance(d, list) and d:
-                vals = [int(x["value"]) for x in d]
-                cur = int(d[0]["value"])
-                below = sum(1 for v in vals if v < cur)
-                self.fear_greed = {
-                    "value": cur,
-                    "label": d[0]["value_classification"],
-                    "percentile": round(below / len(vals) * 100),   # 歷史百分位(越低=越罕見的恐懼)
-                    "hist_min": min(vals), "hist_max": max(vals), "days": len(vals),
-                    "history": [{"v": int(x["value"]), "t": x["timestamp"]} for x in reversed(d)],
-                }
-        except Exception:
-            logger.warning("Fear&Greed 抓取失敗")
+        from .clients.fear_greed import refresh as refresh_fear_greed
+        self.fear_greed = refresh_fear_greed(self._md._client, self.fear_greed)
         # DefiLlama 資金動向（免費）
         try:
             if self._dl is None:

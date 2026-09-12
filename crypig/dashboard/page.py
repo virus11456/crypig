@@ -543,23 +543,24 @@ async function loadRadar(){
     // 時間軸：背離量 gap 逐輪變化，趨 0=收斂=反轉接近
     let tl='', conv=null;
     const cut=Date.now()/1000-24*3600;
-    const h24=hist.filter(h=>Date.parse(h.ts)/1000>=cut);
-    const use=h24.length>=2?h24:hist;          // 近 24 小時(不足則顯示已累積)
+    const validTail=hist.slice(hist.map(h=>typeof h.gap==='number' && Number.isFinite(h.gap)).lastIndexOf(false)+1);
+    const h24=validTail.filter(h=>Date.parse(h.ts)/1000>=cut);
+    const use=h24.length>=2?h24:validTail;          // 近 24 小時(不足則顯示已累積)
     if(use.length>=2){
       const pts=use.map(h=>({t:Date.parse(h.ts)/1000, v:h.gap}));
       const k=Math.min(5,use.length), recent=use.slice(-k), prev=use.slice(-2*k,-k);
       const am=a=>a.length?a.reduce((s,x)=>s+Math.abs(x.gap),0)/a.length:0;
       const rA=am(recent), pA=am(prev||[]);
-      conv = prev.length? (rA<pA-0.03?{t:'背離收斂中 → 群眾正在向聰明錢靠攏，接近反轉/進場時機',c:'#3fb950'}
-                    : rA>pA+0.03?{t:'背離擴大中 → 分歧加劇，反轉時機未到，續觀望',c:'#d29922'}
+      conv = prev.length? (rA<pA-0.03?{t:'背離幅度縮小；不能單憑收斂確認價格反轉',c:'#3fb950'}
+                    : rA>pA+0.03?{t:'背離幅度擴大；情緒與合約方向差距增加',c:'#d29922'}
                     : {t:'背離持平 → 僵持，等收斂訊號',c:'#8b949e'}) : null;
       const lastN=use[use.length-1];
       const span=spanLabel(Date.parse(use[0].ts)/1000, Date.parse(lastN.ts)/1000);
-      tl=`<div class="sec">背離時間軸 <small>${span}｜gap=群眾−聰明錢；線趨近 0 ＝收斂＝反轉接近</small></div>
+      tl=`<div class="sec">背離時間軸 <small>${span}｜gap=群眾−聰明錢；線趨近 0 表示指標差距縮小，不代表價格必然反轉</small></div>
         <div class="meta">最新背離量 <b>${(lastN.gap>=0?'+':'')+lastN.gap}</b>｜背離幣數 <b>${lastN.n_div}</b>（頂 ${lastN.n_top}／底 ${lastN.n_bottom}）${conv?`<br><b style="color:${conv.c}">${conv.t}</b>`:''}</div>
         ${lineChart(pts,{color:'#d29922',includeZero:true,tip:p=>'背離量 '+(p.v>=0?'+':'')+(+p.v).toFixed(2)})}`;
     } else {
-      tl=`<div class="sec">背離時間軸</div><div class="meta">每 20 分鐘記一筆，目前 ${hist.length} 筆，2 筆以上開始畫線（看背離何時收斂＝進場時機）。</div>`;
+      tl=`<div class="sec">背離時間軸</div><div class="meta">每 20 分鐘記一筆，最近連續有效 ${validTail.length} 筆，至少 2 筆才畫線；缺資料不當成零。</div>`;
     }
     document.getElementById('radar').innerHTML=`<div class="box" style="border-color:${vcol}">
       <h2>🎯 分歧雷達 <small>群眾(情緒·資金費率) vs 大戶(聰明錢·鯨魚) 反向＝alpha</small></h2>
@@ -1065,31 +1066,34 @@ async function askKB(){
   catch(e){ out.textContent='問答失敗：'+e; }
 }
 function fgColor(v){return v<25?'#f85149':v<45?'#d29922':v<55?'#8b949e':v<75?'#3fb950':'#2ea043';}
+function sentimentStatus(fg){
+  const observed=Number(fg.observed_at), fetched=Number(fg.fetched_at);
+  const stale=!observed || Date.now()/1000-observed>172800;
+  const status=fg.refresh_failed?'更新失敗，保留上次數值':stale?'資料日期不明或已延遲':'日頻資料';
+  return `${status}｜資料日期 ${observed?new Date(observed*1000).toISOString().slice(0,10)+'（UTC）':'未知'}｜取得 ${fetched?new Date(fetched*1000).toLocaleString('zh-TW'):'未知'}`;
+}
 async function loadSocial(){
   try{
     const r=await apiJSON('/social');
     const fg=r.fear_greed||{};
-    let fgHtml='';
+    let fgHtml='<div class="box empty">恐懼貪婪指數暫無有效資料</div>';
     if(fg.value!=null){
       const col=fgColor(fg.value);
       const spark=lineChart((fg.history||[]).map(h=>({t:+h.t,v:h.v})), {color:'#58a6ff', zeroFloor:true, tip:p=>'恐懼貪婪 '+Math.round(p.v)});
       const pctNote = fg.percentile!=null
-        ? `歷史第 <b style="color:${col}">${fg.percentile}</b> 百分位${fg.percentile<=10?'（極罕見，越低越接近大底）':fg.percentile>=90?'（極度貪婪，留意風險）':''}`
+        ? `歷史第 <b style="color:${col}">${fg.percentile}</b> 百分位${fg.percentile<=10?'（歷史較少見的低值，不代表底部）':fg.percentile>=90?'（極度貪婪，留意風險）':''}`
         : '';
       const v=fg.value;
-      const fc = v<25?{t:`極度恐懼（${v}）→ 散戶過度悲觀，歷史上常是<b>反向買點</b>；對照聰明錢，若聰明錢開始翻多＝底部訊號`,c:'#3fb950'}
-               : v>=75?{t:`極度貪婪（${v}）→ 散戶過熱，<b>留意風險/別追多</b>；若聰明錢同時做空＝頂部反指標`,c:'#f85149'}
-               : v<45?{t:`偏恐懼（${v}）→ 情緒偏弱，未到極端；等更極端或看聰明錢動向`,c:'#d29922'}
-               : v>55?{t:`偏貪婪（${v}）→ 情緒偏熱，未到極端；順勢但留意過熱`,c:'#d29922'}
-               : {t:`中性（${v}）→ 情緒無極端，恐懼貪婪暫無明顯訊號`,c:'#8b949e'};
+      const fc={t:`${String(fg.label||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}（${v}）：BTC 情緒指標，不代表巨鯨現貨持有變化，也不能單獨確認買點或賣點。`,c:col};
       fgHtml=`<div class="box">
-        <h2>😱 恐懼貪婪指數 <small>全市場情緒（alternative.me，全區間 ${fg.days||''} 天 2018至今）｜極度恐懼常是反向買點</small></h2>
-        <div class="vline" style="border-left-color:${fc.c}">📍 現在：${fc.t}</div>
+        <h2>😱 恐懼貪婪指數 <small>BTC 情緒（<a href="https://alternative.me/crypto/fear-and-greed-index/" target="_blank" rel="noopener">Alternative.me</a>，${fg.days||''} 筆日頻資料）</small></h2>
+        <div class="meta">${sentimentStatus(fg)}</div>
+        <div class="vline" style="border-left-color:${fc.c}">📍 最近有效觀測：${fc.t}</div>
         <div class="kpis"><div class="kpi"><div class="v" style="color:${col};font-size:34px">${fg.value}</div>
-          <div class="k">${fg.label}</div></div>
+          <div class="k">${String(fg.label||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</div></div>
           <div class="kpi"><div class="v" style="color:${col}">${fg.percentile??'—'}%</div><div class="k">歷史百分位</div></div>
           <div style="flex:1;min-width:260px">${spark}</div></div>
-        <div class="meta">${pctNote}｜區間 ${fg.hist_min}–${fg.hist_max}。對照：極度恐懼+聰明錢仍做空→順勢偏空；聰明錢開始翻多→底部反向訊號。</div>
+        <div class="meta">${pctNote}｜區間 ${fg.hist_min}–${fg.hist_max}。百分位只表示情緒在歷史資料中的位置，不是反轉機率。</div>
       </div>`;
     }
     // LunarCrush 各幣社群情緒：只有付費金鑰有真實資料時才顯示（無資料不放空面板）

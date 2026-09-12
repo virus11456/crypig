@@ -523,3 +523,44 @@ def test_defi_source_regression_does_not_replace_newer_data():
         assert result['sources']['tvl']['fetched_at']==10
         assert result['sources']['tvl']['refresh_failed']
     finally: client.close()
+
+
+def test_sentiment_orders_deduplicates_and_preserves_on_invalid_batches():
+    from crypig.clients.fear_greed import refresh, available
+    now = 1789223000
+    row = lambda t, v: {'timestamp': str(t), 'value': str(v), 'value_classification': 'Greed'}
+    rows = [row(now-86400, 60), row(now, 63), row(now, 63)]
+    def client_for(data):
+        return SimpleNamespace(get=lambda url: httpx.Response(200, json={'data': data}, request=httpx.Request('GET',url)))
+    good = refresh(client_for(rows), now=now)
+    assert good['value'] == 63 and good['days'] == 2
+    assert good['history'][0]['v'] == 60 and available(good, now)
+    for bad in [[], [row(now, 101)], [row(now, 63), row(now, 60)], [row(now-86400, 60)], [row(now, True)]]:
+        result = refresh(client_for(bad), good, now=now+1)
+        assert result['refresh_failed'] and result['fetched_at'] == now
+        assert result['value'] == 63 and not available(result, now+1)
+    assert refresh(client_for([row(now+1, 63)]), good, now=now)['refresh_failed']
+    assert not available(good, now+172801)
+    assert not good['refresh_failed']
+
+
+def test_radar_missing_stale_and_failed_sentiment_are_not_neutral():
+    from crypig.orchestrator import Orchestrator
+    now=time.time()
+    for fg in [{}, {'value': 63}, {'value': 63, 'observed_at': now-200000},
+               {'value': 63, 'observed_at': now, 'refresh_failed': True}]:
+        market=Orchestrator._divergence_radar(SimpleNamespace(all_scores={}, fear_greed=fg))['market']
+        assert market['crowd_m'] is None and market['smart_avg'] is None
+        assert market['gap'] is None and market['diverging'] is None
+        assert '資料不足' in market['verdict']
+    market=Orchestrator._divergence_radar(SimpleNamespace(all_scores={'BTC': {'sm_net': -.5}}, fear_greed={'value': 63, 'observed_at': now}))['market']
+    assert market['diverging'] is True and market['crowd_m'] == .26
+
+
+def test_unknown_radar_state_survives_history_storage(tmp_path):
+    from crypig.storage.pos_series import PosSeriesStore
+    store = PosSeriesStore(str(tmp_path/'positions.db'))
+    store.record_radar('2026-09-12T00:00:00+00:00', {'gap': None, 'diverging': None})
+    row = store.radar_history()[0]
+    assert row['gap'] is None and row['diverging'] is None
+    store._conn.close()

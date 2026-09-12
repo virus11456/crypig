@@ -95,7 +95,7 @@ class PosSeriesStore:
             " VALUES (?,?,?,?,?,?,?,?)",
             (ts, market.get("gap"), market.get("crowd_m"), market.get("smart_avg"),
              int(market.get("n_div") or 0), int(market.get("n_top") or 0),
-             int(market.get("n_bottom") or 0), 1 if market.get("diverging") else 0))
+             int(market.get("n_bottom") or 0), None if market.get("diverging") is None else int(market["diverging"])))
         self._conn.commit()
 
     def radar_history(self, limit: int = 400) -> list[dict]:
@@ -104,7 +104,7 @@ class PosSeriesStore:
             "SELECT * FROM radar_hist ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
         return [{"ts": r["ts"], "gap": r["gap"], "crowd_m": r["crowd_m"],
                  "smart_avg": r["smart_avg"], "n_div": r["n_div"], "n_top": r["n_top"],
-                 "n_bottom": r["n_bottom"], "diverging": bool(r["diverging"])}
+                 "n_bottom": r["n_bottom"], "diverging": None if r["diverging"] is None else bool(r["diverging"])}
                 for r in reversed(rows)]
 
     # ---- 聰明錢累積池（跨輪累加、TTL 汰舊，避免一次抓太多被限流）----

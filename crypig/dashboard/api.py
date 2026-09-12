@@ -610,7 +610,7 @@ def social() -> dict:
                                "label": "Fear" if hist[-1]["v"] < 45 else "Greed",
                                "history": hist},
                 "lunarcrush_enabled": False, "social": {}}
-    require_snapshot(orc.fear_greed or orc.social)
+    require_snapshot((orc.fear_greed if orc.fear_greed.get("value") is not None else None) or orc.social)
     return {"fear_greed": orc.fear_greed,
             "lunarcrush_enabled": bool(orc.social), "social": orc.social}
 

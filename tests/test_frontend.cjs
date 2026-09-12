@@ -146,3 +146,15 @@ test('DeFi source dates disclose partial failure and remove unsupported net-flow
  assert.match(html,/資料日期/);assert.match(html,/更新失敗/);assert.match(html,/更新延遲/);
  assert.match(html,/包含資產價格與涵蓋範圍/);assert.doesNotMatch(html,/資金正流入|穩定幣增發中/);
 });
+test('sentiment shows its observation date and does not promise a bottom',async()=>{
+ const h=setup(async()=>response({fear_greed:{value:10,label:'Extreme Fear',observed_at:1789171200,fetched_at:1789222367,refresh_failed:true,history:[],days:1,percentile:1}}));
+ await h.run('loadSocial()');
+ const html=h.elements.get('social').innerHTML;
+ assert.match(html,/更新失敗，保留上次數值/);assert.match(html,/2026-09-12/);
+ assert.match(html,/不代表巨鯨現貨持有變化/);assert.doesNotMatch(html,/常是.*反向買點|越低越接近大底/);
+});
+test('unknown latest radar gap is not rendered as a zero or convergence signal',async()=>{
+ const h=setup(async url=>response(url==='/radar'?{market:{verdict:'資料不足',diverging:null},coins:[]}:{history:[{ts:'2026-09-12T00:00:00Z',gap:1},{ts:'2026-09-12T01:00:00Z',gap:null}]}));
+ await h.run('loadRadar()');const html=h.elements.get('radar').innerHTML;
+ assert.match(html,/最近連續有效 0 筆/);assert.doesNotMatch(html,/最新背離量|背離收斂中/);
+});
