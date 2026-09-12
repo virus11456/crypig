@@ -204,3 +204,9 @@ test('qualification subgroup rendering discloses coverage and missing historical
  assert.match(text,/僅歷史獲利補入/);assert.match(text,/尚無各組歷史對照/);
  assert.doesNotMatch(text,/勝率 <b>/);
 });
+
+test('zero net distinguishes offset holdings and unavailable legacy detail',()=>{
+ const h=setup(); h.ctx.g={total:2,long:0,short:0,flat:2,long_pct:null,short_pct:null,no_positions:1,offset_positions:1,flat_unknown:0};
+ const text=h.run("posRow('sample','',g,'gray')");assert.match(text,/無持倉 1/);assert.match(text,/有持倉淨額為零 1/);
+ delete h.ctx.g.no_positions;assert.match(h.run("posRow('sample','',g,'gray')"),/持倉狀態未細分/);
+});

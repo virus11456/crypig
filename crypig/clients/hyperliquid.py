@@ -158,28 +158,40 @@ class HyperliquidClient:
         """抓帳號持倉、『即時抽出精簡欄位就丟掉原始 state』（避免大戶 state JSON
         累積吃爆記憶體）。回 {av, lev, net, pos:[(coin, side, notional)]}。"""
         state = self._post_info({"type": "clearinghouseState", "user": address})
-        ms = state.get("marginSummary") or {}
-        try:
-            av = float(ms.get("accountValue", 0.0) or 0.0)
-            ntl = float(ms.get("totalNtlPos", 0.0) or 0.0)
-        except (TypeError, ValueError):
-            av = ntl = 0.0
+        if not isinstance(state, dict) or not isinstance(state.get("marginSummary"), dict) or not isinstance(state.get("assetPositions"), list):
+            raise ValueError("Invalid account state")
+        import math
+        def number(value):
+            if isinstance(value, bool):
+                raise ValueError("Invalid account number")
+            n = float(value)
+            if not math.isfinite(n):
+                raise ValueError("Non-finite account number")
+            return n
+        ms = state["marginSummary"]
+        av = number(ms["accountValue"])
+        ntl = number(ms["totalNtlPos"])
+        if ntl < 0:
+            raise ValueError("Negative gross position value")
         net = 0.0
         pos: list[tuple] = []
-        for ap in state.get("assetPositions", []):
-            p = ap.get("position", {})
+        for ap in state["assetPositions"]:
+            if not isinstance(ap, dict) or not isinstance(ap.get("position"), dict):
+                raise ValueError("Invalid position")
+            p = ap["position"]
             coin = p.get("coin")
-            if not coin:
-                continue
-            try:
-                szi = float(p.get("szi", 0.0))
-                nv = abs(float(p.get("positionValue", 0.0)))
-            except (TypeError, ValueError):
-                continue
+            if not isinstance(coin, str) or not coin.strip():
+                raise ValueError("Missing position coin")
+            szi = number(p["szi"])
+            nv = abs(number(p["positionValue"]))
+            if (szi == 0) != (nv == 0):
+                raise ValueError("Inconsistent position size and value")
             side = 1 if szi > 0 else -1 if szi < 0 else 0
             if side:
                 net += nv * side
                 pos.append((coin, side, nv))
+        if not math.isfinite(net):
+            raise ValueError("Invalid net position")
         return {"av": av, "lev": ntl / av if av > 0 else 0.0, "net": net, "pos": pos}
 
     def slim_accounts_bulk(self, addresses: list[str], workers: int = 6) -> dict[str, dict]:

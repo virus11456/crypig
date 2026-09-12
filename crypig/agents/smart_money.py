@@ -62,6 +62,9 @@ class SmartMoneyAgent(Agent):
             return {
                 "total": len(accs), "long": len(longs), "short": len(shorts),
                 "flat": len(flat),
+                "no_positions": sum(a.get("pos") == [] for a in flat),
+                "offset_positions": sum(bool(a.get("pos")) for a in flat),
+                "flat_unknown": sum("pos" not in a or a["pos"] is None for a in flat),
                 "short_pct": round(len(shorts) / directional, 4) if directional else None,
                 "long_pct": round(len(longs) / directional, 4) if directional else None,
                 "lev_median": round(statistics.median(levs), 2) if levs else None,

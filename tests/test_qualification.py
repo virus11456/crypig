@@ -134,3 +134,25 @@ def test_qualification_subsets_have_independent_directions_and_statistic_coverag
     assert r['smart_pnl_only']['winrate_median'] is None
     empty=SmartMoneyAgent._summarize_traders([],[])['smart_verified']
     assert empty['long_pct'] is None and empty['btc']['accounts']==0
+
+
+def test_zero_net_keeps_offset_positions_separate_from_empty_and_unknown():
+    common={'net':0,'lev':1,'win_rate':None}
+    r=SmartMoneyAgent._summarize_traders([{**common,'pos':[]},{**common,'pos':[('BTC',1,100),('ETH',-1,100)]},common],[])['smart']
+    assert r['flat']==3 and r['no_positions']==1 and r['offset_positions']==1 and r['flat_unknown']==1
+    assert r['long_pct'] is None and r['btc']['accounts']==1
+
+
+def test_invalid_account_payload_is_not_an_empty_success(monkeypatch):
+    from crypig.clients.hyperliquid import HyperliquidClient
+    import pytest
+    c=HyperliquidClient()
+    valid={'marginSummary':{'accountValue':'100','totalNtlPos':'0'},'assetPositions':[]}
+    monkeypatch.setattr(c,'_post_info',lambda _: valid)
+    try:
+        assert c.slim_account('a')['pos']==[]
+        for bad in [{}, {'error':'busy'}, {**valid,'assetPositions':None}, {**valid,'marginSummary':{'accountValue':'nan','totalNtlPos':'0'}}, {**valid,'assetPositions':[{'position':{'coin':'BTC','szi':'1','positionValue':'0'}}]}]:
+            monkeypatch.setattr(c,'_post_info',lambda _,b=bad:b)
+            with pytest.raises((ValueError,TypeError,KeyError)): c.slim_account('a')
+        assert c.slim_accounts_bulk(['a'])=={}
+    finally:c.close()

@@ -522,7 +522,7 @@ function posRow(name, sub, g, color){
   return `<div class="posrow">
     <div class="posname"><b style="color:${color}">${name}</b> <span class="meta">${sub}・取得 ${g.total} 個帳號</span></div>
     <div class="posstats">
-      <span class="pchip"><span style="color:#3fb950">多 ${g.long}</span> · <span style="color:#f85149">空 ${g.short}</span> · <span style="color:#8b949e">觀 ${g.flat}</span></span>
+      <span class="pchip"><span style="color:#3fb950">多 ${g.long}</span> · <span style="color:#f85149">空 ${g.short}</span> · <span style="color:#8b949e">${g.no_positions!=null?`無持倉 ${g.no_positions} · 有持倉淨額為零 ${g.offset_positions}${g.flat_unknown?' · 狀態未知 '+g.flat_unknown:''}`:`淨額為零 ${g.flat}（持倉狀態未細分）`}</span></span>
       <span class="pchip">傾向 ${lean}</span>
       <span class="pchip">槓桿 <b>${g.lev_median??'—'}x</b></span>
       ${g.winrate_median!=null?`<span class="pchip">獲利紀錄比例中位數 <b>${g.winrate_median}%</b>（${g.winrate_accounts??'涵蓋數未知'}${g.winrate_accounts!=null?'/'+g.total+' 帳號':''}）</span>`:''}
@@ -710,10 +710,10 @@ async function loadPositioning(){
       ${qualificationSplit(p)}
       ${qualificationDetails(p.qualification_check)}
       ${posRow('🐋 合約大額帳號', '候選樣本淨值前N', p.whale, '#d29922')}
-      <div class="meta">註：兩群依不同規則篩選、可能重疊；聰明錢含近期交易資格篩選與歷史獲利補入，大額帳號依候選帳號淨值排序${p.overlap!=null?`（目前重疊 <b>${p.overlap}</b> 人）`:''}；不代表全市場投資人。觀望=此平台無持倉；表態傾向只計有開倉者。<br>👉 聰明錢與巨鯨方向相反時＝值得注意的分歧訊號。</div>
+      <div class="meta">註：兩群依不同規則篩選、可能重疊；聰明錢含近期交易資格篩選與歷史獲利補入，大額帳號依候選帳號淨值排序${p.overlap!=null?`（目前重疊 <b>${p.overlap}</b> 人）`:''}；不代表全市場投資人。無持倉指本次成功回應沒有合約部位；持倉互抵仍列為有持倉。傾向比例只計淨額非零帳號，並非 BTC 現貨方向。<br>👉 聰明錢與巨鯨方向相反時＝值得注意的分歧訊號。</div>
     </div>`;
     const leanS=g=>{ if(!g||!g.total) return '無資料'; const sp=g.short_pct,lp=g.long_pct;
-      return sp==null?'—':(sp>lp?`<b style="color:#f85149">空 ${(sp*100).toFixed(0)}%</b>`:`<b style="color:#3fb950">多 ${(lp*100).toFixed(0)}%</b>`); };
+      return sp==null?'—':sp===lp?'多空人數相同':(sp>lp?`<b style="color:#f85149">空 ${(sp*100).toFixed(0)}%</b>`:`<b style="color:#3fb950">多 ${(lp*100).toFixed(0)}%</b>`); };
     setSum('sum-pos', `🧠 聰明錢 ${leanS(p.smart)} ｜ 🐋 巨鯨 ${leanS(p.whale)}${p.overlap!=null?` ｜ 重疊 ${p.overlap} 人`:''}`);
   }catch(e){document.getElementById('pos').innerHTML='<div class="box empty">決心面板載入失敗：'+e+'</div>';}
 }
