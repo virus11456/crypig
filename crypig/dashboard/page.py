@@ -258,7 +258,7 @@ INDEX_HTML = r"""<!doctype html>
     <summary><span class="ctitle">⏳ 長期持有者 BTC 供給變化</span><span class="csum" id="sum-lth">載入中…</span><span class="chev">▾</span></summary>
     <div id="lth"><div class="box empty">長期持有者日資料載入中…</div></div>
   </details>
-  <section id="opp" class="hero"><h2>🎯 現在有沒有進場機會</h2><div class="meta">載入中…</div></section>
+  <section id="opp" class="hero"><h2>🎯 情緒與合約部位分歧</h2><div class="meta">載入中…</div></section>
 
   <details class="ccard" open>
     <summary><span class="ctitle">🎯 分歧雷達</span><span class="csum" id="sum-radar">載入中…</span><span class="chev">▾</span></summary>
@@ -363,27 +363,28 @@ const sgn=v=>v>0?'#3fb950':v<0?'#f85149':'#8b949e';
 // 進場機會 hero：把分歧雷達的結論＋alpha候選做成一眼看懂的對比視覺
 function renderHero(m, coins, conv){
   const el=document.getElementById('opp'); if(!el) return;
-  const vcol=m.diverging?((m.verdict||'').match(/看多|底部/)?'#3fb950':'#f85149'):'#d29922';
+  const vcol='#d29922';
   const bar=(v,col)=>{const w=Math.min(50,Math.abs(v||0)*50);const left=(v||0)>=0;
     return `<div class="vsbar"><span class="mid"></span><i style="${left?'left:50%':'right:50%'};width:${w}%;background:${col}"></i></div>`;};
   const opps=(coins||[]).slice(0,6).map(c=>{
-    const bcol=c.bias==='看多'?'#3fb950':'#f85149';
+    const bcol='#d29922';
     return `<div class="opp">
       <div class="ot"><span class="osym">${c.symbol}</span><span class="chip" style="background:${bcol}22;color:${bcol}">${c.type}·${c.bias}</span></div>
-      <div class="vs"><span class="lab">群眾</span>${bar(c.crowd,sgn(c.crowd))}<b style="width:44px;text-align:right;color:${sgn(c.crowd)}">${(c.crowd*100).toFixed(0)}%</b></div>
-      <div class="vs"><span class="lab">大戶</span>${bar(c.smart,sgn(c.smart))}<b style="width:44px;text-align:right;color:${sgn(c.smart)}">${(c.smart*100).toFixed(0)}%</b></div>
+      <div class="vs"><span class="lab">費率</span>${bar(c.crowd,sgn(c.crowd))}<b style="width:44px;text-align:right;color:${sgn(c.crowd)}">${(c.crowd*100).toFixed(0)}%</b></div>
+      <div class="vs"><span class="lab">樣本</span>${bar(c.smart,sgn(c.smart))}<b style="width:44px;text-align:right;color:${sgn(c.smart)}">${(c.smart*100).toFixed(0)}%</b></div>
       <div class="meta" style="margin-top:6px">分歧強度 ${c.score}${c.whale!=null?`｜鯨魚 ${(c.whale*100).toFixed(0)}%`:''}</div>
     </div>`;}).join('');
-  el.innerHTML=`<h2>🎯 現在有沒有進場機會 <span class="meta">群眾(情緒·費率) vs 大戶(聰明錢·鯨魚) 反向＝alpha</span></h2>
+  el.innerHTML=`<h2>🎯 情緒與合約部位分歧 <span class="meta">情緒／費率與追蹤合約樣本分開觀察</span></h2>
     <div class="verdict" style="color:${vcol}">${m.verdict||'—'}</div>
     ${conv?`<div class="conv" style="color:${conv.c}">⏱ ${conv.t}</div>`:''}
+    <div class="meta">費率百分比為縮放指標，不是交易人數比例；合約指標為各幣淨多空比等權平均。分歧不確認頂底或現貨買賣。</div>
     <div class="heroline">
       <span class="htag">😱 恐懼貪婪 <b>${m.fear_greed??'—'}</b> ${m.fg_label||''}</span>
-      <span class="htag">🧠 聰明錢整體 <b style="color:${sgn(m.smart_avg)}">${m.smart_avg!=null?(m.smart_avg*100).toFixed(0)+'%':'—'}</b></span>
-      <span class="htag">背離 <b>${m.n_div??'—'}</b> 幣（頂 ${m.n_top??0}／底 ${m.n_bottom??0}）</span>
+      <span class="htag">🧠 合約樣本各幣平均 <b style="color:${sgn(m.smart_avg)}">${m.smart_avg!=null?(m.smart_avg*100).toFixed(0)+'%':'—'}</b></span>
+      <span class="htag">背離 <b>${m.n_div??'—'}</b> 幣（正費率／樣本空 ${m.n_top??0}；負費率／樣本多 ${m.n_bottom??0}）</span>
     </div>
-    <div style="font-weight:700;font-size:13px;color:var(--mut);margin:14px 0 2px">背離最大的幣 · alpha 候選（群眾與大戶反向）</div>
-    <div class="opps">${opps||'<div class="meta">目前沒有明顯的群眾 vs 大戶背離（多數同向）—— 順勢、等背離出現。</div>'}</div>`;
+    <div style="font-weight:700;font-size:13px;color:var(--mut);margin:14px 0 2px">分歧較大的幣（依指標差距排序）</div>
+    <div class="opps">${opps||'<div class="meta">目前沒有符合門檻的分歧；缺資料的幣不列入。</div>'}</div>`;
 }
 async function loadMacro(){
   try{
@@ -535,15 +536,15 @@ async function loadRadar(){
       apiJSON('/radar'),
       apiJSON('/radar_history').then(x=>x.history||[]).catch(()=>[])]);
     const m=r.market||{}, coins=r.coins||[];
-    const vcol=m.diverging?(m.verdict.includes('看多')||m.verdict.includes('底部')?'#3fb950':'#f85149'):'#d29922';
+    const vcol='#d29922';
     const rows=coins.map(c=>{
-      const bcol=c.bias==='看多'?'#3fb950':'#f85149';
+      const bcol='#d29922';
       return `<div class="sig"><div class="sigtitle"><span class="symc">${c.symbol}</span>
         <span class="chip" style="background:${bcol}22;color:${bcol}">${c.type}·${c.bias}</span></div>
-        <div class="calc">群眾(費率) <b style="color:${c.crowd>0?'#3fb950':'#f85149'}">${(c.crowd*100).toFixed(0)}%</b>
+        <div class="calc">費率指標 <b style="color:${c.crowd>0?'#3fb950':'#f85149'}">${(c.crowd*100).toFixed(0)}%</b>
           ⟷ 聰明錢 <b style="color:${c.smart>0?'#3fb950':'#f85149'}">${(c.smart*100).toFixed(0)}%</b>
           ${c.whale!=null?`｜鯨魚 ${(c.whale*100).toFixed(0)}%`:''} ｜ 分歧強度 ${c.score}</div></div>`;
-    }).join('') || '<div class="meta">目前沒有明顯的群眾 vs 大戶背離（多數同向）。</div>';
+    }).join('') || '<div class="meta">目前沒有符合門檻的分歧；缺資料的幣不列入。</div>';
     // 時間軸：背離量 gap 逐輪變化，趨 0=收斂=反轉接近
     let tl='', conv=null;
     const cut=Date.now()/1000-24*3600;
@@ -557,21 +558,21 @@ async function loadRadar(){
       const rA=am(recent), pA=am(prev||[]);
       conv = prev.length? (rA<pA-0.03?{t:'背離幅度縮小；不能單憑收斂確認價格反轉',c:'#3fb950'}
                     : rA>pA+0.03?{t:'背離幅度擴大；情緒與合約方向差距增加',c:'#d29922'}
-                    : {t:'背離持平 → 僵持，等收斂訊號',c:'#8b949e'}) : null;
+                    : {t:'背離幅度大致持平；無法據此判定進場時機',c:'#8b949e'}) : null;
       const lastN=use[use.length-1];
       const span=spanLabel(Date.parse(use[0].ts)/1000, Date.parse(lastN.ts)/1000);
       tl=`<div class="sec">背離時間軸 <small>${span}｜gap=群眾−聰明錢；線趨近 0 表示指標差距縮小，不代表價格必然反轉</small></div>
-        <div class="meta">最新背離量 <b>${(lastN.gap>=0?'+':'')+lastN.gap}</b>｜背離幣數 <b>${lastN.n_div}</b>（頂 ${lastN.n_top}／底 ${lastN.n_bottom}）${conv?`<br><b style="color:${conv.c}">${conv.t}</b>`:''}</div>
+        <div class="meta">最新背離量 <b>${(lastN.gap>=0?'+':'')+lastN.gap}</b>｜背離幣數 <b>${lastN.n_div}</b>（正費率／樣本空 ${lastN.n_top}；負費率／樣本多 ${lastN.n_bottom}）${conv?`<br><b style="color:${conv.c}">${conv.t}</b>`:''}</div>
         ${lineChart(pts,{color:'#d29922',includeZero:true,tip:p=>'背離量 '+(p.v>=0?'+':'')+(+p.v).toFixed(2)})}`;
     } else {
       tl=`<div class="sec">背離時間軸</div><div class="meta">每 20 分鐘記一筆，最近連續有效 ${validTail.length} 筆，至少 2 筆才畫線；缺資料不當成零。</div>`;
     }
     document.getElementById('radar').innerHTML=`<div class="box" style="border-color:${vcol}">
-      <h2>🎯 分歧雷達 <small>群眾(情緒·資金費率) vs 大戶(聰明錢·鯨魚) 反向＝alpha</small></h2>
+      <h2>🎯 分歧雷達 <small>情緒／費率與追蹤合約樣本分開觀察</small></h2>
       <div style="font-size:16px;font-weight:700;color:${vcol};margin:4px 0 8px">${m.verdict||'—'}</div>
-      <div class="meta">市場層級：恐懼貪婪 <b>${m.fear_greed??'—'}</b>（${m.fg_label||''}，歷史第 ${m.fg_percentile??'—'} 百分位）= 群眾<b>${m.crowd_dir||''}</b>　⟷　聰明錢整體 <b>${m.smart_avg!=null?(m.smart_avg*100).toFixed(0)+'%':'—'}</b>（${m.smart_dir||''}）</div>
+      <div class="meta">市場層級：恐懼貪婪 <b>${m.fear_greed??'—'}</b>（${m.fg_label||''}，歷史第 ${m.fg_percentile??'—'} 百分位）= 群眾<b>${m.crowd_dir||''}</b>　⟷　合約樣本各幣平均 <b>${m.smart_avg!=null?(m.smart_avg*100).toFixed(0)+'%':'—'}</b>（${m.smart_dir||''}）</div>
       ${tl}
-      <div class="sec">背離最大的幣（alpha 候選）</div>
+      <div class="sec">分歧較大的幣（依指標差距排序）</div>
       ${rows}</div>`;
     renderHero(m, coins, conv);
     setSum('sum-radar', `<b style="color:${vcol}">${(m.verdict||'').slice(0,18)}</b> ｜ 恐懼貪婪 ${m.fear_greed??'—'} ⟷ 聰明錢 ${m.smart_avg!=null?(m.smart_avg*100).toFixed(0)+'%':'—'} ｜ 背離 ${m.n_div??'—'} 幣`);

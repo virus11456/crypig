@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from ..radar_presentation import describe_radar, convergence_note
 import logging
 import math
 import secrets
@@ -538,20 +539,14 @@ def _build_vault_data(orc) -> dict:
         pass
 
     # 分歧雷達結論＋收斂判讀（寫進 Journal）
-    radar = orc.radar or {}
+    radar = describe_radar(orc.radar)
     sa = (radar.get("market") or {}).get("smart_avg")
     if sa is not None:
         overall["sm_net_pct"] = f"{sa*100:+.0f}%"
     radar_conv = None
     try:
         rh = orc.pos_series.radar_history(limit=400)
-        if len(rh) >= 4:
-            k = min(5, len(rh) // 2)
-            am = lambda a: (sum(abs(x["gap"] or 0) for x in a) / len(a)) if a else 0
-            rA, pA = am(rh[-k:]), am(rh[-2 * k:-k])
-            radar_conv = ("背離收斂中 → 群眾向聰明錢靠攏，接近反轉/進場時機" if rA < pA - 0.03
-                          else "背離擴大中 → 分歧加劇，反轉時機未到" if rA > pA + 0.03
-                          else "背離持平 → 僵持，等收斂訊號")
+        radar_conv = convergence_note(rh)
     except Exception:
         pass
 
@@ -592,13 +587,13 @@ def radar() -> dict:
     """分歧雷達：群眾(情緒/費率) vs 大戶(聰明錢/鯨魚) 反向 = alpha。"""
     orc = dashboard_state()
     if orc.config.use_mock:
-        return {"market": {"fear_greed": 30, "fg_label": "Fear", "fg_percentile": 20,
+        return describe_radar({"market": {"crowd_m": -0.4, "fear_greed": 30, "fg_label": "Fear", "fg_percentile": 20,
                            "smart_avg": -0.3, "crowd_dir": "恐懼偏空", "smart_dir": "偏空",
                            "verdict": "群眾與聰明錢同向（恐懼偏空＋聰明錢偏空）→ 順勢偏空", "diverging": False},
                 "coins": [{"symbol": "DEMO", "crowd": 0.6, "smart": -0.4, "whale": -0.3,
-                           "funding_ann": 0.3, "type": "頂部反指標", "bias": "看空", "score": 1.0}]}
+                           "funding_ann": 0.3, "type": "頂部反指標", "bias": "看空", "score": 1.0}]})
     require_snapshot(orc.radar)
-    return orc.radar
+    return describe_radar(orc.radar)
 
 
 @app.get("/radar_history")

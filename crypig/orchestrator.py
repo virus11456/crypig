@@ -376,7 +376,8 @@ class Orchestrator:
         else:
             market["verdict"] = "未達市場背離門檻；情緒與合約部位不代表現貨買賣"
             market["diverging"] = False
-        return {"market": market, "coins": coins[:20]}
+        from .radar_presentation import describe_radar
+        return describe_radar({"market": market, "coins": coins[:20]})
 
     def _refresh_market_data(self) -> None:
         """每輪(背景)抓一次 CoinGecko：全市場宏觀、各幣市值、跨所聚合 OI。

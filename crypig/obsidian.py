@@ -93,7 +93,7 @@ def _write_journal(root: Path, data: dict) -> None:
     def conv(g):
         if not g or not g.get("total"):
             return "無資料"
-        return (f"多 {g.get('long')} / 空 {g.get('short')} / 觀望 {g.get('flat')}"
+        return (f"多 {g.get('long')} / 空 {g.get('short')} / 淨額為零 {g.get('flat')}"
                 f"，表態空佔 {('%.0f%%' % (g['short_pct']*100)) if g.get('short_pct') is not None else '—'}"
                 f"，槓桿中位 {g.get('lev_median')}x")
 
@@ -110,17 +110,18 @@ def _write_journal(root: Path, data: dict) -> None:
                   f"- 群眾(恐懼貪婪 {rm.get('fear_greed', '—')}/{rm.get('fg_label', '')}) "
                   f"⟷ 聰明錢整體 {('%+.0f%%' % (rm['smart_avg']*100)) if rm.get('smart_avg') is not None else '—'}"
                   f"｜背離量 gap {('%+.2f' % rm['gap']) if rm.get('gap') is not None else '—'}"
-                  f"（背離幣 {rm.get('n_div', 0)}：頂 {rm.get('n_top', 0)}／底 {rm.get('n_bottom', 0)}）"]
+                  f"（背離幣 {rm.get('n_div', 0)}：正費率／樣本空 {rm.get('n_top', 0)}；負費率／樣本多 {rm.get('n_bottom', 0)}）"]
         if data.get("radar_conv"):
             lines.append(f"- ⏱ 時間軸：**{data['radar_conv']}**")
         rc = radar.get("coins") or []
         if rc:
-            lines.append("- Alpha 候選（背離最大）：")
+            lines.append("- 分歧較大的幣（依指標差距排序）：")
             for c in rc[:8]:
                 lines.append(f"    - [[Coins/{c['symbol']}]] {c.get('type', '')}·{c.get('bias', '')}"
                              f"（群眾 {('%+.0f%%' % (c['crowd']*100)) if c.get('crowd') is not None else '—'}"
                              f" ⟷ 聰明錢 {('%+.0f%%' % (c['smart']*100)) if c.get('smart') is not None else '—'}"
                              f"，強度 {c.get('score')}）")
+        lines.append(radar.get("interpretation", "分歧不確認價格頂底或現貨成交。"))
         lines.append("")
     if ov:
         lines += ["## 全市場傾向",

@@ -210,3 +210,11 @@ test('zero net distinguishes offset holdings and unavailable legacy detail',()=>
  const text=h.run("posRow('sample','',g,'gray')");assert.match(text,/無持倉 1/);assert.match(text,/有持倉淨額為零 1/);
  delete h.ctx.g.no_positions;assert.match(h.run("posRow('sample','',g,'gray')"),/持倉狀態未細分/);
 });
+test('radar presents observed disagreement without promising tops or bottoms',async()=>{
+ const h=setup(async url=>response(fixture(url)));
+ await h.run('loadRadar()');
+ const html=h.elements.get('opp').innerHTML;
+ assert.match(html,/費率百分比為縮放指標/);
+ assert.doesNotMatch(html,/反向＝alpha|現在有沒有進場機會|alpha 候選/);
+ assert.match(html,/正費率／樣本空/);
+});

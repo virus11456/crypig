@@ -648,3 +648,16 @@ def test_lth_supply_does_not_vote_as_trade(tmp_path):
         assert obs.direction=='neutral' and obs.magnitude==0
         assert obs.status=='informational' and not obs.relations
         assert '151' not in obs.summary
+
+
+def test_radar_describes_observations_and_relabels_restored_snapshot():
+    from crypig.radar_presentation import describe_radar, convergence_note
+    old={'market': {'crowd_m': .4, 'smart_avg': -.5, 'verdict': '頂部反指標'}, 'coins': [{'crowd': .4, 'smart': -.5, 'type':'頂部反指標', 'bias':'看空'}]}
+    new=describe_radar(old)
+    assert new['coins'][0]['type']=='正費率／樣本淨空'
+    assert new['coins'][0]['bias']=='方向分歧'
+    assert '指標方向相反' in new['market']['verdict']
+    assert old['market']['verdict']=='頂部反指標'
+    assert '資料不足' in describe_radar({})['market']['verdict']
+    assert convergence_note([{'gap': 1}, {'gap': 1}, {'gap': None}, {'gap': .1}, {'gap': .1}]) is None
+    assert '縮小' in convergence_note([{'gap': v} for v in [1,1,.1,.1]])
