@@ -293,3 +293,16 @@ def test_macro_does_not_divide_mixed_underlying_oi_by_crypto_cap():
         assert result['open_interest']==50 and result['oi_cap'] is None
         assert '非加密' in result['oi_coverage']
     finally:c.close()
+
+
+def test_new_oi_coverage_does_not_compare_against_legacy_totals():
+    from crypig.agents.whale import WhaleAgent
+    agent=object.__new__(WhaleAgent)
+    agent._client=SimpleNamespace(aggregate_derivatives=lambda:{'ETH':{'open_interest_usd':100,'contracts':2,'funding_rate_med':0}})
+    agent._store=Mock()
+    agent._store.latest.return_value=None
+    raw=agent._fetch_market('ETH')
+    agent._store.latest.assert_called_once_with(agent.name,'ETH','open_interest_usd_perpetual_v1')
+    assert raw['prev_open_interest_usd'] is None
+    agent._analyze_market('ETH',raw)
+    assert agent._store.record.call_args.args[2]=='open_interest_usd_perpetual_v1'

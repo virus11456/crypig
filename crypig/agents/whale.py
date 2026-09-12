@@ -77,8 +77,9 @@ class WhaleAgent(Agent):
             self._client = MarketDataClient()
         agg = self._client.aggregate_derivatives().get(symbol, {})
         oi = agg.get("open_interest_usd", 0.0)
-        prev_oi = self._store.latest(self.name, symbol, "open_interest_usd")
-        return {"mode": "market", "open_interest_usd": oi,
+        metric = "open_interest_usd_perpetual_v1"
+        prev_oi = self._store.latest(self.name, symbol, metric)
+        return {"mode": "market", "open_interest_usd": oi, "oi_metric": metric,
                 "funding_rate_avg": agg.get("funding_rate_med", 0.0),
                 "contracts": agg.get("contracts", 0),
                 "prev_open_interest_usd": prev_oi[1] if prev_oi else None}
@@ -135,7 +136,7 @@ class WhaleAgent(Agent):
         prev_oi = raw.get("prev_open_interest_usd")
 
         ts = datetime.now(timezone.utc).isoformat()
-        self._store.record(self.name, symbol, "open_interest_usd", oi, ts)
+        self._store.record(self.name, symbol, raw.get("oi_metric", "open_interest_usd"), oi, ts)
 
         if funding_ann > 0.05:
             f_dir, f_note = "bear", f"多單擁擠（年化資金費率 {funding_ann:+.1%}）"
@@ -148,11 +149,11 @@ class WhaleAgent(Agent):
         if prev_oi:
             oi_chg = (oi - prev_oi) / prev_oi if prev_oi else 0.0
             if oi_chg > 0.02:
-                oi_dir, oi_note = "bear", f"全市場持倉量增 {oi_chg:+.1%}（槓桿增加，留意賣壓）"
+                oi_dir, oi_note = "bear", f"覆蓋合約持倉量增 {oi_chg:+.1%}（槓桿增加，留意賣壓）"
             elif oi_chg < -0.02:
-                oi_dir, oi_note = "neutral", f"全市場持倉量減 {oi_chg:+.1%}（去槓桿/平倉）"
+                oi_dir, oi_note = "neutral", f"覆蓋合約持倉量減 {oi_chg:+.1%}（去槓桿/平倉）"
             else:
-                oi_note = f"全市場持倉量變化 {oi_chg:+.1%}（平穩）"
+                oi_note = f"覆蓋合約持倉量變化 {oi_chg:+.1%}（平穩）"
 
         scores = {"bull": 0, "bear": 0, "neutral": 0}
         scores[f_dir] += 1
@@ -162,7 +163,7 @@ class WhaleAgent(Agent):
             direction = "neutral"
         magnitude = min(abs(funding_ann) / 0.3 + 0.2, 1.0) if direction != "neutral" else 0.1
 
-        summary = (f"{symbol} 全市場持倉(聚合{contracts}合約)：{oi_note}；{f_note}。"
+        summary = (f"{symbol} 覆蓋持倉(聚合{contracts}合約)：{oi_note}；{f_note}。"
                    f"OI=${oi/1e9:,.1f}B。")
         return Observation(
             source=self.name, symbol=symbol, signal_type="market_positioning",
