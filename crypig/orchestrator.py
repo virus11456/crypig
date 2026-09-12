@@ -1,6 +1,7 @@
 """協調中台：跑所有 agent → 餵知識圖譜 → 算綜合評分。"""
 from __future__ import annotations
 
+from pathlib import Path
 import logging
 import threading
 import time
@@ -14,6 +15,7 @@ from .kg import SelfLearningRAG
 from .storage.models import Observation
 from .storage.decisions import DecisionStore
 from .storage.pos_series import PosSeriesStore
+from .storage.quotes import QuoteStore
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,7 @@ class Orchestrator:
         self.rag = SelfLearningRAG(self.config)
         self.decisions = DecisionStore(self.config.decisions_db)
         self.pos_series = PosSeriesStore(self.config.posseries_db)
+        self.quotes = QuoteStore(Path(self.config.decisions_db).parent / "market_quotes.json")
         self.all_scores: dict[str, dict] = {}   # 全市場各幣輕量決策(聰明錢+資金費率)
         self.radar: dict = {}                   # 分歧雷達：群眾(情緒/費率) vs 大戶(聰明錢/鯨魚)
         self._prev_pos: dict[str, dict] = {}    # 上一輪各幣 聰明錢/鯨魚 淨多空(算20分鐘變化)
@@ -81,7 +84,8 @@ class Orchestrator:
             self._cycle_lock.release()
 
     def cycle_status(self) -> dict:
-        return {"refreshing": self._cycle_lock.locked(),
+        return {"quotes": self.quotes.read()[1],
+                "refreshing": self._cycle_lock.locked(),
                 "started_at": self._cycle_started_at,
                 "last_success_at": self._cycle_finished_at,
                 "duration_seconds": self._cycle_duration,

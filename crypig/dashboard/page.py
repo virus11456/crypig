@@ -952,6 +952,7 @@ function renderWhaleChart(){
   setSum('sum-whale', `${wc.t.replace(/<[^>]+>/g,'')}`.slice(0,40));
 }
 
+let QUOTE_META=null;
 let REFRESH_TASK=null, TABLE_STATE={decisions:[],hlcoins:[],scores:{}}, TABLE_ERRORS=new Set();
 function renderMarketState(){
   const {decisions,hlcoins,scores}=TABLE_STATE;
@@ -962,7 +963,9 @@ function renderMarketState(){
     open_interest:c.open_interest_usd, oi_source:c.open_interest_source, premium:c.premium,
     market_cap:c.market_cap, oi_cap:c.oi_cap, vol_cap:c.vol_cap});
   Object.entries(scores).forEach(([s,v])=>{ const r=bySym[s]||(bySym[s]={symbol:s});
-    Object.assign(r, v); r.score_source='市場掃描'; });   // label/score/confidence/divergence/sm_net/whale_net/…
+    const {funding_ann, ...signals}=v;
+    Object.assign(r, signals); if(r.funding_ann==null)r.funding_ann=funding_ann;
+    r.score_source='市場掃描'; });   // label/score/confidence/divergence/sm_net/whale_net/…
   decisions.forEach(d=>{ const r=bySym[d.symbol]||(bySym[d.symbol]={symbol:d.symbol});
     r.score_source='綜合決策'; r.label=d.label; r.score=d.score; r.confidence=d.confidence; if(r.price==null)r.price=d.price; });
   MROWS=Object.values(bySym);
@@ -984,6 +987,7 @@ function refresh(){
         const data=await apiJSON(url);
         if(!valid(data[field])) throw new Error('資料格式不符');
         TABLE_STATE[key]=data[field]; TABLE_ERRORS.delete(key);
+        if(key==='hlcoins') QUOTE_META=data.meta?.quotes||null;
         if(key==='decisions'){
           const times=data[field].map(d=>Date.parse(d.ts)).filter(Number.isFinite);
           LASTUP=times.length?Math.min(...times):0;
@@ -1000,12 +1004,13 @@ function refresh(){
 let LASTUP=0;
 function renderLastUp(){
   const el=document.getElementById('ts'); if(!el) return;
-  if(!LASTUP){ el.textContent='決策資料時間未知'; return; }
-  const sec=Math.max(0,Math.round((Date.now()-LASTUP)/1000));
-  const ago = sec<60 ? sec+' 秒前'
-            : sec<3600 ? Math.floor(sec/60)+' 分前'
-            : Math.floor(sec/3600)+' 小時前';
-  el.textContent=(TABLE_ERRORS.size?'部分資料更新失敗｜':'')+'決策資料時間：'+new Date(LASTUP).toLocaleTimeString()+'（'+ago+'）';
+  const age=ts=>{const sec=Math.max(0,Math.round((Date.now()-ts)/1000));
+    return sec<60?sec+' 秒前':sec<3600?Math.floor(sec/60)+' 分前':Math.floor(sec/3600)+' 小時前';};
+  const quoteTs=QUOTE_META?.fetched_at*1000;
+  const stale=quoteTs && (Date.now()-quoteTs>180000 || QUOTE_META.refresh_failed);
+  const quotes=quoteTs?'行情取得：'+new Date(quoteTs).toLocaleTimeString()+'（'+age(quoteTs)+'）'+(stale?' ⚠ 行情延遲':''):'行情取得時間未知';
+  const decisions=LASTUP?'分析資料：'+new Date(LASTUP).toLocaleTimeString()+'（'+age(LASTUP)+'）':'分析資料準備中';
+  el.textContent=(TABLE_ERRORS.size?'部分資料更新失敗｜':'')+quotes+'｜'+decisions;
 }
 // ---- 頁2：策略 / Obsidian ----
 let STRATLOADED=false;

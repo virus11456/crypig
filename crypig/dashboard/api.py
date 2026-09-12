@@ -51,6 +51,12 @@ def _safe_cycle() -> None:
         logger.exception("背景排程跑一輪失敗")
 
 
+def _safe_quotes() -> None:
+    orc = orchestrator()
+    if not orc.config.use_mock:
+        orc.quotes.refresh()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """部署時的背景排程：每隔 CRYPIG_INTERVAL_MIN 分鐘自動跑一輪，
@@ -69,6 +75,9 @@ async def lifespan(app: FastAPI):
         _sched.add_job(_safe_cycle, id="warmup",
                        next_run_time=datetime.now() + timedelta(seconds=warmup_delay))
         _sched.add_job(_safe_cycle, "interval", minutes=interval, id="cycle")
+        _sched.add_job(_safe_quotes, "interval", seconds=60, id="quotes",
+                       next_run_time=datetime.now() + timedelta(seconds=5),
+                       max_instances=1, coalesce=True)
         _sched.start()
         logger.info("背景排程啟動，每 %s 分鐘跑一輪（首輪延遲 %ss 暖機）", interval, warmup_delay)
     yield
@@ -691,8 +700,8 @@ def hl_market() -> dict:
     if orc.config.use_mock:
         coins = _mock_hl_scan()
         return {"count": len(coins), "coins": coins}
-    import copy
-    coins = copy.deepcopy(require_snapshot(orc.hl_scan))
+    snapshot, quote_meta = orc.quotes.read()
+    coins = require_snapshot(snapshot)
     tm = orc.market_caps                     # 讀每輪背景快取，不打 CoinGecko
     deriv = orc.deriv_agg
     for c in coins:
@@ -710,7 +719,7 @@ def hl_market() -> dict:
         c["market_cap_source"] = "coingecko_symbol_match" if info else None
         c["open_interest_usd"] = oi
         c["oi_cap"] = (oi / cap) if (cap and oi is not None) else None
-    return {"count": len(coins), "coins": coins, "meta": orc.cycle_status()}
+    return {"count": len(coins), "coins": coins, "meta": {**orc.cycle_status(), "quotes": quote_meta}}
 
 
 @app.post("/ask")

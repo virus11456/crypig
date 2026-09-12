@@ -37,3 +37,16 @@ node --test tests/test_frontend.cjs
 8. Review strategy claims and confidence calibration separately. Arithmetic consistency does not demonstrate predictive accuracy or establish that address cohorts represent independent people.
 
 Dedicated VPS IPs are still rate limited. Hyperliquid documents IP-weighted REST limits and additional candle/response weights; reducing duplicate requests is preferable to indiscriminately increasing concurrency. See the [official limits](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/rate-limits-and-user-limits) and [Info API](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint).
+
+## Phase 2: independent market quotes
+
+Market quotes now refresh every 60 seconds on a separate scheduler job and HTTP
+client. Slow analysis keeps its existing interval. Dashboard reads never fetch
+upstream. Valid quotes are atomically persisted beside the decision database,
+restored after restart, and retained on fetch/validation errors. Fetch time is
+shown separately from analysis time; quotes older than 180 seconds or with a
+failed refresh are marked delayed. Slow score funding cannot overwrite quote
+funding. CoinGecko market-cap identity matching remains a separate follow-up;
+this change does not claim all asset identities are verified.
+
+Validation: 11 Python pipeline tests and 13 JavaScript frontend tests pass.

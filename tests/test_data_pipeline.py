@@ -54,6 +54,7 @@ def client(monkeypatch):
         pos_series=SimpleNamespace(history=lambda *a, **kw: [], radar_history=lambda **kw: []),
         run_cycle=Mock(side_effect=AssertionError("GET triggered collection")),
         cycle_status=lambda: {"refreshing": False})
+    fake.quotes = SimpleNamespace(read=lambda: (__import__('copy').deepcopy(fake.hl_scan), {}))
     monkeypatch.setattr(api, '_orc', fake)
     # Deliberately do not start scheduler or make any upstream calls.
     return TestClient(api.app), fake
@@ -158,3 +159,38 @@ def test_onchain_does_not_treat_missing_band_as_zero(client, monkeypatch):
         {'theDate':'2026-09-03','whaleBtc':'NaN','humpbackBtc':20}]))
     assert api._load_onchain_whale()['history'] == [
         {'date':'2026-09-02','btc':30,'whale':10,'humpback':20,'price':None}]
+
+
+def test_quote_store_retains_valid_snapshot_and_reloads_after_restart(tmp_path):
+    from crypig.storage.quotes import QuoteStore
+    row = dict(symbol='BTC', price=100, open_interest_usd=0, funding_ann=0, premium=0)
+    loader = Mock(return_value=[row])
+    path = tmp_path / 'quotes.json'
+    store = QuoteStore(path, loader)
+    assert store.refresh()
+    coins, meta = store.read()
+    coins[0]['price'] = 999
+    assert store.read()[0][0]['price'] == 100
+    loader.return_value = [{**row, 'price': float('nan')}]
+    assert not store.refresh()
+    assert store.read()[0][0]['price'] == 100
+    assert store.read()[1]['refresh_failed']
+    restored = QuoteStore(path, loader)
+    assert restored.read()[0][0]['price'] == 100
+    assert restored.read()[1]['fetched_at'] == meta['fetched_at']
+    path.write_text('{"coins":["broken"],"fetched_at":1}')
+    assert QuoteStore(path).read()[0] == []
+
+
+def test_quote_refresh_is_nonblocking_and_preserves_timestamp_on_failure(tmp_path):
+    from crypig.storage.quotes import QuoteStore
+    store = QuoteStore(tmp_path / 'quotes.json', Mock(side_effect=RuntimeError('offline')))
+    store._refresh_lock.acquire()
+    try:
+        assert store.refresh() is False
+        assert store.read()[1]['refreshing']
+    finally:
+        store._refresh_lock.release()
+    assert not store.refresh()
+    assert store.read()[1]['fetched_at'] is None
+    assert store.read()[1]['stale']

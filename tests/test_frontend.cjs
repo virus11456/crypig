@@ -102,3 +102,10 @@ test('obsolete line chart tooltip data is released without deleting visible char
  h.ctx.document.getElementById=id=>id==='lc-visible'?{}:null;
  h.run('pruneLineData()');assert.equal(h.run('Object.keys(LINE_DATA).join()'),'visible');
 });
+test('slow score funding cannot overwrite latest quote funding; old quotes are disclosed',()=>{
+ const h=setup();
+ h.run("TABLE_STATE={decisions:[],hlcoins:[{symbol:'BTC',price:100,funding_ann:0.12}],scores:{BTC:{funding_ann:0.99,score:5}}}; QUOTE_META={fetched_at:Date.now()/1000-240}; renderMarketState()");
+ assert.equal(h.run('MROWS[0].funding_ann'),0.12);
+ assert.match(h.elements.get('ts').textContent,/行情延遲/);
+ assert.match(h.elements.get('ts').textContent,/分析資料準備中/);
+});
