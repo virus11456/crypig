@@ -299,6 +299,7 @@ def test_new_oi_coverage_does_not_compare_against_legacy_totals():
     from crypig.agents.whale import WhaleAgent
     agent=object.__new__(WhaleAgent)
     agent._client=SimpleNamespace(aggregate_derivatives=lambda:{'ETH':{'open_interest_usd':100,'contracts':2,'funding_rate_med':0}})
+    agent._hl=SimpleNamespace(funding_scan=lambda:[{'symbol':'ETH','funding_ann':0}])
     agent._store=Mock()
     agent._store.latest.return_value=None
     raw=agent._fetch_market('ETH')
@@ -306,3 +307,71 @@ def test_new_oi_coverage_does_not_compare_against_legacy_totals():
     assert raw['prev_open_interest_usd'] is None
     agent._analyze_market('ETH',raw)
     assert agent._store.record.call_args.args[2]=='open_interest_usd_perpetual_v1'
+
+
+def test_missing_observations_do_not_inflate_coverage_or_trigger_alerts():
+    from crypig.aggregate import aggregate
+    from crypig.storage.models import Observation
+    cfg=SimpleNamespace(analyzers=SimpleNamespace(weights={'good':1,'missing':1}))
+    good=Observation(source='good',symbol='BTC',signal_type='x',direction='bull',magnitude=1)
+    missing=Observation(source='missing',symbol='BTC',signal_type='x',direction='bear',magnitude=1,status='no_data')
+    x=aggregate([good,missing],cfg)['BTC']
+    assert x['confidence']==0.5 and x['score']==1
+    assert x['signals'][1]['weight']==0
+    empty=aggregate([missing],cfg)['BTC']
+    assert empty['label']=='資料不足' and empty['confidence']==0
+    assert empty['action']=='資料不足，等待有效訊號'
+
+
+def test_whale_missing_oi_is_not_saved_as_zero_and_raw_rates_are_not_annualized():
+    from crypig.agents.whale import WhaleAgent
+    agent=object.__new__(WhaleAgent);agent._store=Mock()
+    x=agent._analyze_market('ETH',{'open_interest_usd':None,'funding_ann':.5})
+    assert x.status=='no_data';agent._store.record.assert_not_called()
+    x=agent._analyze_market('ETH',{'open_interest_usd':100,'funding_rate_avg':99,'prev_open_interest_usd':50})
+    assert x.status=='no_data' and x.direction=='neutral' and x.magnitude==0
+    x=agent._analyze_market('ETH',{'open_interest_usd':0,'funding_ann':0,'prev_open_interest_usd':100})
+    assert x.status=='ok' and x.direction=='neutral'
+
+
+def test_whale_uses_explicit_hyperliquid_annual_funding():
+    from crypig.agents.whale import WhaleAgent
+    agent=object.__new__(WhaleAgent)
+    agent._client=SimpleNamespace(aggregate_derivatives=lambda:{'ETH':{'open_interest_usd':100,'funding_rate_med':999}})
+    agent._hl=SimpleNamespace(funding_scan=lambda:[{'symbol':'ETH','funding_ann':-.1}])
+    agent._store=Mock();agent._store.latest.return_value=None
+    raw=agent._fetch_market('ETH')
+    assert raw['funding_ann']==-.1 and raw['funding_source']=='hyperliquid_hourly'
+    assert agent._analyze_market('ETH',raw).direction=='bull'
+
+
+def test_persisted_history_restores_without_upstream_and_preserves_age_on_error(tmp_path):
+    cache=SnapshotCache(directory=tmp_path)
+    loader=Mock(return_value={'history':[{'date':'2026-09-12','value':1}]})
+    try:
+        cache.read('history',loader,3600)
+        wait_until(lambda: not cache.read('history',loader,3600)[1]['refreshing'])
+        original=cache.read('history',loader,3600)
+    finally:cache.close()
+    restored=SnapshotCache(directory=tmp_path)
+    failed=Mock(side_effect=ValueError('offline'))
+    try:
+        data,meta=restored.read('history',failed,3600)
+        assert data==original[0] and meta['updated_at']==original[1]['updated_at']
+        failed.assert_not_called()
+        data,meta=restored.read('history',failed,0)
+        assert data==original[0] and meta['stale']
+        wait_until(lambda: not restored.read('history',failed,0)[1]['refreshing'])
+        assert restored.read('history',failed,0)[1]['updated_at']==original[1]['updated_at']
+    finally:restored.close()
+
+
+def test_manual_collection_cannot_be_triggered_anonymously(client, monkeypatch):
+    c, fake=client
+    monkeypatch.delenv('CRYPIG_ADMIN_TOKEN',raising=False)
+    assert c.post('/cycle').status_code==404
+    monkeypatch.setenv('CRYPIG_ADMIN_TOKEN','test-only-token')
+    assert c.post('/cycle').status_code==401
+    fake.run_cycle.assert_not_called()
+    fake.run_cycle.side_effect=None;fake.run_cycle.return_value={'ok':True}
+    assert c.post('/cycle',headers={'Authorization':'Bearer test-only-token'}).json()=={'ok':True}

@@ -91,3 +91,24 @@ https://docs.coingecko.com/reference/derivatives-tickers
 
 Still requiring audit: settlement intervals for cross-exchange funding-rate
 annualization in legacy agent signals; full identity registry for candidates.
+
+## Phase 5: signal availability, funding provenance and restart recovery
+
+Whale market signals now use explicitly annualized Hyperliquid hourly funding,
+not a blanket eight-hour assumption over cross-exchange rates. Missing OI is
+not stored as zero; missing funding is no_data. OI alone no longer determines
+a directional vote. Aggregate scoring excludes unavailable/warming observations
+from effective weight, coverage, reasons and alerts; all unavailable becomes
+資料不足. Historical decisions remain unchanged.
+
+History caches persist atomically under CRYPIG_DATA_DIR/history_cache and restore
+original timestamps after restart. Expired saved histories remain readable while
+refresh runs. Persistence failures are surfaced separately from upstream errors.
+
+Manual POST /cycle is disabled unless CRYPIG_ADMIN_TOKEN is configured and requires
+a matching Bearer token. The public dashboard does not use this route; scheduled
+collection is unchanged. No new credentials were configured during this work.
+
+Validation: 24 Python and 15 frontend tests, including source availability,
+missing-versus-zero, funding provenance, cache restart and anonymous collection.
+Source: https://hyperliquid.gitbook.io/hyperliquid-docs/trading/funding

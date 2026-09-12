@@ -34,6 +34,8 @@ def _label(score: float, conflict: bool) -> str:
 
 
 def _action(label: str, confidence: float) -> str:
+    if label == "資料不足":
+        return "資料不足，等待有效訊號"
     if label == "訊號分歧":
         return "訊號分歧，建議觀望、等待方向收斂"
     if label == "中性":
@@ -58,7 +60,7 @@ def aggregate(observations: list[Observation], config: Config) -> dict:
         contribs, alerts = [], []
 
         for o in obs:
-            w = weights.get(o.source, 0.0)
+            w = weights.get(o.source, 0.0) if getattr(o, "status", "ok") == "ok" else 0.0
             sign = _SIGN[o.direction]
             score += w * sign * o.magnitude
             wsum += w
@@ -79,7 +81,7 @@ def aggregate(observations: list[Observation], config: Config) -> dict:
                 "summary": o.summary,
             })
             # 劇烈變動提示（強訊號才提示，門檻 magnitude≥0.5）
-            if o.direction != "neutral" and o.magnitude >= 0.5:
+            if w > 0 and o.direction != "neutral" and o.magnitude >= 0.5:
                 alerts.append(f"{o.source}：{o.summary}")
 
         norm = score / wsum if wsum else 0.0        # -1 ~ +1
@@ -100,11 +102,11 @@ def aggregate(observations: list[Observation], config: Config) -> dict:
             and min(bull_w, bear_w) / max(bull_w, bear_w) > 0.6
             and abs(norm) < 0.15
         )
-        label = _label(norm, conflict)
+        label = _label(norm, conflict) if wsum else "資料不足"
 
         # 理由：點名貢獻最大的 1~2 個非中性訊號
         movers = sorted(
-            (c for c in contribs if c["direction"] != "neutral"),
+            (c for c in contribs if c["direction"] != "neutral" and c["weight"] > 0),
             key=lambda c: abs(c["contribution"]), reverse=True,
         )
         if movers:

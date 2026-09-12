@@ -16,7 +16,7 @@ from collections import defaultdict
 
 import httpx
 
-_FUNDING_PER_YEAR = 3 * 365   # CoinGecko funding 為 %/8h → 一年 3*365 期
+
 
 # 通用 timeframe -> 各交易所 bar 代碼
 _OKX_BAR = {
@@ -51,7 +51,7 @@ class MarketDataClient:
 
         回傳 {base: {open_interest_usd, funding_rate_med, contracts}}。
         funding_rate_med 取各所中位數（避免小交易所離群值拉歪），
-        單位百分比/8h（CoinGecko 原始單位）。
+        原始費率不假設結算週期，不可直接跨所統一年化。
         """
         if self._deriv_cache is not None and time.time() - self._deriv_ts < ttl:
             return self._deriv_cache
@@ -230,14 +230,14 @@ class MarketDataClient:
             vol = float(m.get("total_volume") or 0.0)
             d = deriv.get(s, {})
             oi = float(d.get("open_interest_usd") or 0.0)
-            # CoinGecko funding 為 %/8h → 年化小數
-            fund_ann = float(d.get("funding_rate_med") or 0.0) / 100 * _FUNDING_PER_YEAR
+            fund_ann = None  # settlement intervals are not provided by this endpoint
             out[s] = {
                 "market_cap": cap, "volume_24h": vol, "open_interest": oi,
                 "oi_cap": (oi / cap) if (oi and cap) else None,
                 "vol_cap": (vol / cap) if cap else None,
                 "funding_ann": fund_ann,
-                "funding_flag": self._funding_flag(fund_ann),
+                "funding_flag": None,
+                "funding_note": "結算週期未知，不進行年化換算",
             }
         if out:                              # 只快取成功結果（空的就讓下次重試）
             self._coin_cache, self._coin_key, self._coin_ts = out, key, time.time()

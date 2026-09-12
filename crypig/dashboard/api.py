@@ -11,13 +11,15 @@
 """
 from __future__ import annotations
 
+from pathlib import Path
 import logging
 import math
+import secrets
 import time
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Header
 from fastapi.middleware.gzip import GZipMiddleware
 from threading import Lock
 from .cache import SnapshotCache
@@ -34,7 +36,8 @@ _orc: Orchestrator | None = None
 _last: dict | None = None
 _sched = None
 _orc_lock = Lock()
-_history_cache = SnapshotCache()
+_history_cache = SnapshotCache(directory=Path(os.environ["CRYPIG_DATA_DIR"]) / "history_cache"
+                               if os.getenv("CRYPIG_DATA_DIR") else None)
 
 
 def orchestrator() -> Orchestrator:
@@ -175,7 +178,12 @@ def index() -> HTMLResponse:
 
 
 @app.post("/cycle")
-def run_cycle() -> dict:
+def run_cycle(authorization: str | None = Header(default=None)) -> dict:
+    token = os.getenv("CRYPIG_ADMIN_TOKEN")
+    if not token:
+        raise HTTPException(status_code=404, detail="Manual collection is disabled")
+    if not authorization or not secrets.compare_digest(authorization.encode(), ("Bearer " + token).encode()):
+        raise HTTPException(status_code=401, detail="Unauthorized")
     global _last
     _last = orchestrator().run_cycle()
     return _last

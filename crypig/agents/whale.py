@@ -11,17 +11,20 @@
 """
 from __future__ import annotations
 
+import math
 import random
 import time
 from datetime import datetime, timezone
 
 from .base import Agent
 from ..clients.market_data import MarketDataClient
+from ..clients.hyperliquid import HyperliquidClient
 from ..clients.bitcoin_data import BitcoinDataClient, RateLimited
 from ..storage.models import Observation
 from ..storage.snapshots import SnapshotStore
 
-_FUNDING_PERIODS_PER_YEAR = 3 * 365   # CoinGecko funding 為 %/8h
+def valid_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
 class WhaleAgent(Agent):
@@ -31,6 +34,7 @@ class WhaleAgent(Agent):
         super().__init__(config)
         self._client: MarketDataClient | None = None
         self._btc: BitcoinDataClient | None = None
+        self._hl = None
         self._store = SnapshotStore(config.snapshot_db)
 
     # ---------- fetch ----------
@@ -52,7 +56,7 @@ class WhaleAgent(Agent):
         rng = random.Random(f"{symbol}-whale-{int(time.time()/600)}")
         oi = rng.uniform(1e9, 6e10)
         return {"mode": "market", "open_interest_usd": oi,
-                "funding_rate_avg": rng.uniform(-0.3, 0.3),
+                "funding_ann": rng.uniform(-0.3, 0.3), "funding_source": "mock",
                 "contracts": rng.randint(80, 200),
                 "prev_open_interest_usd": oi * rng.uniform(0.9, 1.1)}
 
@@ -76,11 +80,21 @@ class WhaleAgent(Agent):
         if self._client is None:
             self._client = MarketDataClient()
         agg = self._client.aggregate_derivatives().get(symbol, {})
-        oi = agg.get("open_interest_usd", 0.0)
+        oi = agg.get("open_interest_usd")
+        funding_ann = None
+        if valid_number(oi) and oi >= 0:
+            try:
+                if self._hl is None:
+                    self._hl = HyperliquidClient()
+                quote = next((r for r in self._hl.funding_scan() if r["symbol"] == symbol), {})
+                value = quote.get("funding_ann")
+                funding_ann = value if valid_number(value) else None
+            except Exception:
+                pass
         metric = "open_interest_usd_perpetual_v1"
         prev_oi = self._store.latest(self.name, symbol, metric)
         return {"mode": "market", "open_interest_usd": oi, "oi_metric": metric,
-                "funding_rate_avg": agg.get("funding_rate_med", 0.0),
+                "funding_ann": funding_ann, "funding_source": "hyperliquid_hourly" if funding_ann is not None else None,
                 "contracts": agg.get("contracts", 0),
                 "prev_open_interest_usd": prev_oi[1] if prev_oi else None}
 
@@ -129,45 +143,32 @@ class WhaleAgent(Agent):
             raw=raw)
 
     def _analyze_market(self, symbol: str, raw: dict) -> Observation:
-        oi = raw["open_interest_usd"]
-        funding = raw["funding_rate_avg"]
-        funding_ann = funding / 100 * _FUNDING_PERIODS_PER_YEAR
-        contracts = raw.get("contracts", 0)
+        oi = raw.get("open_interest_usd")
+        if not valid_number(oi) or oi < 0:
+            return Observation(source=self.name, symbol=symbol, signal_type="market_positioning",
+                               status="no_data", magnitude=0, summary=f"{symbol} 持倉資料未取得，不計入評分。", raw=raw)
+        funding_ann = raw.get("funding_ann")
+        if not valid_number(funding_ann):
+            funding_ann = None
         prev_oi = raw.get("prev_open_interest_usd")
-
-        ts = datetime.now(timezone.utc).isoformat()
-        self._store.record(self.name, symbol, raw.get("oi_metric", "open_interest_usd"), oi, ts)
-
-        if funding_ann > 0.05:
-            f_dir, f_note = "bear", f"多單擁擠（年化資金費率 {funding_ann:+.1%}）"
+        self._store.record(self.name, symbol, raw.get("oi_metric", "open_interest_usd"), oi,
+                           datetime.now(timezone.utc).isoformat())
+        direction, magnitude = "neutral", 0.0
+        if funding_ann is None:
+            f_note = "資金費率未取得，不計入方向評分"
+        elif funding_ann > 0.05:
+            direction, f_note = "bear", f"Hyperliquid 費率偏正（年化 {funding_ann:+.1%}）"
         elif funding_ann < -0.05:
-            f_dir, f_note = "bull", f"空單擁擠，潛在軋空（年化資金費率 {funding_ann:+.1%}）"
+            direction, f_note = "bull", f"Hyperliquid 費率偏負（年化 {funding_ann:+.1%}）"
         else:
-            f_dir, f_note = "neutral", f"資金費率中性（年化 {funding_ann:+.1%}）"
-
-        oi_dir, oi_note = "neutral", "（無前一輪快照，持倉變化待累積）"
-        if prev_oi:
-            oi_chg = (oi - prev_oi) / prev_oi if prev_oi else 0.0
-            if oi_chg > 0.02:
-                oi_dir, oi_note = "bear", f"覆蓋合約持倉量增 {oi_chg:+.1%}（槓桿增加，留意賣壓）"
-            elif oi_chg < -0.02:
-                oi_dir, oi_note = "neutral", f"覆蓋合約持倉量減 {oi_chg:+.1%}（去槓桿/平倉）"
-            else:
-                oi_note = f"覆蓋合約持倉量變化 {oi_chg:+.1%}（平穩）"
-
-        scores = {"bull": 0, "bear": 0, "neutral": 0}
-        scores[f_dir] += 1
-        scores[oi_dir] += 1
-        direction = max(scores, key=scores.get)
-        if scores["bull"] == scores["bear"]:
-            direction = "neutral"
-        magnitude = min(abs(funding_ann) / 0.3 + 0.2, 1.0) if direction != "neutral" else 0.1
-
-        summary = (f"{symbol} 覆蓋持倉(聚合{contracts}合約)：{oi_note}；{f_note}。"
-                   f"OI=${oi/1e9:,.1f}B。")
-        return Observation(
-            source=self.name, symbol=symbol, signal_type="market_positioning",
-            direction=direction, magnitude=magnitude, summary=summary,
-            entities=[("asset", symbol), ("metric", "open_interest"), ("metric", "funding")],
-            relations=[("market", f"is_{direction}_positioned_on", symbol)]
-            if direction != "neutral" else [], raw=raw)
+            f_note = f"Hyperliquid 資金費率中性（年化 {funding_ann:+.1%}）"
+        if direction != "neutral":
+            magnitude = min(abs(funding_ann) / 0.3 + 0.2, 1.0)
+        oi_note = "比較基準待累積"
+        if valid_number(prev_oi) and prev_oi > 0:
+            oi_note = f"名目持倉變化 {(oi-prev_oi)/prev_oi:+.1%}（含價格與樣本變化，不能單獨判定買賣方向）"
+        summary = f"{symbol} 覆蓋 {raw.get('contracts', 0)} 個合約，OI=${oi/1e9:,.2f}B；{oi_note}；{f_note}。"
+        return Observation(source=self.name, symbol=symbol, signal_type="market_positioning",
+                           direction=direction, magnitude=magnitude,
+                           status="ok" if funding_ann is not None else "no_data",
+                           summary=summary, entities=[("asset", symbol), ("metric", "open_interest")], raw=raw)
