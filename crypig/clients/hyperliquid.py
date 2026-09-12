@@ -52,6 +52,7 @@ class HyperliquidClient:
         self._state_cache: dict[str, tuple[float, dict]] = {}
         self._mc_cache: tuple[float, dict] | None = None
         self._mc_ttl = 120.0
+        self._daily_cache: dict = {}
 
     def close(self) -> None:
         self._client.close()
@@ -309,19 +310,37 @@ class HyperliquidClient:
         """
         now = int(time.time() * 1000)
         start = now - days * 24 * 3600 * 1000
+        day = now // 86400000
+        # Only completed UTC daily candles: shared by scans within the same day.
+        # Evict the previous day so memory stays bounded as the symbol universe changes.
+        self._daily_cache = {k: v for k, v in self._daily_cache.items() if k[2] == day}
 
         def fetch(coin: str):
+            key = (coin, days, day)
+            if key in self._daily_cache:
+                return coin, self._daily_cache[key]
             try:
                 r = self._client.post(INFO_URL, json={
                     "type": "candleSnapshot",
                     "req": {"coin": coin, "interval": "1d",
                             "startTime": start, "endTime": now}})
+                r.raise_for_status()
                 data = r.json()
                 if not isinstance(data, list):
                     return coin, None
-                closes = [float(c["c"]) for c in data]
-                vols = [float(c["v"]) for c in data]
-                return coin, (closes, vols)
+                import math
+                candles = {}
+                for c in data:
+                    t = int(c["t"])
+                    close, volume = float(c["c"]), float(c["v"])
+                    if t + 86400000 <= now and t >= start and close > 0 and volume >= 0 and math.isfinite(close) and math.isfinite(volume):
+                        candles[t] = (close, volume)
+                times = sorted(candles)
+                if len(times) < 31 or times[-1] != (day - 1) * 86400000 or any(b - a != 86400000 for a, b in zip(times, times[1:])):
+                    return coin, None
+                result = ([candles[t][0] for t in times], [candles[t][1] for t in times])
+                self._daily_cache[key] = result
+                return coin, result
             except Exception:
                 return coin, None
 

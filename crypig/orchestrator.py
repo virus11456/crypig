@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from datetime import datetime, timezone
 
 from .config import Config, get_config
@@ -27,6 +28,11 @@ class Orchestrator:
         self.radar: dict = {}                   # 分歧雷達：群眾(情緒/費率) vs 大戶(聰明錢/鯨魚)
         self._prev_pos: dict[str, dict] = {}    # 上一輪各幣 聰明錢/鯨魚 淨多空(算20分鐘變化)
         self.trader_summary: dict = {}          # 前N名交易者多空人數/比例/槓桿(看決心)
+        self.last_result: dict | None = None
+        self._cycle_started_at = None
+        self._cycle_finished_at = None
+        self._cycle_duration = None
+        self._cycle_failed = False
         self._cycle_lock = threading.Lock()     # 避免並發跑輪(請求端各自觸發會互相覆蓋+打爆 HL)
         # 以下 CoinGecko 資料只在每輪(背景)抓一次並快取，請求端只讀不打 API（避免被封）
         self.macro: dict | None = None          # 全市場宏觀
@@ -59,10 +65,28 @@ class Orchestrator:
         if not self._cycle_lock.acquire(blocking=False):
             logger.info("已有一輪在跑，略過本次觸發")
             return {"skipped": True}
+        started = time.monotonic()
+        self._cycle_started_at = datetime.now(timezone.utc).isoformat()
         try:
-            return self._run_cycle_locked()
+            result = self._run_cycle_locked()
+            self.last_result = result
+            self._cycle_finished_at = datetime.now(timezone.utc).isoformat()
+            self._cycle_failed = False
+            return result
+        except Exception:
+            self._cycle_failed = True
+            raise
         finally:
+            self._cycle_duration = round(time.monotonic() - started, 3)
             self._cycle_lock.release()
+
+    def cycle_status(self) -> dict:
+        return {"refreshing": self._cycle_lock.locked(),
+                "started_at": self._cycle_started_at,
+                "last_success_at": self._cycle_finished_at,
+                "duration_seconds": self._cycle_duration,
+                "last_cycle_failed": self._cycle_failed,
+                "note": "Cycle completion is not the upstream observation timestamp."}
 
     def _run_cycle_locked(self) -> dict:
         observations: list[Observation] = []
@@ -141,8 +165,8 @@ class Orchestrator:
                     source="whale_flow", symbol=coin, signal_type="funding",
                     direction=fdir, magnitude=fmag,
                     summary=f"{coin} 資金費率年化 {fa*100:+.1f}%"))
-            ddir, dmag, dnote = div.get(coin, ("neutral", 0.0, ""))
-            if ddir != "neutral":                         # 日線量價背離訊號
+            ddir, dmag, dnote = div.get(coin, (None, 0.0, ""))
+            if ddir in ("bull", "bear"):                         # 日線量價背離訊號
                 obs.append(Observation(
                     source="divergence", symbol=coin, signal_type="divergence",
                     direction=ddir, magnitude=dmag, summary=dnote))

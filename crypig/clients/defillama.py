@@ -68,18 +68,25 @@ class DefiLlamaClient:
         hit = getattr(self, "_sc_hist", None)
         if hit and now - hit[0] < ttl:
             return hit[1]
-        try:
-            sc = self._client.get("https://stablecoins.llama.fi/stablecoincharts/all").json()
-        except Exception:
-            return hit[1] if hit else []
+        response = self._client.get("https://stablecoins.llama.fi/stablecoincharts/all")
+        response.raise_for_status()
+        sc = response.json()
         if not isinstance(sc, list):
-            return hit[1] if hit else []
-
-        def mc(x):
-            v = x.get("totalCirculatingUSD")
-            return sum(float(a) for a in v.values()) if isinstance(v, dict) else float(v or 0)
-
-        out = [{"t": int(x["date"]), "v": round(mc(x), 0)} for x in sc if x.get("date")]
+            raise ValueError("Invalid stablecoin history")
+        import math
+        points = {}
+        for x in sc:
+            try:
+                t = int(x["date"])
+                values = x["totalCirculatingUSD"]
+                v = sum(float(a) for a in values.values()) if isinstance(values, dict) else float(values)
+                if t > 0 and math.isfinite(v) and v > 0:
+                    points[t] = v
+            except (KeyError, TypeError, ValueError):
+                continue
+        out = [{"t": t, "v": points[t]} for t in sorted(points)]
+        if not out:
+            raise ValueError("Empty stablecoin history")
         self._sc_hist = (now, out)
         return out
 

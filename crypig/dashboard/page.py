@@ -272,17 +272,17 @@ INDEX_HTML = r"""<!doctype html>
   </details>
 
   <details class="ccard" open>
-    <summary><span class="ctitle">🧠 聰明錢在買還是賣 BTC <small style="opacity:.7">合約</small></span><span class="csum" id="sum-smartbtc">載入中…</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle">🧠 聰明錢 BTC 淨持倉變化 <small style="opacity:.7">合約</small></span><span class="csum" id="sum-smartbtc">載入中…</span><span class="chev">▾</span></summary>
     <div id="smartbtc"><div class="box empty">聰明錢 BTC 買賣偵測載入中…</div></div>
   </details>
 
   <details class="ccard">
-    <summary><span class="ctitle">🐋 巨鯨在買還是賣 BTC <small style="opacity:.7">合約</small></span><span class="csum" id="sum-whale">載入中…</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle">🐋 巨鯨 BTC 淨持倉變化 <small style="opacity:.7">合約</small></span><span class="csum" id="sum-whale">載入中…</span><span class="chev">▾</span></summary>
     <div id="whalechart"><div class="box empty">巨鯨 BTC 買賣偵測載入中…</div></div>
   </details>
 
   <details class="ccard" open>
-    <summary><span class="ctitle">🪙 長期持有者在囤還是放 BTC <small style="opacity:.7">鏈上現貨</small></span><span class="csum" id="sum-onchain">載入中…</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle">🪙 大型持有者 BTC 餘額變化 <small style="opacity:.7">鏈上現貨</small></span><span class="csum" id="sum-onchain">載入中…</span><span class="chev">▾</span></summary>
     <div id="onchainwhale"><div class="box empty">鏈上巨鯨持幣量載入中…</div></div>
   </details>
 
@@ -302,6 +302,41 @@ INDEX_HTML = r"""<!doctype html>
   </details>
 </div></div>
 <script>
+
+const API_INFLIGHT = new Map(), API_CACHE = new Map();
+const API_TTLS = {'/stablecoins':300000, '/onchain_whale':300000,
+  '/defi':300000, '/macro':60000, '/radar_history':60000,
+  '/whale_history?symbol=BTC&cohort=smart&limit=2500':1200000,
+  '/whale_history?symbol=BTC&cohort=whale&limit=2500':1200000};
+function apiJSON(url, timeoutMs=12000){
+  const cached=API_CACHE.get(url);
+  if(cached && cached.expires>Date.now()) return Promise.resolve(cached.data);
+  if(API_INFLIGHT.has(url)) return API_INFLIGHT.get(url);
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),timeoutMs);
+  const task=(async()=>{
+    try{
+      const response=await fetch(url,{signal:controller.signal});
+      if(!response.ok) throw new Error('資料服務回應 '+response.status);
+      const data=await response.json();
+      if(!data || typeof data!=='object' || data.error) throw new Error('資料服務暫時不可用');
+      if(API_TTLS[url]) API_CACHE.set(url,{data,expires:Date.now()+API_TTLS[url]});
+      return data;
+    }finally{ clearTimeout(timer); API_INFLIGHT.delete(url); }
+  })();
+  API_INFLIGHT.set(url,task);
+  return task;
+}
+function orderedPoints(points,valueKey){
+  return points.filter(p=>Number.isFinite(p.t)&&Number.isFinite(p[valueKey]))
+    .sort((a,b)=>a.t-b.t).filter((p,i,a)=>i===a.length-1||p.t!==a[i+1].t);
+}
+function onchainWindow(all,days){
+  if(!all.length) return [];
+  const cutoff=all[all.length-1].t-days*86400;
+  return all.filter(p=>p.t>=cutoff);
+}
+
 const C={bull:'#3fb950',bear:'#f85149',neutral:'#8b949e'};
 const LBLC=l=>l.includes('多')?C.bull:l.includes('空')?C.bear:l==='訊號分歧'?'#d29922':C.neutral;
 
@@ -348,7 +383,7 @@ function renderHero(m, coins, conv){
 }
 async function loadMacro(){
   try{
-    const m=await (await fetch('/macro')).json();
+    const m=await apiJSON('/macro');
     const g=m.global;
     if(!g){document.getElementById('macro').innerHTML='<div class="box empty">宏觀資料暫無（外部 API 失敗）</div>';return {};}
     const oc=g.oi_cap;
@@ -383,7 +418,7 @@ function eqspark(eq){
 }
 async function loadBacktest(){
   try{
-    const b=await (await fetch('/backtest')).json();
+    const b=await apiJSON('/backtest');
     const o=b.overall, hr=o.hit_rate, col=hr==null?'#8b949e':hr>=0.5?'#3fb950':'#f85149';
     const cb=o.by_confidence||{};
     const cbtxt=['low','mid','high'].map(k=>`${({low:'低',mid:'中',high:'高'})[k]}信心 ${pct(cb[k]?.hit_rate)}(${cb[k]?.trades||0})`).join(' ｜ ');
@@ -419,8 +454,8 @@ function netCell(net, delta, whale){
   const side = net>0.05?'偏多':net<-0.05?'偏空':'中性';
   let mv='';
   if(delta!=null && Math.abs(delta)>=0.02){
-    if(delta>0) mv=` <span style="color:#3fb950">▲${whale?'加倉':'加多'}</span>`;
-    else mv=` <span style="color:#f85149">▼${whale?'在賣':'加空'}</span>`;
+    if(delta>0) mv=` <span style="color:#3fb950">▲淨多空比上升</span>`;
+    else mv=` <span style="color:#f85149">▼淨多空比下降</span>`;
   }
   return `<span style="color:${col}">${side} ${(net*100).toFixed(0)}%</span>${mv}`;
 }
@@ -428,7 +463,7 @@ let MROWS=[], MSORT={col:'score',dir:-1}, MFILT='';
 const MABS=new Set(['funding_ann']);   // 費率欄按絕對值排（抓最極端）
 const MCOLS=[
   {k:'symbol',t:'幣別',f:r=>`<span class="symc">${r.symbol}</span>`},
-  {k:'label', t:'判斷',f:r=>r.label?`<span style="color:${LBLC(r.label)}">${r.label}</span>`:'—'},
+  {k:'label', t:'判斷',f:r=>r.label?`<span style="color:${LBLC(r.label)}">${r.label}</span> <span class="meta">${r.score_source||''}</span>`:'—'},
   {k:'score', t:'分數',f:r=>r.score==null?'—':r.score.toFixed(3)},
   {k:'confidence',t:'信心',f:r=>r.confidence==null?'—':(r.confidence*100).toFixed(0)+'%'},
   {k:'sm_net',t:'聰明錢多空',f:r=>netCell(r.sm_net, r.sm_delta)},
@@ -439,7 +474,7 @@ const MCOLS=[
     if(r.divergence==='bear') return '<span style="color:#f85149">📉 頂背離</span>';
     return '<span style="color:#8b949e">無</span>';}},
   {k:'price',t:'標記價',f:r=>money(r.price)},
-  {k:'oi_cap',t:'OI/Cap',f:r=>r.oi_cap==null?'—':(r.oi_cap*100).toFixed(2)+'%'},
+  {k:'oi_cap',t:'OI/Cap',f:r=>r.oi_cap==null?'—':(r.oi_cap*100).toFixed(2)+'% '+(r.oi_source==='hyperliquid'?'（HL）':r.oi_source==='coingecko_aggregated'?'（跨所）':'（來源未標）')},
   {k:'vol_cap',t:'Vol/Cap',f:r=>r.vol_cap==null?'—':(r.vol_cap*100).toFixed(2)+'%'},
   {k:'funding_ann',t:'資金費率(年化)',f:fundCell},
   {k:'open_interest',t:'OI',f:r=>bigMoney(r.open_interest)},
@@ -470,7 +505,7 @@ function renderTable(){
       <h2 style="margin:0">📋 幣別總表 <small>共 ${MROWS.length} 幣 · BTC/ETH/SOL 完整4訊號決策、其餘為聰明錢+資金費率輕量評分 · 點標題排序</small></h2>
       <input class="filt" placeholder="搜尋幣別…" oninput="MFILT=this.value.trim().toUpperCase();renderMBody()" value="${MFILT}">
     </div>
-    <div class="meta" style="margin:-4px 0 8px">ℹ️ <b>標記價／OI／溢價</b>來自 Hyperliquid，全幣皆有。<b>市值／OI&#8202;Cap／Vol&#8202;Cap</b>來自 CoinGecko，僅 ${withCap}/${MROWS.length} 幣對得上——冷門幣顯示「—」代表 <b>CoinGecko 無此幣市值資料</b>，非系統錯誤。</div>
+    <div class="meta" style="margin:-4px 0 8px">ℹ️ <b>標記價／溢價</b>來自 Hyperliquid，全幣皆有。OI 優先採 CoinGecko 跨交易所聚合，缺資料時採 HL；來源見 OI/Cap 標示。<b>市值／OI&#8202;Cap／Vol&#8202;Cap</b>來自 CoinGecko，僅 ${withCap}/${MROWS.length} 幣對得上——「—」代表本次未取得可靠對應資料；目前僅抓取市值前 250 名，且幣別代號可能有歧義。日線背離使用已收盤日線，與綜合決策中的其他週期訊號不同。</div>
     <div class="scroll"><table class="tbl"><thead><tr>${head}</tr></thead><tbody id="mbody">${mBodyHTML()}</tbody></table></div></div>`;
   setSum('sum-table', `共 <b>${MROWS.length}</b> 幣 · 判斷·聰明錢/巨鯨多空·背離·費率·市值 · 點開可排序/篩選`);
 }
@@ -492,8 +527,8 @@ function posRow(name, sub, g, color){
 async function loadRadar(){
   try{
     const [r,hist]=await Promise.all([
-      (await fetch('/radar')).json(),
-      fetch('/radar_history').then(x=>x.json()).then(x=>x.history||[]).catch(()=>[])]);
+      apiJSON('/radar'),
+      apiJSON('/radar_history').then(x=>x.history||[]).catch(()=>[])]);
     const m=r.market||{}, coins=r.coins||[];
     const vcol=m.diverging?(m.verdict.includes('看多')||m.verdict.includes('底部')?'#3fb950':'#f85149'):'#d29922';
     const rows=coins.map(c=>{
@@ -538,13 +573,13 @@ async function loadRadar(){
 }
 // 💵 穩定幣總供應：完整歷史走勢＋近1月/近1年/全部切換（增發=資金進場、縮減=撤離）
 let SC_ALL=[], SC_RANGE='1y', SC_ERR=null;
-function setSCRange(rg){ SC_RANGE=rg; renderStable(); }
+function setSCRange(rg){ SC_RANGE=rg; renderStable(); pruneLineData(); }
 async function loadStablecoins(){
   try{
-    const r=await (await fetch('/stablecoins')).json();
-    SC_ALL=(r.history||[]).map(x=>({t:x.t, v:x.v})); SC_ERR=r.error||null;
+    const r=await apiJSON('/stablecoins');
+    SC_ALL=(r.history||[]).map(x=>({t:x.t, v:x.v})); SC_ERR=r.meta?.stale?'來源更新延遲，顯示上次資料':null;
     renderStable();
-  }catch(e){document.getElementById('stablecoins').innerHTML='<div class="box empty">穩定幣載入失敗：'+e+'</div>';}
+  }catch(e){SC_ERR='更新失敗，稍後重試';renderStable();}
 }
 // 30 天滾動淨流入/流出：某日供應 − 30 天前供應（正=淨增發/流入、負=贖回/流出）
 function scNetFlow(all){
@@ -560,7 +595,7 @@ function downsample(arr, cap){ if(arr.length<=cap) return arr;
   const k=Math.ceil(arr.length/cap), out=[]; for(let i=0;i<arr.length;i+=k) out.push(arr[i]);
   if(out[out.length-1]!==arr[arr.length-1]) out.push(arr[arr.length-1]); return out; }
 function renderStable(){
-  const all=SC_ALL||[];
+  const all=orderedPoints(SC_ALL||[],'v');
   const toggle=`<span class="rtoggle">
     <button class="${SC_RANGE==='1m'?'on':''}" onclick="setSCRange('1m')">近1月</button>
     <button class="${SC_RANGE==='1y'?'on':''}" onclick="setSCRange('1y')">近1年</button>
@@ -571,30 +606,31 @@ function renderStable(){
   const now=Date.now()/1000;
   const cutoff = SC_RANGE==='1m'?now-30*86400 : SC_RANGE==='1y'?now-365*86400 : 0;
   let pts=all.filter(p=>p.t>=cutoff);
-  if(pts.length<2) pts=all.slice(-Math.min(all.length, SC_RANGE==='1m'?31:366));
-  const last=pts[pts.length-1];
+  // Do not silently display older dates when the selected window has no data.
+  const last=all[all.length-1];
   const bil=x=>'$'+(x/1e9).toFixed(1)+'B';
   // 結論用「當前 30 天淨流入/流出」(全序列最後一筆，最能反映此刻資金進出)
   const flowAll=scNetFlow(all), curFlow=flowAll.length?flowAll[flowAll.length-1].v:0;
   let concl;
-  if(curFlow>1e8) concl={t:`近30天穩定幣<b>淨流入 +${bil(curFlow)}</b> → 資金正流入加密、乾火藥變多＝<b>偏多</b>`,c:'#2ea043'};
-  else if(curFlow<-1e8) concl={t:`近30天穩定幣<b>淨流出 -${bil(-curFlow)}</b> → 贖回、資金撤離加密＝<b>偏空/留意</b>`,c:'#da3633'};
-  else concl={t:`近30天穩定幣淨流入流出趨近 0（${curFlow>=0?'+':''}${bil(curFlow)}）→ 資金無明顯進出`,c:'#8b949e'};
+  if(curFlow>1e8) concl={t:`近30天穩定幣總市值<b>增加 +${bil(curFlow)}</b>`,c:'#2ea043'};
+  else if(curFlow<-1e8) concl={t:`近30天穩定幣總市值<b>減少 -${bil(-curFlow)}</b>`,c:'#da3633'};
+  else concl={t:`近30天穩定幣總市值變化接近 0（${curFlow>=0?'+':''}${bil(curFlow)}）`,c:'#8b949e'};
   // 下圖：淨流入/流出，依區間篩選＋降採樣(避免全區間上千根)
   const flow=downsample(flowAll.filter(p=>p.t>=cutoff), 400);
   document.getElementById('stablecoins').innerHTML=`<div class="box">
-    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><span class="meta">💵 穩定幣總供應 ＆ 淨流入流出（DefiLlama·2017至今）</span>${toggle}</div>
-    <div class="vline" style="border-left-color:${concl.c}">📍 現在：${concl.t}｜最新總供應 <b>${bil(last.v)}</b></div>
-    <div class="meta" style="margin-top:6px">① 總市值走勢（線往上＝資金流入加密）</div>
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><span class="meta">💵 穩定幣總市值與變化（DefiLlama）</span>${toggle}</div>
+    <div class="meta">${SC_ERR||''} 資料截至 ${new Date(last.t*1000).toISOString().slice(0,10)}；市值變化包含幣價與匯率影響，並非實際交易流入。</div>
+    <div class="vline" style="border-left-color:${concl.c}">📍 現在：${concl.t}｜最新總市值 <b>${bil(last.v)}</b></div>
+    <div class="meta" style="margin-top:6px">① 總市值走勢</div>
     ${lineChart(pts,{color:'#58a6ff', tip:p=>'總供應 $'+(p.v/1e9).toFixed(1)+'B'})}
-    <div class="meta" style="margin-top:10px">② 30 天淨流入/流出（<b style="color:#3fb950">綠=淨增發/流入</b>、<b style="color:#f85149">紅=贖回/流出</b>）</div>
-    ${flow.length>=2?barChart(flow,{up:'#3fb950',down:'#f85149',tip:p=>(p.v>=0?'淨流入 +':'淨流出 ')+(p.v/1e9).toFixed(1)+'B'}):'<span class="meta">此區間資料不足</span>'}
+    <div class="meta" style="margin-top:10px">② 30 天市值變化（<b style="color:#3fb950">綠=增加</b>、<b style="color:#f85149">紅=減少</b>）</div>
+    ${flow.length>=2?barChart(flow,{up:'#3fb950',down:'#f85149',tip:p=>(p.v>=0?'市值增加 +':'市值減少 ')+(p.v/1e9).toFixed(1)+'B'}):'<span class="meta">此區間資料不足</span>'}
   </div>`;
   setSum('sum-stable', `${concl.t.replace(/<[^>]+>/g,'')}`.slice(0,42));
 }
 async function loadDefi(){
   try{
-    const d=await (await fetch('/defi')).json();
+    const d=await apiJSON('/defi');
     const tvl=d.tvl||{}, sc=d.stablecoin||{}, chains=d.chains||[];
     const chg=(x)=>x==null?'—':`<b style="color:${x>=0?'#3fb950':'#f85149'}">${(x*100).toFixed(1)}%</b>`;
     const chainHtml=chains.map(c=>`<span style="margin-right:14px">${c.name} <b>$${(c.tvl/1e9).toFixed(1)}B</b></span>`).join('');
@@ -620,7 +656,7 @@ async function loadDefi(){
 }
 async function loadPositioning(){
   try{
-    const p=await (await fetch('/positioning')).json();
+    const p=await apiJSON('/positioning');
     const pdir=g=>(!g||!g.total||g.short_pct==null)?null:(g.short_pct>g.long_pct?'空':g.long_pct>g.short_pct?'多':'中性');
     const sd=pdir(p.smart), wd=pdir(p.whale);
     let pc=null;
@@ -669,6 +705,9 @@ function spanLabel(firstT, lastT){
   return '近 '+Math.max(1,Math.round(h*60))+' 分鐘';
 }
 let _gid=0; const LINE_DATA={};
+function pruneLineData(){
+  for(const id of Object.keys(LINE_DATA)) if(!document.getElementById('lc-'+id)) delete LINE_DATA[id];
+}
 function lineChart(pts, opts){
   opts=opts||{};
   if(!pts||pts.length<2) return '<span class="meta">資料累積中…</span>';
@@ -746,39 +785,21 @@ function lineOut(id){ ctipHide(); const m=document.getElementById('lm-'+id); if(
 let SB_VERDICT=null, OC_VERDICT=null;
 function renderBigMoney(){
   const el=document.getElementById('bigmoney'); if(!el) return;
-  const o=OC_VERDICT, s=SB_VERDICT;
-  if(!o){ return; }                       // 至少要有現貨那條
-  const m={buy:'囤幣/買進', sell:'出貨/賣出', flat:'持平'};
-  let v;
-  if(!s || s.insufficient){               // 合約還在累積，先只用現貨
-    v = o.dir==='flat'
-      ? {t:`鏈上現貨持平、合約持倉累積中 → 大戶暫無明顯動向`,c:'#8b949e'}
-      : {t:`鏈上現貨<b>${m[o.dir]}</b>（結構性${o.dir==='sell'?'偏空':'偏多'}）｜合約持倉累積中，暫只看現貨`,c:o.dir==='sell'?'#f85149':'#3fb950'};
-  }
-  else if(o.dir==='buy'&&s.dir==='buy') v={t:`🟢 <b>大戶一致偏多</b>：鏈上現貨囤幣 ＋ 合約加碼，兩邊都在買 → <b>最強偏多訊號</b>`,c:'#2ea043'};
-  else if(o.dir==='sell'&&s.dir==='sell') v={t:`🔴 <b>大戶一致偏空</b>：鏈上現貨出貨 ＋ 合約減碼，兩邊都在賣 → <b>強烈偏空，留意頂部</b>`,c:'#da3633'};
-  else if(o.dir==='sell'&&s.dir==='buy') v={t:`⚠️ <b>假突破警訊</b>：合約還做多、但鏈上現貨偷偷出貨 → 漲勢恐無量、留意誘多`,c:'#d29922'};
-  else if(o.dir==='buy'&&s.dir==='sell') v={t:`🟡 <b>大戶分歧</b>：鏈上囤幣、合約卻做空（避險或低調吸籌）→ 方向未定，續觀察`,c:'#d29922'};
-  else {                                  // 一方持平
-    const act = o.dir!=='flat'?`鏈上現貨${m[o.dir]}` : s.dir!=='flat'?`合約${m[s.dir]}` : '';
-    v = act ? {t:`大戶綜合：<b>${act}</b>（另一邊持平）→ 單邊訊號，參考即可`,c:'#8b949e'}
-            : {t:`大戶綜合：現貨與合約都持平，無明顯動向`,c:'#8b949e'};
-  }
-  el.innerHTML=`<div class="combo" style="border-color:${v.c}"><span class="ct">🐋 大戶綜合判讀</span><span style="color:${v.c}">${v.t}</span></div>`;
+  el.innerHTML='<div class="combo"><span class="ct">🐋 大戶資料解讀</span><span>合約圖為淨持倉名目金額變化，鏈上圖為大型持有者餘額變化；兩者均不能單獨證明實際買賣或假突破。</span></div>';
 }
 // 🪙 鏈上巨鯨 BTC 現貨持倉量：每日買/賣量柱狀（綠囤幣/紅出貨）＋近30天/近7天切換
 let OC_ALL=[], OC_RANGE='30d', OC_BANDS='大型持有者', OC_ERR=null;
 function setOCRange(rg){ OC_RANGE=rg; renderOnchain(); }
 async function loadOnchainWhale(){
   try{
-    const r=await (await fetch('/onchain_whale')).json();
+    const r=await apiJSON('/onchain_whale');
     OC_ALL=(r.history||[]).map(x=>({t:Date.parse(x.date)/1000, btc:x.btc}));
-    OC_BANDS=r.bands||'大型持有者'; OC_ERR=r.error||null;
+    OC_BANDS=r.bands||'大型持有者'; OC_ERR=r.meta?.stale?'來源更新延遲，顯示上次資料':null;
     renderOnchain();
-  }catch(e){document.getElementById('onchainwhale').innerHTML='<div class="box empty">鏈上持幣載入失敗：'+e+'</div>';}
+  }catch(e){OC_ERR='更新失敗，稍後重試';renderOnchain();}
 }
 function renderOnchain(){
-  const all=OC_ALL||[];
+  const all=orderedPoints(OC_ALL||[],'btc');
   const toggle=`<span class="rtoggle"><button class="${OC_RANGE==='7d'?'on':''}" onclick="setOCRange('7d')">近7天</button><button class="${OC_RANGE==='30d'?'on':''}" onclick="setOCRange('30d')">近30天</button></span>`;
   if(all.length<2){
     document.getElementById('onchainwhale').innerHTML='<div class="box"><div class="meta">'+(OC_ERR?('bitcoin-data 暫時取不到（'+OC_ERR+'），下輪重試。'):'資料載入中…')+'</div></div>';
@@ -787,18 +808,20 @@ function renderOnchain(){
   // 每日變化（流入/流出）：綠=當天淨買進、紅=當天淨賣出
   const deltas=[]; for(let i=1;i<all.length;i++) deltas.push({t:all[i].t, v:all[i].btc-all[i-1].btc});
   const last=all[all.length-1].btc;
-  const k=Math.min(7,all.length-1), base=all[all.length-1-k].btc, dBtc=last-base, pctc=base?dBtc/base:0;
+  const window=onchainWindow(all,7), base=window[0].btc, k=Math.round((all[all.length-1].t-window[0].t)/86400), dBtc=last-base, pctc=base?dBtc/base:0;
   let concl;
-  if(pctc>0.002) concl={t:`▲ 巨鯨<b>正在吸籌 BTC</b>（近 ${k} 天鏈上多了 <b>${Math.round(dBtc).toLocaleString()}</b> 顆）→ 移除供給＝結構性偏多`,c:'#2ea043'};
-  else if(pctc<-0.002) concl={t:`▼ 巨鯨<b>正在派發/出貨 BTC</b>（近 ${k} 天鏈上少了 <b>${Math.round(-dBtc).toLocaleString()}</b> 顆）→ 大戶在賣＝結構性偏空/留意頂部`,c:'#da3633'};
-  else concl={t:`巨鯨持幣量<b>大致持平</b>（近 ${k} 天 ${dBtc>=0?'+':''}${Math.round(dBtc).toLocaleString()} 顆）→ 無明顯吸籌/派發`,c:'#8b949e'};
+  if(pctc>0.002) concl={t:`▲ 巨鯨<b>鏈上持幣量增加</b>（近 ${k} 天鏈上多了 <b>${Math.round(dBtc).toLocaleString()}</b> 顆）；餘額增加不等於成交買入`,c:'#2ea043'};
+  else if(pctc<-0.002) concl={t:`▼ 巨鯨<b>鏈上持幣量減少</b>（近 ${k} 天鏈上少了 <b>${Math.round(-dBtc).toLocaleString()}</b> 顆）；餘額減少不等於成交賣出`,c:'#da3633'};
+  else concl={t:`巨鯨持幣量<b>大致持平</b>（近 ${k} 天 ${dBtc>=0?'+':''}${Math.round(dBtc).toLocaleString()} 顆）；這是持幣規模分組，並非按持有時間分類`,c:'#8b949e'};
   OC_VERDICT={dir: pctc>0.002?'buy':pctc<-0.002?'sell':'flat'}; renderBigMoney();
-  const bars = OC_RANGE==='7d' ? deltas.slice(-7) : deltas;
+  const days=OC_RANGE==='7d'?7:30;
+  const bars=deltas.filter(p=>p.t>all[all.length-1].t-days*86400);
   document.getElementById('onchainwhale').innerHTML=`<div class="box">
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><span class="meta">🪙 ${OC_BANDS} 真實鏈上持幣（bitcoin-data 日頻）</span>${toggle}</div>
     <div class="vline" style="border-left-color:${concl.c}">📍 現在：${concl.t}</div>
-    <div class="meta">最新持有 <b style="color:#c9d1d9">${Math.round(last).toLocaleString()} BTC</b>｜每根柱＝<b>那天長期持有者淨買/賣的真實 BTC</b>：<b style="color:#3fb950">綠=囤幣(買進)</b>、<b style="color:#f85149">紅=出貨(賣出)</b>。連續紅柱越來越長＝加速出貨。<br><span style="opacity:.75">跟上面兩張差別：這張是<b>鏈上真實現貨</b>（真的把幣搬走），上面兩張是<b>合約押注</b>。三張都是綠買紅賣。對照：合約在買＋鏈上囤幣＝最強偏多；合約在買但鏈上出貨＝假突破警訊。</span></div>
-    ${barChart(bars,{up:'#3fb950',down:'#f85149',tip:p=>(p.v>=0?'囤幣 +':'出貨 ')+Math.round(p.v).toLocaleString()+' BTC'})}
+    <div class="meta">${OC_ERR||''}</div>
+    <div class="meta">最新持有 <b>${Math.round(last).toLocaleString()} BTC</b>｜資料截至 ${new Date(all[all.length-1].t*1000).toISOString().slice(0,10)}，圖表為截至該日近 ${days} 天。每根柱為大型持有者分組餘額變化，可能受轉帳及地址跨分組影響，不能直接判定現貨買賣；大型持有者也不等於長期持有者。</div>
+    ${barChart(bars,{up:'#3fb950',down:'#f85149',tip:p=>(p.v>=0?'餘額增加 +':'餘額減少 ')+Math.round(p.v).toLocaleString()+' BTC'})}
   </div>`;
   setSum('sum-onchain', `${concl.t.replace(/<[^>]+>/g,'')}`.slice(0,40));
 }
@@ -846,7 +869,7 @@ function bucketNet(all, rangeKey){
   const now=Date.now()/1000;
   const cutoff = rangeKey==='30d' ? now-30*86400 : now-24*3600;
   const bsec   = rangeKey==='30d' ? 86400 : 3600;
-  const pts=all.filter(p=>p.t>=cutoff);
+  const pts=orderedPoints(all,'v').filter(p=>p.t>=cutoff && p.t<=now);
   const m=new Map();
   for(const p of pts) m.set(Math.floor(p.t/bsec), p);   // 升冪→最後一筆勝出
   return [...m.entries()].sort((a,b)=>a[0]-b[0]).map(([k,p])=>({t:k*bsec, v:p.v}));
@@ -854,7 +877,8 @@ function bucketNet(all, rangeKey){
 // 把「持倉水位」序列轉成「每桶買賣動作」：v=本桶淨持倉相對上一桶的變化（正=在買/加碼、負=在賣/減碼）
 function bucketFlow(all, rangeKey){
   const lv=bucketNet(all, rangeKey), out=[];
-  for(let i=1;i<lv.length;i++) out.push({t:lv[i].t, v:lv[i].v-lv[i-1].v});
+  const step=rangeKey==='30d'?86400:3600;
+  for(let i=1;i<lv.length;i++) if(lv[i].t-lv[i-1].t===step) out.push({t:lv[i].t, v:lv[i].v-lv[i-1].v});
   return out;
 }
 // 從一串買賣動作 flow 判斷方向：連續同向輪數 streak、是否加速 accel
@@ -870,13 +894,13 @@ let SB_ALL=[], SB_RANGE='24h';
 function setSBRange(rg){ SB_RANGE=rg; renderSmartBTC(); }
 async function loadSmartBTC(){
   try{
-    const r=await (await fetch('/whale_history?symbol=BTC&cohort=smart')).json();
+    const r=await apiJSON('/whale_history?symbol=BTC&cohort=smart&limit=2500');
     SB_ALL=(r.history||[]).map(x=>({t:Date.parse(x.ts)/1000, v:x.net_usd, count:x.count}));
     renderSmartBTC();
   }catch(e){document.getElementById('smartbtc').innerHTML='<div class="box empty">聰明錢吸籌偵測載入失敗：'+e+'</div>';}
 }
 function renderSmartBTC(){
-  const all=SB_ALL||[];
+  const all=orderedPoints(SB_ALL||[],'v');
   const toggle=`<span class="rtoggle"><button class="${SB_RANGE==='24h'?'on':''}" onclick="setSBRange('24h')">24H</button><button class="${SB_RANGE==='30d'?'on':''}" onclick="setSBRange('30d')">近30天</button></span>`;
   if(all.length<3){
     document.getElementById('smartbtc').innerHTML='<div class="box"><div class="row" style="justify-content:flex-end">'+toggle+'</div><div class="meta">每 20 分鐘記一筆，目前 '+all.length+' 筆，3 筆以上開始偵測。</div></div>';
@@ -886,19 +910,14 @@ function renderSmartBTC(){
   const bars=bucketFlow(all, SB_RANGE);            // 每根柱＝那一輪的淨買/淨賣
   const {lastSign, streak, accel}=flowDir(bars);
   const v=all.map(p=>p.v), net=v[v.length-1], col=net>=0?'#3fb950':'#f85149';
-  let concl;
-  if(lastSign>0 && streak>=2 && accel) concl={t:`⚡ <b>聰明錢正在加速買入 BTC</b>（連續 ${streak} 輪淨買、且越買越多）→ 強力買盤`,c:'#2ea043'};
-  else if(lastSign>0 && streak>=2) concl={t:`▲ 聰明錢<b>持續買入 BTC</b>（連續 ${streak} 輪淨買）→ 偏多`,c:'#3fb950'};
-  else if(lastSign<0 && streak>=2 && accel) concl={t:`⚡ <b>聰明錢正在加速賣出 BTC</b>（連續 ${streak} 輪淨賣、且越賣越多）→ 偏空警訊`,c:'#da3633'};
-  else if(lastSign<0 && streak>=2) concl={t:`▼ 聰明錢<b>持續賣出 BTC</b>（連續 ${streak} 輪淨賣）→ 偏空`,c:'#f85149'};
-  else concl={t:`聰明錢 BTC <b>買賣來回</b>，無明顯方向`,c:'#8b949e'};
+  const concl={t:`聰明錢 BTC 淨持倉名目金額：${bars.length?(lastSign>0?'增加':lastSign<0?'減少':'持平'):'區間資料不足'}。包含價格與樣本變化，不能直接視為淨買賣。`,c:'#8b949e'};
   SB_VERDICT={dir: streak>=2?(lastSign>0?'buy':lastSign<0?'sell':'flat'):'flat', accel}; renderBigMoney();
-  const note = SB_RANGE==='30d' && bars.length<3 ? `<div class="meta">（30天資料累積中——逐輪記錄，目前約 ${Math.max(1,Math.round((all[all.length-1].t-all[0].t)/86400))} 天）</div>` : '';
+  const note = SB_RANGE==='30d' && (all[all.length-1].t-all[0].t)<30*86400 ? `<div class="meta">（30天資料累積中——逐輪記錄，目前約 ${Math.max(1,Math.round((all[all.length-1].t-all[0].t)/86400))} 天）</div>` : '';
   document.getElementById('smartbtc').innerHTML=`<div class="box">
-    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><span class="meta">🧠 20 個高勝率贏家帳號 · 每輪對 BTC 合約的買賣</span>${toggle}</div>
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><span class="meta">🧠 本次 BTC 持倉樣本 ${all[all.length-1].count??'—'} 個帳號 · 淨持倉名目金額變化</span>${toggle}</div>
     <div class="vline" style="border-left-color:${concl.c}">📍 現在：${concl.t}</div>
-    <div class="meta">每根柱＝那一輪聰明錢<b style="color:#3fb950">淨買(綠)</b>／<b style="color:#f85149">淨賣(紅)</b> BTC 合約｜連續同色越長＝方向越強。<br><span style="opacity:.75">（目前累計站在 <b style="color:${col}">${net>=0?'淨多':'淨空'} $${(Math.abs(net)/1e6).toFixed(1)}M</b>，僅供參考立場，非當輪動作）</span></div>
-    ${note}${barChart(bars,{tip:p=>(p.v>=0?'淨買 +$':'淨賣 -$')+(Math.abs(p.v)/1e6).toFixed(1)+'M'})}
+    <div class="meta">每根柱＝那一輪聰明錢<b style="color:#3fb950">名目金額增加(綠)</b>／<b style="color:#f85149">名目金額減少(紅)</b> BTC 合約｜此差額包含價格變化及追蹤樣本變化，非成交金額。<br><span style="opacity:.75">（目前累計站在 <b style="color:${col}">${net>=0?'淨多':'淨空'} $${(Math.abs(net)/1e6).toFixed(1)}M</b>，僅供參考立場，非當輪動作）</span></div>
+    ${note}${barChart(bars,{tip:p=>(p.v>=0?'名目金額增加 +$':'名目金額減少 -$')+(Math.abs(p.v)/1e6).toFixed(1)+'M'})}
   </div>`;
   setSum('sum-smartbtc', `${concl.t.replace(/<[^>]+>/g,'')}`.slice(0,40));
 }
@@ -907,13 +926,13 @@ let WH_ALL=[], WH_RANGE='24h';
 function setWHRange(rg){ WH_RANGE=rg; renderWhaleChart(); }
 async function loadWhaleChart(){
   try{
-    const r=await (await fetch('/whale_history?symbol=BTC&cohort=whale')).json();
+    const r=await apiJSON('/whale_history?symbol=BTC&cohort=whale&limit=2500');
     WH_ALL=(r.history||[]).map(x=>({t:Date.parse(x.ts)/1000, v:x.net_usd, long:x.long_usd, short:x.short_usd, count:x.count}));
     renderWhaleChart();
   }catch(e){document.getElementById('whalechart').innerHTML='<div class="box empty">鯨魚圖載入失敗：'+e+'</div>';}
 }
 function renderWhaleChart(){
-  const all=WH_ALL||[];
+  const all=orderedPoints(WH_ALL||[],'v');
   const toggle=`<span class="rtoggle"><button class="${WH_RANGE==='24h'?'on':''}" onclick="setWHRange('24h')">24H</button><button class="${WH_RANGE==='30d'?'on':''}" onclick="setWHRange('30d')">近30天</button></span>`;
   if(all.length<2){
     document.getElementById('whalechart').innerHTML='<div class="box"><div class="row" style="justify-content:flex-end">'+toggle+'</div><div class="meta">每 20 分鐘記一筆，目前 '+all.length+' 筆，2 筆以上開始畫（看大戶部位何時翻多/翻空＝進場時機）。</div></div>';
@@ -922,53 +941,71 @@ function renderWhaleChart(){
   const bars=bucketFlow(all, WH_RANGE);            // 每根柱＝那一輪的淨買/淨賣
   const {lastSign, streak, accel}=flowDir(bars);
   const firstNet=all[0].v, flip = firstNet<0&&net>=0?'翻多':firstNet>=0&&net<0?'翻空':'';
-  let wc;
-  if(lastSign>0 && streak>=2 && accel) wc={t:`⚡ <b>巨鯨正在加速買入 BTC</b>（連續 ${streak} 輪淨買、越買越多）→ 強力買盤`,c:'#2ea043'};
-  else if(lastSign>0 && streak>=2) wc={t:`▲ 巨鯨<b>持續買入 BTC</b>（連續 ${streak} 輪淨買）→ 偏多`,c:'#3fb950'};
-  else if(lastSign<0 && streak>=2 && accel) wc={t:`⚡ <b>巨鯨正在加速賣出 BTC</b>（連續 ${streak} 輪淨賣、越賣越多）→ 偏空警訊`,c:'#da3633'};
-  else if(lastSign<0 && streak>=2) wc={t:`▼ 巨鯨<b>持續賣出 BTC</b>（連續 ${streak} 輪淨賣）→ 偏空`,c:'#f85149'};
-  else wc={t:`巨鯨 BTC <b>買賣來回</b>，無明顯方向${flip?`（部位剛${flip}）`:''}`,c:'#8b949e'};
-  const note = WH_RANGE==='30d' && bars.length<3 ? `<div class="meta">（30天資料累積中——逐輪記錄，目前約 ${Math.max(1,Math.round((all[all.length-1].t-all[0].t)/86400))} 天）</div>` : '';
+  const wc={t:`巨鯨 BTC 淨持倉名目金額：${bars.length?(lastSign>0?'增加':lastSign<0?'減少':'持平'):'區間資料不足'}。包含價格與樣本變化，不能直接視為淨買賣。`,c:'#8b949e'};
+  const note = WH_RANGE==='30d' && (all[all.length-1].t-all[0].t)<30*86400 ? `<div class="meta">（30天資料累積中——逐輪記錄，目前約 ${Math.max(1,Math.round((all[all.length-1].t-all[0].t)/86400))} 天）</div>` : '';
   document.getElementById('whalechart').innerHTML=`<div class="box">
-    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><span class="meta">🐋 14 個最大淨值帳號 · 每輪對 BTC 合約的買賣</span>${toggle}</div>
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><span class="meta">🐋 本次 BTC 持倉樣本 ${last.count??'—'} 個帳號 · 淨持倉名目金額變化</span>${toggle}</div>
     <div class="vline" style="border-left-color:${wc.c}">📍 現在：${wc.t}</div>
-    <div class="meta">每根柱＝那一輪巨鯨<b style="color:#3fb950">淨買(綠)</b>／<b style="color:#f85149">淨賣(紅)</b> BTC 合約｜連續同色越長＝方向越強。<br><span style="opacity:.75">（目前累計站在 <b style="color:${col}">${bias} $${(Math.abs(net)/1e6).toFixed(1)}M</b>：多 $${(last.long/1e6).toFixed(1)}M／空 $${(last.short/1e6).toFixed(1)}M，${last.count} 帳號，僅供參考立場）</span></div>
-    ${note}${barChart(bars,{tip:p=>(p.v>=0?'淨買 +$':'淨賣 -$')+(Math.abs(p.v)/1e6).toFixed(1)+'M'})}
+    <div class="meta">每根柱＝那一輪巨鯨<b style="color:#3fb950">名目金額增加(綠)</b>／<b style="color:#f85149">名目金額減少(紅)</b> BTC 合約｜此差額包含價格變化及追蹤樣本變化，非成交金額。<br><span style="opacity:.75">（目前累計站在 <b style="color:${col}">${bias} $${(Math.abs(net)/1e6).toFixed(1)}M</b>：多 $${(last.long/1e6).toFixed(1)}M／空 $${(last.short/1e6).toFixed(1)}M，${last.count} 帳號，僅供參考立場）</span></div>
+    ${note}${barChart(bars,{tip:p=>(p.v>=0?'名目金額增加 +$':'名目金額減少 -$')+(Math.abs(p.v)/1e6).toFixed(1)+'M'})}
   </div>`;
   setSum('sum-whale', `${wc.t.replace(/<[^>]+>/g,'')}`.slice(0,40));
 }
-async function refresh(){
-  loadRadar(); loadDefi(); loadPositioning(); loadSmartBTC(); loadWhaleChart(); loadOnchainWhale(); loadStablecoins();
-  await loadMacro();
-  let decisions=[], hlcoins=[], scores={};
-  try{ decisions=(await (await fetch('/decisions')).json()).decisions||[]; }catch(e){}
-  try{ hlcoins=(await (await fetch('/hl_market')).json()).coins||[]; }catch(e){}
-  try{ scores=(await (await fetch('/scores')).json()).scores||{}; }catch(e){}
+
+let REFRESH_TASK=null, TABLE_STATE={decisions:[],hlcoins:[],scores:{}}, TABLE_ERRORS=new Set();
+function renderMarketState(){
+  const {decisions,hlcoins,scores}=TABLE_STATE;
   // 合併：HL+CoinGecko 已整合為底；輕量全幣評分疊上；watchlist 完整決策最後覆蓋。
   const bySym={};
   hlcoins.forEach(c=>bySym[c.symbol]={symbol:c.symbol, price:c.price,
     funding_ann:c.funding_ann, funding_flag:c.funding_flag,
-    open_interest:c.open_interest_usd, premium:c.premium,
+    open_interest:c.open_interest_usd, oi_source:c.open_interest_source, premium:c.premium,
     market_cap:c.market_cap, oi_cap:c.oi_cap, vol_cap:c.vol_cap});
   Object.entries(scores).forEach(([s,v])=>{ const r=bySym[s]||(bySym[s]={symbol:s});
-    Object.assign(r, v); });   // label/score/confidence/divergence/sm_net/whale_net/…
+    Object.assign(r, v); r.score_source='市場掃描'; });   // label/score/confidence/divergence/sm_net/whale_net/…
   decisions.forEach(d=>{ const r=bySym[d.symbol]||(bySym[d.symbol]={symbol:d.symbol});
-    r.label=d.label; r.score=d.score; r.confidence=d.confidence; if(r.price==null)r.price=d.price; });
+    r.score_source='綜合決策'; r.label=d.label; r.score=d.score; r.confidence=d.confidence; if(r.price==null)r.price=d.price; });
   MROWS=Object.values(bySym);
   renderTable();
-  if(decisions[0]) LASTUP=new Date(decisions[0].ts).getTime();
+
+  if(TABLE_ERRORS.size){
+    setSum('sum-table','部分資料更新失敗，顯示已取得的資料（可能含上一輪）；稍後重試');
+  }
   renderLastUp();
+}
+function refresh(){
+  pruneLineData();
+  if(REFRESH_TASK) return REFRESH_TASK;
+  REFRESH_TASK=(async()=>{
+    const market=[['/hl_market','hlcoins','coins',Array.isArray],
+      ['/scores','scores','scores',x=>!!x&&typeof x==='object'&&!Array.isArray(x)],
+      ['/decisions','decisions','decisions',Array.isArray]].map(async([url,key,field,valid])=>{
+      try{
+        const data=await apiJSON(url);
+        if(!valid(data[field])) throw new Error('資料格式不符');
+        TABLE_STATE[key]=data[field]; TABLE_ERRORS.delete(key);
+        if(key==='decisions'){
+          const times=data[field].map(d=>Date.parse(d.ts)).filter(Number.isFinite);
+          LASTUP=times.length?Math.min(...times):0;
+        }
+      }catch(e){TABLE_ERRORS.add(key);}
+      renderMarketState();
+    });
+    await Promise.allSettled([...market,loadRadar(),loadDefi(),loadPositioning(),
+      loadSmartBTC(),loadWhaleChart(),loadOnchainWhale(),loadStablecoins(),loadMacro()]);
+  })().finally(()=>{REFRESH_TASK=null;});
+  return REFRESH_TASK;
 }
 // 最後更新時間：顯示時刻＋相對「X 秒/分前」，每秒持續跳動，一眼看出資料是活的。
 let LASTUP=0;
 function renderLastUp(){
   const el=document.getElementById('ts'); if(!el) return;
-  if(!LASTUP){ el.textContent='載入中…'; return; }
+  if(!LASTUP){ el.textContent='決策資料時間未知'; return; }
   const sec=Math.max(0,Math.round((Date.now()-LASTUP)/1000));
   const ago = sec<60 ? sec+' 秒前'
             : sec<3600 ? Math.floor(sec/60)+' 分前'
             : Math.floor(sec/3600)+' 小時前';
-  el.textContent='最後更新：'+new Date(LASTUP).toLocaleTimeString()+'（'+ago+'）';
+  el.textContent=(TABLE_ERRORS.size?'部分資料更新失敗｜':'')+'決策資料時間：'+new Date(LASTUP).toLocaleTimeString()+'（'+ago+'）';
 }
 // ---- 頁2：策略 / Obsidian ----
 let STRATLOADED=false;
@@ -995,7 +1032,7 @@ async function askKB(){
 function fgColor(v){return v<25?'#f85149':v<45?'#d29922':v<55?'#8b949e':v<75?'#3fb950':'#2ea043';}
 async function loadSocial(){
   try{
-    const r=await (await fetch('/social')).json();
+    const r=await apiJSON('/social');
     const fg=r.fear_greed||{};
     let fgHtml='';
     if(fg.value!=null){
@@ -1079,10 +1116,10 @@ function loadStrategy(){
 }
 async function loadValidate(){
   try{
-    const v=await (await fetch('/validate')).json();
+    const v=await apiJSON('/validate');
     const pw=v.price_window||{};
     let curFG=null;  // 當下恐懼貪婪值，用來判讀「現在落在哪個桶」
-    try{ const rd=await (await fetch('/radar')).json(); curFG=rd.market&&rd.market.fear_greed; }catch(e){}
+    try{ const rd=await apiJSON('/radar'); curFG=rd.market&&rd.market.fear_greed; }catch(e){}
     const col=x=>x==null?'#8b949e':x>0?'#3fb950':'#f85149';
     const wcol=x=>x==null?'#8b949e':x>=55?'#3fb950':x<=45?'#f85149':'#d29922';
     function tbl(study){
@@ -1212,8 +1249,8 @@ function ago(ts){ if(!ts) return ''; const m=Math.floor((Date.now()/1000-ts)/60)
 async function loadNews(){
   try{
     const [r,sc]=await Promise.all([
-      (await fetch('/news')).json(),
-      fetch('/scores').then(x=>x.json()).then(x=>x.scores||{}).catch(()=>({}))]);
+      apiJSON('/news'),
+      apiJSON('/scores').then(x=>x.scores||{}).catch(()=>({}))]);
     const s=r.summary||{}, items=r.items||[];
     if(!items.length){document.getElementById('news').innerHTML='<div class="box empty">新聞暫無</div>';return;}
     const biasCol=s.net>2?'#3fb950':s.net<-2?'#f85149':'#8b949e';
@@ -1252,7 +1289,7 @@ async function loadNews(){
 }
 async function loadReddit(){
   try{
-    const r=await (await fetch('/reddit')).json();
+    const r=await apiJSON('/reddit');
     const coins=r.coins||{};
     if(!Object.keys(coins).length){
       document.getElementById('reddit').innerHTML=`<div class="box">
@@ -1280,7 +1317,8 @@ async function loadReddit(){
       ${rows}</div>`;
   }catch(e){document.getElementById('reddit').innerHTML='<div class="box empty">Reddit 載入失敗：'+e+'</div>';}
 }
-refresh(); setInterval(refresh,30000);
+refresh(); setInterval(()=>{if(!document.hidden) refresh();},30000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden) refresh();});
 setInterval(renderLastUp,1000);   // 「X 秒前」每秒持續跳動
 setInterval(refreshStrategy,180000);   // 策略頁每 3 分鐘自動重抓(僅該頁可見時)
 // PWA：註冊 service worker（可安裝、離線載入 App 殼）
