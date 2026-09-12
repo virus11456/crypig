@@ -52,3 +52,18 @@ def refresh(client, previous=None, now=None):
         retained = copy.deepcopy(previous)
         retained.update(attempted_at=now, refresh_failed=True)
         return retained
+
+
+def snapshot(previous=None, now=None, ttl=3600):
+    """Reuse today's validated batch for one hour; new UTC day/failure retries next cycle."""
+    import httpx
+    now = time.time() if now is None else now
+    previous = previous or {}
+    fetched = previous.get('fetched_at')
+    if (available(previous, now) and isinstance(fetched, (int, float))
+            and 0 <= now-fetched < ttl
+            and previous['observed_at']//86400 == now//86400):
+        return copy.deepcopy(previous)
+    # Dedicated public-source client: never inherit another provider's API headers.
+    with httpx.Client(timeout=15, headers={'User-Agent': 'crypig/0.1'}) as client:
+        return refresh(client, previous, now=now)

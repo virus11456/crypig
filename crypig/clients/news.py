@@ -10,6 +10,7 @@ RSS 非 IP 限流，client 自帶 TTL 快取即可。
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import re
 import time
 from xml.etree import ElementTree as ET
@@ -124,8 +125,11 @@ class NewsClient:
         if self._cache is not None and time.time() - self._ts < ttl:
             return self._cache
         items: list[dict] = []
-        for source, url in _FEEDS.items():
-            items += self._fetch_feed(source, url)
+        # Bounded fan-out across distinct publishers; preserve feed order for ties.
+        with ThreadPoolExecutor(max_workers=3, thread_name_prefix="news-rss") as pool:
+            batches = list(pool.map(lambda feed: self._fetch_feed(*feed), _FEEDS.items()))
+        for batch in batches:
+            items.extend(batch)
         if not items:
             return self._cache or {"items": [], "summary": {}, "total": 0}
         # 依時間新到舊（無時間者排後）
@@ -153,7 +157,8 @@ class NewsClient:
                 "net": bull - bear,
                 "bias": "偏多" if bull - bear > 2 else "偏空" if bull - bear < -2 else "中性",
                 "top_coins": [{"symbol": s, **v} for s, v in top_coins],
-                "sources": len(_FEEDS),
+                "sources": sum(bool(batch) for batch in batches),
+                "configured_sources": len(_FEEDS),
             },
             "total": len(items),
         }

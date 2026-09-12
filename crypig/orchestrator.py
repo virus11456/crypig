@@ -38,6 +38,7 @@ class Orchestrator:
         self._cycle_finished_at = None
         self._cycle_duration = None
         self._cycle_failed = False
+        self._cycle_steps = {}
         self._cycle_lock = threading.Lock()     # 避免並發跑輪(請求端各自觸發會互相覆蓋+打爆 HL)
         # 以下 CoinGecko 資料只在每輪(背景)抓一次並快取，請求端只讀不打 API（避免被封）
         self.macro: dict | None = None          # 全市場宏觀
@@ -85,6 +86,7 @@ class Orchestrator:
             logger.info("已有一輪在跑，略過本次觸發")
             return {"skipped": True}
         started = time.monotonic()
+        self._cycle_steps = {}
         self._cycle_started_at = datetime.now(timezone.utc).isoformat()
         try:
             result = self._run_cycle_locked()
@@ -137,13 +139,29 @@ class Orchestrator:
                              "restored": self._analysis_restored,
                              "persist_failed": self._analysis_persist_failed},
                 "duration_seconds": self._cycle_duration,
+                "steps": dict(self._cycle_steps),
                 "last_cycle_failed": self._cycle_failed,
                 "note": "Cycle completion is not the upstream observation timestamp."}
+
+    def _timed(self, name, fn, *args, **kwargs):
+        """Wall-clock timing only: returning may include cached/partial upstream data."""
+        started = time.monotonic()
+        self._cycle_steps[name] = {"state": "running", "duration_seconds": None}
+        state = "returned"
+        try:
+            return fn(*args, **kwargs)
+        except Exception:
+            state = "raised"
+            raise
+        finally:
+            duration = round(time.monotonic() - started, 3)
+            self._cycle_steps[name] = {"state": state, "duration_seconds": duration}
+            logger.info("collection_step %s %s %.3fs", name, state, duration)
 
     def _run_cycle_locked(self) -> dict:
         observations: list[Observation] = []
         for agent in self.agents:
-            obs = agent.run()
+            obs = self._timed("agent." + agent.name, agent.run)
             logger.info("agent %s 產出 %d 筆觀察", agent.name, len(obs))
             observations.extend(obs)
 
@@ -152,8 +170,8 @@ class Orchestrator:
         prices = self._prices(observations)
         ts = datetime.now(timezone.utc).isoformat()
         saved = self.decisions.record_cycle(signals, ts, prices)
-        self.all_scores = self._compute_all_scores()      # 全市場各幣輕量決策
-        self._record_positioning(ts)                       # 大戶持倉逐輪落地成時間軸
+        self.all_scores = self._timed("scores", self._compute_all_scores)      # 全市場各幣輕量決策
+        self._timed("position_history", self._record_positioning, ts)                       # 大戶持倉逐輪落地成時間軸
         self._refresh_market_data()                       # 背景抓一次 CoinGecko 並快取
         self.radar = self._divergence_radar()             # 群眾 vs 大戶 分歧雷達
         try:                                               # 背離逐輪落地成時間軸(看何時收斂=進場時機)
@@ -364,7 +382,7 @@ class Orchestrator:
                          ("macro", self._md.global_macro),
                          ("caps", self._md.top_markets)):
             try:
-                val = fn()
+                val = self._timed("market." + name, fn)
                 if name == "deriv" and val:
                     self.deriv_agg = val
                     self.valuation_times["aggregate_oi"] = self._md._deriv_ts
@@ -375,14 +393,14 @@ class Orchestrator:
                     self.valuation_times["market_caps"] = self._md._top_ts
             except Exception:
                 logger.warning("CoinGecko %s 抓取失敗，沿用上次快取", name)
-        from .clients.fear_greed import refresh as refresh_fear_greed
-        self.fear_greed = refresh_fear_greed(self._md._client, self.fear_greed)
+        from .clients.fear_greed import snapshot as sentiment_snapshot
+        self.fear_greed = self._timed("sentiment", sentiment_snapshot, self.fear_greed)
         # DefiLlama 資金動向（免費）
         try:
             if self._dl is None:
                 from .clients.defillama import DefiLlamaClient
                 self._dl = DefiLlamaClient()
-            snap = self._dl.snapshot(previous=self.defi)
+            snap = self._timed("defillama", self._dl.snapshot, previous=self.defi)
             if snap:
                 self.defi = snap
         except Exception:
@@ -392,7 +410,7 @@ class Orchestrator:
             if self._rd is None:
                 from .clients.reddit import RedditClient
                 self._rd = RedditClient()
-            buzz = self._rd.crypto_buzz()
+            buzz = self._timed("reddit", self._rd.crypto_buzz)
             if buzz:
                 self.reddit = buzz
         except Exception:
@@ -402,7 +420,7 @@ class Orchestrator:
             if self._nc is None:
                 from .clients.news import NewsClient
                 self._nc = NewsClient()
-            nz = self._nc.analyze()
+            nz = self._timed("news", self._nc.analyze)
             if nz and nz.get("total"):
                 self.news = nz
         except Exception:
@@ -413,7 +431,7 @@ class Orchestrator:
                 from .clients.lunarcrush import LunarCrushClient
                 self._lc = LunarCrushClient()
             if self._lc.enabled:
-                soc = self._lc.fetch_coins_sentiment()
+                soc = self._timed("lunarcrush", self._lc.fetch_coins_sentiment)
                 if soc:
                     self.social = soc
         except Exception:

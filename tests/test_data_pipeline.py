@@ -564,3 +564,64 @@ def test_unknown_radar_state_survives_history_storage(tmp_path):
     row = store.radar_history()[0]
     assert row['gap'] is None and row['diverging'] is None
     store._conn.close()
+
+
+def test_news_fetch_is_bounded_parallel_and_preserves_order_and_fallback(monkeypatch):
+    from threading import Barrier, Lock
+    from crypig.clients.news import NewsClient, _FEEDS
+    c=NewsClient()
+    gate=Barrier(3, timeout=2)
+    lock=Lock(); counts={'active':0, 'maximum':0, 'calls':0}
+    def fetch(source, url):
+        with lock:
+            counts['active']+=1;counts['calls']+=1
+            counts['maximum']=max(counts['maximum'], counts['active'])
+        gate.wait()
+        with lock: counts['active']-=1
+        if source==list(_FEEDS)[-1]: return []
+        return [{'title':source,'link':url,'source':source,'ts':1,'sentiment':'neutral','net':0,'coins':[]}]
+    monkeypatch.setattr(c,'_fetch_feed',fetch)
+    try:
+        good=c.analyze()
+        assert counts['maximum']==3 and counts['calls']==6
+        assert [x['source'] for x in good['items']]==list(_FEEDS)[:-1]
+        assert good['summary']['sources']==5 and good['summary']['configured_sources']==6
+        assert c.analyze()==good and counts['calls']==6
+        monkeypatch.setattr(c,'_fetch_feed',lambda *args: [])
+        assert c.analyze(ttl=0)==good
+    finally: c.close()
+
+
+def test_sentiment_cache_keeps_times_and_retries_on_boundary_failure_or_expiry(monkeypatch):
+    from crypig.clients import fear_greed
+    now=1789224620
+    previous={'value':63,'observed_at':1789171200,'fetched_at':now-100,'refresh_failed':False}
+    from unittest.mock import MagicMock
+    factory=MagicMock()
+    monkeypatch.setattr(httpx,'Client',factory)
+    fetch=Mock(return_value={'fresh':True});monkeypatch.setattr(fear_greed,'refresh',fetch)
+    cached=fear_greed.snapshot(previous,now)
+    assert cached==previous and cached is not previous
+    factory.assert_not_called()
+    for data, clock in [(previous,now+3600), (previous,1789257600),
+                        ({**previous,'refresh_failed':True},now), ({},now)]:
+        assert fear_greed.snapshot(data,clock)=={'fresh':True}
+    assert factory.call_count==4
+    assert factory.call_args.kwargs['headers']=={'User-Agent':'crypig/0.1'}
+    assert previous['fetched_at']==now-100
+
+
+def test_collection_timing_records_exception_without_conflating_freshness(monkeypatch):
+    from crypig.orchestrator import Orchestrator
+    from crypig import orchestrator as module
+    ticks=iter([10,12,20,23]);monkeypatch.setattr(module.time,'monotonic',lambda:next(ticks))
+    fake=SimpleNamespace(_cycle_steps={})
+    def cached():
+        assert fake._cycle_steps['source']['state']=='running'
+        return {'refresh_failed':True}
+    assert Orchestrator._timed(fake,'source',cached)=={'refresh_failed':True}
+    first=dict(fake._cycle_steps)
+    def fail(): raise ValueError('upstream')
+    with pytest.raises(ValueError): Orchestrator._timed(fake,'source',fail)
+    assert first['source']=={'state':'returned','duration_seconds':2}
+    assert fake._cycle_steps['source']=={'state':'raised','duration_seconds':3}
