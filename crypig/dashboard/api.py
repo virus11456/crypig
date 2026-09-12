@@ -475,6 +475,27 @@ def stablecoins() -> dict:
     return history_response("stablecoins", _load_stablecoins)
 
 
+def _load_lth_history() -> dict:
+    from ..clients.lth_history import build_lth, SLUG
+    if orchestrator().config.use_mock:
+        from datetime import date, timedelta
+        data = build_lth([{"d":(date.today()-timedelta(days=31-i)).isoformat(),
+                           "longTermHodlerSupplyBtc":16000000+i*100} for i in range(32)])
+        data["note"] = "示範資料，非真實鏈上資料。" + data["note"]
+        return data
+    from ..clients.bitcoin_data import BitcoinDataClient
+    client = BitcoinDataClient()
+    try:
+        return build_lth(client.fetch_history(SLUG, ttl=0))
+    finally:
+        client.close()
+
+
+@app.get("/lth_history")
+def lth_history() -> dict:
+    return history_response("lth_daily_supply_v1", _load_lth_history)
+
+
 @app.get("/onchain_whale")
 def onchain_whale() -> dict:
     return history_response("onchain_btc_cohorts_v1", _load_onchain_whale)

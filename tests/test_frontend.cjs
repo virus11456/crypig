@@ -158,3 +158,26 @@ test('unknown latest radar gap is not rendered as a zero or convergence signal',
  await h.run('loadRadar()');const html=h.elements.get('radar').innerHTML;
  assert.match(html,/最近連續有效 0 筆/);assert.doesNotMatch(html,/最新背離量|背離收斂中/);
 });
+test('three cohorts describe independent trends, not a consensus trade',async()=>{
+ const h=setup(async url=>response(fixture(url)));await h.run('refresh()');
+ h.run(`LTH_INFO={as_of:'2026-09-11',changes_btc:{7:-10,30:-20}};
+ OC_INFO={as_of:'2026-09-11',changes_btc:{7:10,30:-30},cohorts:[]};renderBigMoney()`);
+ const text=h.elements.get('bigmoney').innerHTML;
+ assert.match(text,/LTH 供給：近 7 天減少，近 30 天減少/);
+ assert.match(text,/大額地址合計餘額：近 30 天減少，但近 7 天轉為增加/);
+ assert.match(text,/Hyperliquid 合約/);
+ assert.doesNotMatch(text,/大戶共識/);
+});
+test('smart money analyzes both sides and refuses an incomplete 24h baseline',()=>{
+ const h=setup();
+ h.run('SB_ALL=[{t:1,v:80,long:100,short:20,count:5},{t:86401,v:60,long:120,short:60,count:6}]');
+ assert.match(h.run('smartBehavior()'),/多單名目金額增加.*空單名目金額增加/);
+ h.run('SB_ALL[0].t=4000');assert.match(h.run('smartBehavior()'),/缺少 24 小時對照/);
+ h.run('SB_ALL[0].t=1;SB_ALL[0].long=null');assert.match(h.run('smartBehavior()'),/缺少多空分項/);
+});
+test('LTH failure does not block the other behavior analyses',async()=>{
+ const h=setup(async url=>url==='/lth_history'?{ok:false,status:503}:response(fixture(url)));
+ await h.run('refresh()');assert.match(h.elements.get('lth').innerHTML,/暫時無法更新/);
+ assert.match(h.elements.get('smartbtc').innerHTML,/21 個帳號/);
+ assert.match(h.elements.get('onchainwhale').innerHTML,/BTC/);
+});

@@ -625,3 +625,26 @@ def test_collection_timing_records_exception_without_conflating_freshness(monkey
     with pytest.raises(ValueError): Orchestrator._timed(fake,'source',fail)
     assert first['source']=={'state':'returned','duration_seconds':2}
     assert fake._cycle_steps['source']=={'state':'raised','duration_seconds':3}
+
+
+def test_lth_calendar_changes_reject_conflicts_and_ignore_future():
+    from datetime import date
+    from crypig.clients.lth_history import build_lth
+    rows=[{'d':d,'longTermHodlerSupplyBtc':v} for d,v in
+          [('2026-09-11',100),('2026-09-04',110),('2026-08-12',90),('2099-01-01',200)]]
+    r=build_lth(rows,today=date(2026,9,12))
+    assert r['changes_btc']=={'1':None,'7':-10,'30':10}
+    assert r['as_of']=='2026-09-11'
+    with pytest.raises(RuntimeError):
+        build_lth(rows+[{'d':'2026-09-11','longTermHodlerSupplyBtc':101}])
+
+
+def test_lth_supply_does_not_vote_as_trade(tmp_path):
+    from crypig.agents.lth import LTHAgent
+    from crypig.config import Config
+    agent=LTHAgent(Config(snapshot_db=str(tmp_path/'lth.db')))
+    for value in (100,200,50):
+        obs=agent.analyze('BTC',{'threshold_days':151,'lth_supply':value,'as_of':'2026-09-11'})
+        assert obs.direction=='neutral' and obs.magnitude==0
+        assert obs.status=='informational' and not obs.relations
+        assert '151' not in obs.summary

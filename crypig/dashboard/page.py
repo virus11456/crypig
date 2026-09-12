@@ -254,6 +254,10 @@ INDEX_HTML = r"""<!doctype html>
 <div id="page-strategy" style="display:none"></div>
 <div id="page-market"><div class="wrap">
   <div id="bigmoney"></div>
+  <details class="ccard" open>
+    <summary><span class="ctitle">⏳ 長期持有者 BTC 供給變化</span><span class="csum" id="sum-lth">載入中…</span><span class="chev">▾</span></summary>
+    <div id="lth"><div class="box empty">長期持有者日資料載入中…</div></div>
+  </details>
   <section id="opp" class="hero"><h2>🎯 現在有沒有進場機會</h2><div class="meta">載入中…</div></section>
 
   <details class="ccard" open>
@@ -262,7 +266,7 @@ INDEX_HTML = r"""<!doctype html>
   </details>
 
   <details class="ccard">
-    <summary><span class="ctitle">🧭 大玩家決心</span><span class="csum" id="sum-pos">載入中…</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle">🧭 合約帳號部位比較</span><span class="csum" id="sum-pos">載入中…</span><span class="chev">▾</span></summary>
     <div id="pos"><div class="box empty">大玩家決心載入中…</div></div>
   </details>
 
@@ -273,11 +277,11 @@ INDEX_HTML = r"""<!doctype html>
 
   <details class="ccard" open>
     <summary><span class="ctitle">🧠 聰明錢 BTC 淨持倉變化 <small style="opacity:.7">合約</small></span><span class="csum" id="sum-smartbtc">載入中…</span><span class="chev">▾</span></summary>
-    <div id="smartbtc"><div class="box empty">聰明錢 BTC 買賣偵測載入中…</div></div>
+    <div id="smartbtc"><div class="box empty">聰明錢 BTC 合約分析載入中…</div></div>
   </details>
 
   <details class="ccard">
-    <summary><span class="ctitle">🐋 巨鯨 BTC 淨持倉變化 <small style="opacity:.7">合約</small></span><span class="csum" id="sum-whale">載入中…</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle">🐋 合約大額帳號 BTC 淨持倉變化 <small style="opacity:.7">合約</small></span><span class="csum" id="sum-whale">載入中…</span><span class="chev">▾</span></summary>
     <div id="whalechart"><div class="box empty">巨鯨 BTC 買賣偵測載入中…</div></div>
   </details>
 
@@ -304,7 +308,7 @@ INDEX_HTML = r"""<!doctype html>
 <script>
 
 const API_INFLIGHT = new Map(), API_CACHE = new Map();
-const API_TTLS = {'/stablecoins':300000, '/onchain_whale':300000,
+const API_TTLS = {'/stablecoins':300000, '/onchain_whale':300000, '/lth_history':300000,
   '/defi':300000, '/macro':60000, '/radar_history':60000,
   '/whale_history?symbol=BTC&cohort=smart&limit=2500':1200000,
   '/whale_history?symbol=BTC&cohort=whale&limit=2500':1200000};
@@ -677,17 +681,17 @@ async function loadPositioning(){
     let pc=null;
     if(sd&&wd){
       if((sd==='多'&&wd==='空')||(sd==='空'&&wd==='多'))
-        pc={t:`⚠️ <b>分歧訊號</b>：聰明錢偏<b>${sd}</b>、巨鯨偏<b>${wd}</b>（方向相反）→ 會交易的贏家和最有錢的人看法不同，值得盯`,c:'#d29922'};
+        pc={t:`⚠️ <b>分歧訊號</b>：聰明錢偏<b>${sd}</b>、巨鯨偏<b>${wd}</b>（方向相反）→ 兩種合約樣本的部位方向不同`,c:'#d29922'};
       else if(sd===wd)
-        pc={t:`聰明錢與巨鯨<b>同向偏${sd}</b> → 大戶共識，順勢偏${sd}；無分歧`,c:sd==='多'?'#3fb950':sd==='空'?'#f85149':'#8b949e'};
+        pc={t:`聰明錢與巨鯨<b>同向偏${sd}</b> → 兩種合約樣本方向相同，未涵蓋現貨或長期持有者`,c:sd==='多'?'#3fb950':sd==='空'?'#f85149':'#8b949e'};
       else pc={t:`聰明錢偏${sd}、巨鯨${wd} → 一方中性，方向未明、續觀望`,c:'#8b949e'};
     }
     document.getElementById('pos').innerHTML=`<div class="box">
-      <h2>🧭 大玩家決心 <small>多空人數＋槓桿（人數=表態強度，槓桿=決心）</small></h2>
+      <h2>🧭 合約帳號部位比較 <small>多空人數＋帳號槓桿</small></h2>
       ${pc?`<div class="vline" style="border-left-color:${pc.c}">📍 現在：${pc.t}</div>`:''}
       ${posRow('🧠 聰明錢', '近100筆勝率+獲利', p.smart, '#58a6ff')}
-      ${posRow('🐋 巨鯨', '全市場淨值前N', p.whale, '#d29922')}
-      <div class="meta">註：兩群為獨立母體——聰明錢=近期方向贏家、巨鯨=全市場最有錢者${p.overlap!=null?`（目前重疊 <b>${p.overlap}</b> 人）`:''}；已排除 HLP/做市金庫。觀望=無持倉；表態傾向只計有開倉者。<br>👉 聰明錢與巨鯨方向相反時＝值得注意的分歧訊號。</div>
+      ${posRow('🐋 合約大額帳號', '候選樣本淨值前N', p.whale, '#d29922')}
+      <div class="meta">註：兩群依不同規則篩選、可能重疊；聰明錢含近期交易資格篩選與歷史獲利補入，大額帳號依候選帳號淨值排序${p.overlap!=null?`（目前重疊 <b>${p.overlap}</b> 人）`:''}；不代表全市場投資人。觀望=此平台無持倉；表態傾向只計有開倉者。<br>👉 聰明錢與巨鯨方向相反時＝值得注意的分歧訊號。</div>
     </div>`;
     const leanS=g=>{ if(!g||!g.total) return '無資料'; const sp=g.short_pct,lp=g.long_pct;
       return sp==null?'—':(sp>lp?`<b style="color:#f85149">空 ${(sp*100).toFixed(0)}%</b>`:`<b style="color:#3fb950">多 ${(lp*100).toFixed(0)}%</b>`); };
@@ -796,11 +800,55 @@ function lineTip(e,id){ const d=LINE_DATA[id]; if(!d) return;
   if(m){ m.setAttribute('cx',d.P[i][0].toFixed(1)); m.setAttribute('cy',d.P[i][1].toFixed(1)); m.style.display='block'; }
   ctip(e, dateLab(p.t,d.spanD)+'　'+d.label(p)); }
 function lineOut(id){ ctipHide(); const m=document.getElementById('lm-'+id); if(m)m.style.display='none'; }
-// 🐋 大戶綜合判讀：鏈上現貨(結構性) × 合約(短期方向) 交叉結論，放最上面
-let SB_VERDICT=null, OC_VERDICT=null;
+// Each population is analyzed independently; no combined trade verdict.
+let SB_VERDICT=null, OC_VERDICT=null, LTH_INFO=null, LTH_ERR=null;
+function signedBTC(v){return Number.isFinite(v)?(v>0?'+':'')+Math.round(v).toLocaleString()+' BTC':'缺少對照日';}
+function supplyBehavior(r, subject){
+  const a=r?.changes_btc?.['7'], b=r?.changes_btc?.['30'];
+  if(!Number.isFinite(a)||!Number.isFinite(b))return subject+'：7／30 天對照不足，暫不判定趨勢。';
+  if(a>0&&b<0)return subject+'：近 30 天減少，但近 7 天轉為增加。';
+  if(a<0&&b>0)return subject+'：近 30 天增加，但近 7 天轉為減少。';
+  return subject+'：近 7 天'+(a>0?'增加':a<0?'減少':'持平')+'，近 30 天'+(b>0?'增加':b<0?'減少':'持平')+'。';
+}
+function smartBehavior(){
+  const all=orderedPoints(SB_ALL||[],'v'), last=all.at(-1);
+  if(!last)return 'BTC 合約部位資料不足。';
+  const target=last.t-86400;
+  const prev=all.filter(p=>p.t<=target&&target-p.t<=3600).at(-1);
+  const current=(Date.now()/1000-last.t>3600?'資料延遲，以下為上次紀錄。':'')+'目前樣本名目部位'+(last.v>0?'淨多':last.v<0?'淨空':'多空相等')+'。';
+  if(!prev)return current+'缺少 24 小時對照，暫不判斷部位變化。';
+  if(![last.long,last.short,prev.long,prev.short].every(Number.isFinite))return current+'缺少多空分項，暫不判斷部位變化。';
+  const describe=(name,n)=>name+(n>0?'增加':n<0?'減少':'持平')+' $'+(Math.abs(n)/1e6).toFixed(2)+'M';
+  return current+'約 24 小時內，'+describe('多單名目金額',last.long-prev.long)+'；'+describe('空單名目金額',last.short-prev.short)+'。樣本 '+(prev.count??'—')+' → '+(last.count??'—')+' 帳號。';
+}
 function renderBigMoney(){
   const el=document.getElementById('bigmoney'); if(!el) return;
-  el.innerHTML='<div class="combo"><span class="ct">🐋 大戶資料解讀</span><span>聰明錢／巨鯨合約樣本來自 Hyperliquid，不代表 BTC 現貨持有；鏈上地址按餘額分組，長期持有者按時間分類，三者不能混用。</span></div>';
+  const freshness=r=>r?.as_of?'截至 '+r.as_of+((r.meta?.stale||Date.now()-Date.parse(r.as_of)>3*86400000)?'｜資料延遲':''):'';
+  const whale=OC_INFO?supplyBehavior(OC_INFO,'大額地址合計餘額'):'資料載入中…';
+  const bands=(OC_INFO?.cohorts||[]).map(c=>supplyBehavior(c,c.label)).join(' ');
+  el.innerHTML=`<section class="box"><h2>三類行為分別分析</h2>
+    <p><b>⏳ 長期持有者</b>｜${LTH_INFO?supplyBehavior(LTH_INFO,'LTH 供給'):(LTH_ERR||'資料載入中…')}<br><span class="meta">${freshness(LTH_INFO)}${LTH_ERR?'｜'+LTH_ERR:''}｜觀察舊幣供給變化；增加不等於新買入。</span></p>
+    <p><b>🐋 現貨巨鯨</b>｜${whale}<br>${bands}<br><span class="meta">${freshness(OC_INFO)}${OC_ERR?'｜'+OC_ERR:''}｜地址分組可能含交易所與託管；不能由餘額確認抄底或拋售。</span></p>
+    <p><b>🧠 聰明錢</b>｜${smartBehavior()}<br><span class="meta">${SB_ALL.length?'截至 '+new Date(SB_ALL.at(-1).t*1000).toISOString():''}｜Hyperliquid 合約追蹤樣本；名單可能包含僅依歷史獲利補入的帳號。名目差額包含價格與樣本更換，不等於成交或 BTC 現貨買賣。</span></p>
+    </section>`;
+}
+async function loadLTH(){
+  try{LTH_INFO=await apiJSON('/lth_history');LTH_ERR=null;renderLTH();}
+  catch(e){LTH_ERR='日資料暫時無法更新';renderLTH();}
+  renderBigMoney();
+}
+function renderLTH(){
+  const r=LTH_INFO, el=document.getElementById('lth');
+  if(!r){el.innerHTML='<div class="box empty">'+(LTH_ERR||'資料載入中…')+'</div>';return;}
+  const all=orderedPoints((r.history||[]).map(x=>({t:Date.parse(x.date)/1000,v:x.btc})),'v');
+  const bars=[];
+  for(let i=1;i<all.length;i++)if(all[i].t>all.at(-1).t-30*86400&&all[i].t-all[i-1].t===86400)bars.push({t:all[i].t,v:all[i].v-all[i-1].v});
+  el.innerHTML=`<div class="box"><p><b>${supplyBehavior(r,'LTH 供給')}</b></p>
+    <p>目前 ${signedBTC(r.balance_btc).replace(/^\+/,'')}｜近 1 天 ${signedBTC(r.changes_btc?.['1'])}｜近 7 天 ${signedBTC(r.changes_btc?.['7'])}｜近 30 天 ${signedBTC(r.changes_btc?.['30'])}</p>
+    <p class="meta">截至 ${r.as_of}。${LTH_ERR||((r.meta?.stale||Date.now()-Date.parse(r.as_of)>3*86400000)?'資料延遲，保留上次資料。':'')} ${r.note}</p>
+    <p class="meta">近 30 天每日供給差額；缺日不畫成單日變化。下降只能說明 LTH 分類供給減少，要判斷賣出仍需舊幣支出與流向證據。</p>
+    ${barChart(bars,{tip:p=>'供給差額 '+signedBTC(p.v)})}<p class="meta">來源：<a href="https://bitcoin-data.com/v1/long-term-hodler-supply-btc" target="_blank" rel="noopener">bitcoin-data LTH 日供給</a></p></div>`;
+  setSum('sum-lth','近7天 '+signedBTC(r.changes_btc?.['7']));
 }
 // 🪙 鏈上巨鯨 BTC 現貨持倉量：每日買/賣量柱狀（綠囤幣/紅出貨）＋近30天/近7天切換
 let OC_ALL=[], OC_RANGE='30d', OC_BANDS='大型持有者', OC_ERR=null, OC_INFO=null;
@@ -811,8 +859,8 @@ async function loadOnchainWhale(){
     OC_INFO=r;
     OC_ALL=(r.history||[]).map(x=>({t:Date.parse(x.date)/1000, btc:x.btc, whale:x.whale, humpback:x.humpback}));
     OC_BANDS=r.bands||'大型持有者'; OC_ERR=r.meta?.stale?'來源更新延遲，顯示上次資料':null;
-    renderOnchain();
-  }catch(e){OC_ERR='更新失敗，稍後重試';renderOnchain();}
+    renderOnchain();renderBigMoney();
+  }catch(e){OC_ERR='更新失敗，稍後重試';renderOnchain();renderBigMoney();}
 }
 function renderOnchain(){
   const all=orderedPoints(OC_ALL||[],'btc');
@@ -837,7 +885,7 @@ function renderOnchain(){
   document.getElementById('onchainwhale').innerHTML=`<div class="box">
     <div class="row" style="justify-content:space-between"><span>BTC 現貨地址餘額分組</span>${toggle}</div>
     <p class="meta">${OC_ERR||''} 資料截至 ${new Date(all[all.length-1].t*1000).toISOString().slice(0,10)}。${OC_INFO?.note||'地址餘額變化不等於成交買賣。'}</p>
-    <p>巨鯨按持有量分類；長期持有者按持有時間分類；聰明錢按追蹤規則分類。三者不等同，本圖不判定抄底或拋售。</p>
+    <p><b>${supplyBehavior(OC_INFO,"大額地址合計餘額")}</b></p><p class="meta">巨鯨按地址餘額分類；長期持有者按持有時間分類，請分別查看各自分析。</p>
     <div style="overflow-x:auto">${table}</div><p class="meta">綠＝餘額增加，紅＝餘額減少。轉帳、交易所託管與跨分組均可能影響數值。</p>${charts}
     <p class="meta">來源：<a href="https://bitcoin-data.com/v1/coins-addr-10K-1K-BTC" target="_blank" rel="noopener">1,000–10,000 BTC</a> ／ <a href="https://bitcoin-data.com/v1/coins-addr-10K-BTC" target="_blank" rel="noopener">超過10,000 BTC</a>；已替換待核實的 wallet-bands。</p></div>`;
   setSum('sum-onchain','BTC 地址分組｜近7天合計 '+signed(OC_INFO?.changes_btc?.['7']));
@@ -913,9 +961,9 @@ function setSBRange(rg){ SB_RANGE=rg; renderSmartBTC(); }
 async function loadSmartBTC(){
   try{
     const r=await apiJSON('/whale_history?symbol=BTC&cohort=smart&limit=2500');
-    SB_ALL=(r.history||[]).map(x=>({t:Date.parse(x.ts)/1000, v:x.net_usd, count:x.count}));
+    SB_ALL=orderedPoints((r.history||[]).map(x=>({t:Date.parse(x.ts)/1000, v:x.net_usd, long:x.long_usd, short:x.short_usd, count:x.count})),'v');
     renderSmartBTC();
-  }catch(e){document.getElementById('smartbtc').innerHTML='<div class="box empty">聰明錢吸籌偵測載入失敗：'+e+'</div>';}
+  }catch(e){document.getElementById('smartbtc').innerHTML='<div class="box empty">聰明錢合約分析載入失敗：'+e+'</div>';}
 }
 function renderSmartBTC(){
   const all=orderedPoints(SB_ALL||[],'v');
@@ -935,7 +983,7 @@ function renderSmartBTC(){
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><span class="meta">🧠 本次 BTC 持倉樣本 ${all[all.length-1].count??'—'} 個帳號 · 淨持倉名目金額變化</span>${toggle}</div>
     <div class="vline" style="border-left-color:${concl.c}">📍 現在：${concl.t}</div>
     <div class="meta">每根柱＝那一輪聰明錢<b style="color:#3fb950">名目金額增加(綠)</b>／<b style="color:#f85149">名目金額減少(紅)</b> BTC 合約｜此差額包含價格變化及追蹤樣本變化，非成交金額。<br><span style="opacity:.75">（目前累計站在 <b style="color:${col}">${net>=0?'淨多':'淨空'} $${(Math.abs(net)/1e6).toFixed(1)}M</b>，僅供參考立場，非當輪動作）</span></div>
-    ${note}${barChart(bars,{tip:p=>(p.v>=0?'名目金額增加 +$':'名目金額減少 -$')+(Math.abs(p.v)/1e6).toFixed(1)+'M'})}
+    <p>${smartBehavior()}</p>${note}${barChart(bars,{tip:p=>(p.v>=0?'名目金額增加 +$':'名目金額減少 -$')+(Math.abs(p.v)/1e6).toFixed(1)+'M'})}
   </div>`;
   setSum('sum-smartbtc', `${concl.t.replace(/<[^>]+>/g,'')}`.slice(0,40));
 }
@@ -1014,7 +1062,7 @@ function refresh(){
       renderMarketState();
     });
     await Promise.allSettled([...market,loadRadar(),loadDefi(),loadPositioning(),
-      loadSmartBTC(),loadWhaleChart(),loadOnchainWhale(),loadStablecoins(),loadMacro()]);
+      loadSmartBTC(),loadWhaleChart(),loadOnchainWhale(),loadLTH(),loadStablecoins(),loadMacro()]);
   })().finally(()=>{REFRESH_TASK=null;});
   return REFRESH_TASK;
 }
