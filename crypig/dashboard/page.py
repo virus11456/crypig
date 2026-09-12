@@ -479,7 +479,7 @@ const MCOLS=[
   {k:'funding_ann',t:'資金費率(年化)',f:fundCell},
   {k:'open_interest',t:'OI',f:r=>bigMoney(r.open_interest)},
   {k:'premium',t:'溢價',f:r=>r.premium==null?'—':(r.premium*100).toFixed(3)+'%'},
-  {k:'market_cap',t:'市值',f:r=>bigMoney(r.market_cap)},
+  {k:'market_cap',t:'市值',f:r=>bigMoney(r.market_cap)+(r.market_cap!=null && r.cap_match!=='asset_id'?'（代號配對）':'')},
 ];
 function mRows(){
   let rows=MFILT?MROWS.filter(r=>r.symbol.includes(MFILT)):MROWS;
@@ -505,7 +505,7 @@ function renderTable(){
       <h2 style="margin:0">📋 幣別總表 <small>共 ${MROWS.length} 幣 · BTC/ETH/SOL 完整4訊號決策、其餘為聰明錢+資金費率輕量評分 · 點標題排序</small></h2>
       <input class="filt" placeholder="搜尋幣別…" oninput="MFILT=this.value.trim().toUpperCase();renderMBody()" value="${MFILT}">
     </div>
-    <div class="meta" style="margin:-4px 0 8px">ℹ️ <b>標記價／溢價</b>來自 Hyperliquid，全幣皆有。OI 優先採 CoinGecko 跨交易所聚合，缺資料時採 HL；來源見 OI/Cap 標示。<b>市值／OI&#8202;Cap／Vol&#8202;Cap</b>來自 CoinGecko，僅 ${withCap}/${MROWS.length} 幣對得上——「—」代表本次未取得可靠對應資料；目前僅抓取市值前 250 名，且幣別代號可能有歧義。日線背離使用已收盤日線，與綜合決策中的其他週期訊號不同。</div>
+    <div class="meta" style="margin:-4px 0 8px">ℹ️ <b>標記價／溢價</b>來自 Hyperliquid，目前清單排除已下架市場。OI 優先採 CoinGecko 跨交易所聚合，缺資料時採 HL；來源見 OI/Cap 標示。<b>市值／OI&#8202;Cap／Vol&#8202;Cap</b>來自 CoinGecko，僅 ${withCap}/${MROWS.length} 幣取得資料。「代號配對」尚未逐幣核實身分；同名有歧義或資料缺漏顯示「—」。目前抓取市值前 250 名。日線背離使用已收盤日線，與綜合決策中的其他週期訊號不同。</div>
     <div class="scroll"><table class="tbl"><thead><tr>${head}</tr></thead><tbody id="mbody">${mBodyHTML()}</tbody></table></div></div>`;
   setSum('sum-table', `共 <b>${MROWS.length}</b> 幣 · 判斷·聰明錢/巨鯨多空·背離·費率·市值 · 點開可排序/篩選`);
 }
@@ -952,7 +952,7 @@ function renderWhaleChart(){
   setSum('sum-whale', `${wc.t.replace(/<[^>]+>/g,'')}`.slice(0,40));
 }
 
-let QUOTE_META=null;
+let QUOTE_META=null, VALUATION_META=null;
 let REFRESH_TASK=null, TABLE_STATE={decisions:[],hlcoins:[],scores:{}}, TABLE_ERRORS=new Set();
 function renderMarketState(){
   const {decisions,hlcoins,scores}=TABLE_STATE;
@@ -961,12 +961,12 @@ function renderMarketState(){
   hlcoins.forEach(c=>bySym[c.symbol]={symbol:c.symbol, price:c.price,
     funding_ann:c.funding_ann, funding_flag:c.funding_flag,
     open_interest:c.open_interest_usd, oi_source:c.open_interest_source, premium:c.premium,
-    market_cap:c.market_cap, oi_cap:c.oi_cap, vol_cap:c.vol_cap});
-  Object.entries(scores).forEach(([s,v])=>{ const r=bySym[s]||(bySym[s]={symbol:s});
+    market_cap:c.market_cap, cap_match:c.market_cap_match, oi_cap:c.oi_cap, vol_cap:c.vol_cap});
+  Object.entries(scores).forEach(([s,v])=>{ if(hlcoins.length && !bySym[s])return; const r=bySym[s]||(bySym[s]={symbol:s});
     const {funding_ann, ...signals}=v;
     Object.assign(r, signals); if(r.funding_ann==null)r.funding_ann=funding_ann;
     r.score_source='市場掃描'; });   // label/score/confidence/divergence/sm_net/whale_net/…
-  decisions.forEach(d=>{ const r=bySym[d.symbol]||(bySym[d.symbol]={symbol:d.symbol});
+  decisions.forEach(d=>{ if(hlcoins.length && !bySym[d.symbol])return; const r=bySym[d.symbol]||(bySym[d.symbol]={symbol:d.symbol});
     r.score_source='綜合決策'; r.label=d.label; r.score=d.score; r.confidence=d.confidence; if(r.price==null)r.price=d.price; });
   MROWS=Object.values(bySym);
   renderTable();
@@ -987,7 +987,7 @@ function refresh(){
         const data=await apiJSON(url);
         if(!valid(data[field])) throw new Error('資料格式不符');
         TABLE_STATE[key]=data[field]; TABLE_ERRORS.delete(key);
-        if(key==='hlcoins') QUOTE_META=data.meta?.quotes||null;
+        if(key==='hlcoins'){ QUOTE_META=data.meta?.quotes||null; VALUATION_META=data.meta?.valuations||null; }
         if(key==='decisions'){
           const times=data[field].map(d=>Date.parse(d.ts)).filter(Number.isFinite);
           LASTUP=times.length?Math.min(...times):0;
@@ -1011,6 +1011,13 @@ function renderLastUp(){
   const quotes=quoteTs?'行情取得：'+new Date(quoteTs).toLocaleTimeString()+'（'+age(quoteTs)+'）'+(stale?' ⚠ 行情延遲':''):'行情取得時間未知';
   const decisions=LASTUP?'分析資料：'+new Date(LASTUP).toLocaleTimeString()+'（'+age(LASTUP)+'）':'分析資料準備中';
   el.textContent=(TABLE_ERRORS.size?'部分資料更新失敗｜':'')+quotes+'｜'+decisions;
+  if(VALUATION_META){
+    const parts=[['market_caps','市值'],['aggregate_oi','跨所 OI']].map(([key,label])=>{
+      const ts=VALUATION_META[key]?.fetched_at*1000;
+      return label+(ts?'取得 '+age(ts)+(Date.now()-ts>2400000?' ⚠ 延遲':''):'準備中');
+    });
+    el.textContent+='｜'+parts.join('／');
+  }
 }
 // ---- 頁2：策略 / Obsidian ----
 let STRATLOADED=false;

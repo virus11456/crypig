@@ -109,3 +109,14 @@ test('slow score funding cannot overwrite latest quote funding; old quotes are d
  assert.match(h.elements.get('ts').textContent,/行情延遲/);
  assert.match(h.elements.get('ts').textContent,/分析資料準備中/);
 });
+test('scores and old decisions cannot reintroduce an absent market into live quotes',()=>{
+ const h=setup();
+ h.run("TABLE_STATE={hlcoins:[{symbol:'BTC',price:100}],scores:{OLD:{score:1}},decisions:[{symbol:'OLD',price:300}]}; renderMarketState()");
+ assert.equal(h.run("MROWS.map(r=>r.symbol).join(',')"),'BTC');
+});
+test('valuation timestamps distinguish older market caps from fresh quotes',()=>{
+ const h=setup();
+ h.run("VALUATION_META={market_caps:{fetched_at:Date.now()/1000-2500},aggregate_oi:{fetched_at:null}}; renderLastUp()");
+ assert.match(h.elements.get('ts').textContent,/市值取得.*延遲/);
+ assert.match(h.elements.get('ts').textContent,/跨所 OI準備中/);
+});

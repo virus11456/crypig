@@ -50,3 +50,24 @@ funding. CoinGecko market-cap identity matching remains a separate follow-up;
 this change does not claim all asset identities are verified.
 
 Validation: 11 Python pipeline tests and 13 JavaScript frontend tests pass.
+
+## Phase 3: market identity and listing status
+
+Exclude Hyperliquid `isDelisted` markets before building live quotes and scores;
+validate universe/context lengths before zipping to prevent silent truncation.
+The frontend does not reintroduce symbols from old scores/decisions when a live
+quote universe is available. Persisted quote caches require the active-only
+schema marker, so older snapshots cannot restore delisted markets.
+
+CoinGecko uses the six existing configured asset IDs where available; other
+symbols are explicitly marked as candidates, and duplicate symbols are omitted.
+Missing volume stays null rather than zero. HTTP failures retain the original
+cache timestamp. The page shows separate market-cap and aggregate-OI fetch ages.
+No extra CoinGecko calls or expanded page budget are introduced.
+
+Validation: 14 Python and 15 JavaScript tests. Public upstream inspection found
+56 delisted entries in a 234-entry universe (178 active). This does not verify
+all symbol candidates or aggregate derivative asset identities.
+
+References: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint/perpetuals
+and https://docs.coingecko.com/reference/coins-markets

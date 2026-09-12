@@ -269,8 +269,13 @@ class HyperliquidClient:
         resp = self._client.post(INFO_URL, json={"type": "metaAndAssetCtxs"})
         resp.raise_for_status()
         meta, ctxs = resp.json()
+        universe = meta.get("universe", [])
+        if not universe or len(universe) != len(ctxs):
+            raise ValueError("Incomplete market contexts")
         out: dict[str, dict] = {}
-        for u, ctx in zip(meta.get("universe", []), ctxs):
+        for u, ctx in zip(universe, ctxs):
+            if u.get("isDelisted"):
+                continue
             name = u.get("name")
             if not name:
                 continue

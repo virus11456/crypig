@@ -194,3 +194,53 @@ def test_quote_refresh_is_nonblocking_and_preserves_timestamp_on_failure(tmp_pat
     assert not store.refresh()
     assert store.read()[1]['fetched_at'] is None
     assert store.read()[1]['stale']
+
+
+def test_market_ids_reject_namesakes_and_ambiguous_symbols():
+    from crypig.clients.market_data import MarketDataClient
+    def row(symbol, cid, cap=100, volume=0):
+        return dict(symbol=symbol, id=cid, market_cap=cap, total_volume=volume)
+    result = MarketDataClient.normalize_markets([
+        row('btc','fake-bitcoin',10000), row('btc','bitcoin'),
+        row('eth','fake-ethereum'), row('abc','abc-one'), row('abc','abc-two'),
+        row('xyz','xyz',volume=None), row('bad','bad',cap=float('nan'))])
+    assert result['BTC']['asset_id'] == 'bitcoin'
+    assert result['BTC']['match_method'] == 'asset_id'
+    assert result['BTC']['volume_24h'] == 0
+    assert 'ETH' not in result and 'ABC' not in result and 'BAD' not in result
+    assert result['XYZ']['volume_24h'] is None
+    assert result['XYZ']['match_method'] == 'symbol_candidate'
+
+
+def test_market_http_error_preserves_cache_and_original_timestamp():
+    from crypig.clients.market_data import MarketDataClient
+    c = MarketDataClient()
+    try:
+        c._top_cache = {'BTC': {'market_cap':100}}
+        c._top_ts = 12
+        response = Mock()
+        response.raise_for_status.side_effect = ValueError('rate limited')
+        c._client.get = Mock(return_value=response)
+        assert c.top_markets(ttl=0) == {'BTC': {'market_cap':100}}
+        assert c._top_ts == 12
+    finally:
+        c._client.close()
+
+
+def test_delisted_contexts_are_excluded_without_shifting_symbol_alignment():
+    from crypig.clients.hyperliquid import HyperliquidClient
+    c = HyperliquidClient()
+    response = Mock()
+    response.json.return_value = [{'universe':[{'name':'OLD','isDelisted':True},{'name':'BTC'}]},
+        [{'markPx':'123'}, {'markPx':'50000','funding':'0','openInterest':'2','premium':'0'}]]
+    try:
+        c._client.post = Mock(return_value=response)
+        rows = c.funding_scan()
+        assert len(rows) == 1 and rows[0]['symbol'] == 'BTC'
+        assert rows[0]['price'] == 50000 and rows[0]['open_interest_usd'] == 100000
+        c._mc_ttl = 0
+        response.json.return_value[1].pop()
+        with pytest.raises(ValueError, match='Incomplete'):
+            c.market_contexts()
+    finally:
+        c.close()

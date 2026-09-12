@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import math
 import os
 import statistics
 import time
@@ -133,34 +134,51 @@ class MarketDataClient:
             return "squeeze"
         return "normal"
 
-    def top_markets(self, per_page: int = 250, ttl: float = 600.0) -> dict[str, dict]:
-        """CoinGecko 前 N 大市值幣的 {SYMBOL: {market_cap, volume_24h}}（一次抓、快取）。
+    @classmethod
+    def normalize_markets(cls, raw: list) -> dict[str, dict]:
+        if not isinstance(raw, list) or not raw:
+            raise ValueError("Empty market response")
+        groups = defaultdict(list)
+        for row in raw:
+            if not isinstance(row, dict):
+                raise ValueError("Invalid market row")
+            symbol = row.get("symbol")
+            if isinstance(symbol, str) and symbol and isinstance(row.get("id"), str):
+                groups[symbol.upper()].append(row)
+        out = {}
+        for symbol, rows in groups.items():
+            expected = cls._CG_ID.get(symbol)
+            candidates = [r for r in rows if r["id"] == expected] if expected else rows
+            if len(candidates) != 1:
+                continue  # ambiguous or known ID missing: never pick the biggest namesake
+            row = candidates[0]
+            cap, volume = row.get("market_cap"), row.get("total_volume")
+            def valid(value):
+                return not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value) and value >= 0
+            if not valid(cap) or cap == 0:
+                continue
+            out[symbol] = {"market_cap": cap, "volume_24h": volume if valid(volume) else None,
+                           "asset_id": row["id"],
+                           "match_method": "asset_id" if expected else "symbol_candidate",
+                           "source_updated_at": row.get("last_updated")}
+        return out
 
-        用來補全市場列表中各幣的市值與量（同名取市值最大者）。CoinGecko 對雲端
-        IP 會限流，故：失敗時沿用上次好的快取（不回空），TTL 拉長到 10 分鐘。
-        """
+    def top_markets(self, per_page: int = 250, ttl: float = 600.0) -> dict[str, dict]:
+        """One page per refresh; reject ambiguous symbols and preserve valid cache on errors."""
         if self._top_cache is not None and time.time() - self._top_ts < ttl:
             return self._top_cache
         try:
-            raw = self._client.get(
+            response = self._client.get(
                 "https://api.coingecko.com/api/v3/coins/markets",
                 params={"vs_currency": "usd", "order": "market_cap_desc",
-                        "per_page": str(per_page), "page": "1"}).json()
+                        "per_page": str(per_page), "page": "1"})
+            response.raise_for_status()
+            out = self.normalize_markets(response.json())
+            if out:
+                self._top_cache, self._top_ts = out, time.time()
         except Exception:
-            return self._top_cache or {}
-        out: dict[str, dict] = {}
-        if isinstance(raw, list):
-            for m in raw:
-                if not isinstance(m, dict):
-                    continue
-                sym = (m.get("symbol") or "").upper()
-                if sym and sym not in out:        # 同名取第一個(市值最大)
-                    out[sym] = {"market_cap": float(m.get("market_cap") or 0.0),
-                                "volume_24h": float(m.get("total_volume") or 0.0)}
-        if out:
-            self._top_cache, self._top_ts = out, time.time()
-            return out
-        return self._top_cache or {}              # 限流回非 list → 用上次快取
+            pass
+        return self._top_cache or {}
 
     def coin_macro(self, symbols: list[str], ttl: float = 120.0) -> dict[str, dict]:
         """各幣 OI/Cap、Vol/Cap、資金費率(年化)與異常分級。快取以減少 CoinGecko 呼叫。"""

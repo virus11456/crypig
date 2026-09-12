@@ -694,7 +694,7 @@ def hl_market() -> dict:
     """Hyperliquid 全市場（全部永續幣）資金費率掃描 + 跨平台補市值/OI-Cap/Vol-Cap。
 
     跨平台整合：HL（標記價、資金費率、溢價、OI 後備）＋ CoinGecko（市值、量、
-    跨所聚合 OI）。OI 優先用跨所聚合、否則 HL；市值對得上的幣才有(同名取最大市值)。
+    跨所聚合 OI）。OI 優先用跨所聚合、否則 HL；市值優先採明確 ID，未指定 ID 的代號配對保留候選標記。
     """
     orc = orchestrator()
     if orc.config.use_mock:
@@ -716,10 +716,20 @@ def hl_market() -> dict:
         oi = agg["open_interest_usd"] if (agg and agg.get("open_interest_usd")) else c["open_interest_usd"]
         c["hl_open_interest_usd"] = c["open_interest_usd"]
         c["open_interest_source"] = "coingecko_aggregated" if agg and agg.get("open_interest_usd") else "hyperliquid"
-        c["market_cap_source"] = "coingecko_symbol_match" if info else None
+        c["market_cap_source"] = "coingecko" if info else None
+        c["market_cap_match"] = info.get("match_method", "symbol_candidate") if info else None
+        c["market_cap_asset_id"] = info.get("asset_id") if info else None
+        c["market_cap_updated_at"] = info.get("source_updated_at") if info else None
         c["open_interest_usd"] = oi
         c["oi_cap"] = (oi / cap) if (cap and oi is not None) else None
-    return {"count": len(coins), "coins": coins, "meta": {**orc.cycle_status(), "quotes": quote_meta}}
+    md = getattr(orc, "_md", None)
+    valuations = {}
+    for name, attr in (("market_caps", "_top_ts"), ("aggregate_oi", "_deriv_ts")):
+        fetched = getattr(md, attr, 0) or None
+        age = max(0, time.time() - fetched) if fetched else None
+        valuations[name] = {"fetched_at": fetched, "age_seconds": age,
+                            "stale": age is None or age > 2400}
+    return {"count": len(coins), "coins": coins, "meta": {**orc.cycle_status(), "quotes": quote_meta, "valuations": valuations}}
 
 
 @app.post("/ask")

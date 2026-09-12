@@ -25,6 +25,8 @@ class QuoteStore:
         self._persist_failed = False
         try:
             saved = json.loads(self.path.read_text())
+            if saved.get("universe_policy") != "active_only_v1":
+                raise ValueError("Obsolete market universe cache")
             self._validate(saved["coins"])
             ts = saved["fetched_at"]
             if not isinstance(ts, (int, float)) or not math.isfinite(ts) or not 0 < ts <= time.time() + 60:
@@ -65,7 +67,8 @@ class QuoteStore:
             else:
                 coins = self._loader()
             self._validate(coins)
-            snapshot = {"coins": copy.deepcopy(coins), "fetched_at": time.time()}
+            snapshot = {"coins": copy.deepcopy(coins), "fetched_at": time.time(),
+                        "universe_policy": "active_only_v1"}
             with self._state_lock:
                 self._snapshot = snapshot
                 self._failed = False
