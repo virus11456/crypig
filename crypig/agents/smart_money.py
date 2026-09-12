@@ -49,7 +49,7 @@ class SmartMoneyAgent(Agent):
 
     @staticmethod
     def _summarize_traders(smart_accounts: list[dict], whale_accounts: list[dict]) -> dict:
-        """多空人數、比例、槓桿、勝率（看『決心』）。smart=方向贏家、whale=全市場淨值前N。"""
+        """Account direction and sample statistics; qualification subsets are independent."""
         import statistics
 
         def grp(accs):
@@ -68,8 +68,14 @@ class SmartMoneyAgent(Agent):
                 "lev_avg": round(statistics.mean(levs), 2) if levs else None,
                 "lev_max": round(max(levs), 2) if levs else None,
                 "winrate_median": round(statistics.median(wrs) * 100, 1) if wrs else None,
+                "winrate_accounts": len(wrs),
+                "btc": {"accounts": sum(any(p[0] == "BTC" for p in a.get("pos", [])) for a in accs),
+                        "long_usd": sum(p[2] for a in accs for p in a.get("pos", []) if p[0] == "BTC" and p[1] > 0),
+                        "short_usd": sum(p[2] for a in accs for p in a.get("pos", []) if p[0] == "BTC" and p[1] < 0)},
             }
-        return {"smart": grp(smart_accounts), "whale": grp(whale_accounts)}
+        return {"smart": grp(smart_accounts), "whale": grp(whale_accounts),
+                "smart_verified": grp([a for a in smart_accounts if a.get("win_rate") is not None]),
+                "smart_pnl_only": grp([a for a in smart_accounts if a.get("win_rate") is None])}
 
     def _pool_store(self):
         if self._store is None:

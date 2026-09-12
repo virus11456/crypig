@@ -194,3 +194,13 @@ test('qualification details disclose source limits without declaring empty histo
  assert.match(text,/空成交紀錄 1 個/);assert.match(text,/非零平倉損益 1 個/);assert.match(text,/來源限流 1 個/);
  assert.match(text,/不代表完整交易歷史/);
 });
+
+test('qualification subgroup rendering discloses coverage and missing historical comparison',()=>{
+ const h=setup();
+ assert.match(h.run('qualificationSplit({})'),/等待下一輪/);
+ h.ctx.p={smart_verified:{total:2,long:1,short:1,flat:0,long_pct:.5,short_pct:.5,winrate_median:80,winrate_accounts:2,btc:{accounts:1,long_usd:120,short_usd:0}},smart_pnl_only:{total:1,long:0,short:1,flat:0,long_pct:0,short_pct:1,btc:{accounts:1,long_usd:0,short_usd:500}}};
+ const text=h.run('qualificationSplit(p)');
+ assert.match(text,/多空人數相同/);assert.match(text,/2\/2 帳號/);
+ assert.match(text,/僅歷史獲利補入/);assert.match(text,/尚無各組歷史對照/);
+ assert.doesNotMatch(text,/勝率 <b>/);
+});

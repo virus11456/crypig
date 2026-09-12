@@ -121,3 +121,16 @@ def test_successful_empty_histories_are_not_classified_as_outage(tmp_path,monkey
         q=agent.qualification_status();assert not q['failed'] and not q['partial_failure']
         assert q['reasons']=={'no_fills':1} and q['qualified']==0 and q['observed']==0
     finally:agent.close()
+
+
+def test_qualification_subsets_have_independent_directions_and_statistic_coverage():
+    verified={'net':10,'lev':1,'win_rate':.8,'pos':[('BTC',1,120),('ETH',-1,30)]}
+    fallback={'net':-20,'lev':2,'win_rate':None,'pos':[('BTC',-1,500)]}
+    r=SmartMoneyAgent._summarize_traders([verified,fallback],[verified,fallback])
+    assert r['smart']['winrate_accounts']==1 and r['smart']['total']==2
+    assert r['smart_verified']['long_pct']==1 and r['smart_pnl_only']['short_pct']==1
+    assert r['smart_verified']['btc']=={'accounts':1,'long_usd':120,'short_usd':0}
+    assert r['smart_pnl_only']['btc']['short_usd']==500
+    assert r['smart_pnl_only']['winrate_median'] is None
+    empty=SmartMoneyAgent._summarize_traders([],[])['smart_verified']
+    assert empty['long_pct'] is None and empty['btc']['accounts']==0

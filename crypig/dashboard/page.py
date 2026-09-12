@@ -518,14 +518,14 @@ function posRow(name, sub, g, color){
   if(!g||!g.total) return `<div class="posrow"><div class="posname"><b style="color:${color}">${name}</b> <span class="meta">${sub}</span></div><div class="meta">無資料</div></div>`;
   const sp=g.short_pct, lp=g.long_pct;
   const lean = sp==null?'—':sp>lp?`<b style="color:#f85149">空 ${(sp*100).toFixed(0)}%</b>`
-                                  :`<b style="color:#3fb950">多 ${(lp*100).toFixed(0)}%</b>`;
+                                  :sp===lp?'多空人數相同':`<b style="color:#3fb950">多 ${(lp*100).toFixed(0)}%</b>`;
   return `<div class="posrow">
-    <div class="posname"><b style="color:${color}">${name}</b> <span class="meta">${sub}・前 ${g.total} 名</span></div>
+    <div class="posname"><b style="color:${color}">${name}</b> <span class="meta">${sub}・取得 ${g.total} 個帳號</span></div>
     <div class="posstats">
       <span class="pchip"><span style="color:#3fb950">多 ${g.long}</span> · <span style="color:#f85149">空 ${g.short}</span> · <span style="color:#8b949e">觀 ${g.flat}</span></span>
       <span class="pchip">傾向 ${lean}</span>
       <span class="pchip">槓桿 <b>${g.lev_median??'—'}x</b></span>
-      ${g.winrate_median!=null?`<span class="pchip">勝率 <b>${g.winrate_median}%</b></span>`:''}
+      ${g.winrate_median!=null?`<span class="pchip">獲利紀錄比例中位數 <b>${g.winrate_median}%</b>（${g.winrate_accounts??'涵蓋數未知'}${g.winrate_accounts!=null?'/'+g.total+' 帳號':''}）</span>`:''}
     </div>
   </div>`;
 }
@@ -681,6 +681,14 @@ function qualificationDetails(q){
   const criteria={too_few_trades:'樣本筆數不足',nonpositive_pnl:'樣本獲利未大於零',short_span:'交易時間跨度不足'};
   return `<p class="meta">最近背景檢查：${new Date(q.completed_at*1000).toLocaleString()}｜${q.requested??'—'} 個帳號。${q.failed?'本次資格檢查失敗。':q.partial_failure?'部分來源讀取失敗或資料異常。':''}<br>${Object.entries(q.reasons||{}).map(([k,v])=>(labels[k]||'其他')+' '+v+' 個').join('；')}<br>${Object.entries(q.criteria||{}).map(([k,v])=>(criteria[k]||'其他')+' '+v+' 個').join('；')}。合格 ${q.qualified??'—'} 個。<br>空紀錄只代表來源最近可回傳的範圍；本統計採非零平倉損益紀錄，不代表完整交易歷史或完整帳戶報酬。讀取失敗與無可用統計者保留尚未過期資格的原時間。</p>`;
 }
+function qualificationSplit(p){
+  if(!p.smart_verified||!p.smart_pnl_only)return '<p class="meta">資格分組部位等待下一輪完整分析；舊快照不推算分組。</p>';
+  const row=(name,g)=>{
+    const b=g.btc;
+    return posRow(name,'本輪資格分組',g,'#8b949e')+(b?`<p class="meta">BTC 合約 ${b.accounts} 個帳號｜多單 $${(b.long_usd/1e6).toFixed(2)+'M'}｜空單 $${(b.short_usd/1e6).toFixed(2)+'M'}｜名目淨額 $${((b.long_usd-b.short_usd)/1e6).toFixed(2)+'M'}</p>`:'');
+  };
+  return row('通過交易資格',p.smart_verified)+row('僅歷史獲利補入',p.smart_pnl_only)+'<p class="meta">以上多空人數按帳號全部合約的淨方向；BTC 金額只計 BTC 合約。獲利紀錄比例採有統計帳號的中位數，非整組交易勝率或未來獲利機率。分組目前部位不等於加倉／減倉；尚無各組歷史對照。</p>';
+}
 async function loadPositioning(){
   try{
     const p=await apiJSON('/positioning');
@@ -699,6 +707,7 @@ async function loadPositioning(){
       ${pc?`<div class="vline" style="border-left-color:${pc.c}">📍 現在：${pc.t}</div>`:''}
       ${posRow('🧠 聰明錢', '交易資格篩選＋歷史獲利補入', p.smart, '#58a6ff')}
       ${p.qualification?`<p class="meta">本輪名單 ${p.qualification.selected} 個：已驗證 ${p.qualification.qualified} 個、僅歷史獲利補入 ${p.qualification.pnl_only} 個。實際取得持倉 ${p.qualification.positions_received} 個（已驗證 ${p.qualification.positions_qualified}、補入 ${p.qualification.positions_pnl_only}）。<br>名單選定：${new Date(p.qualification.selected_at*1000).toLocaleString()}${p.qualification.oldest_verified_at?'｜最早資格檢查：'+new Date(p.qualification.oldest_verified_at*1000).toLocaleString():''}。新資格結果下一輪套用。</p>`:''}
+      ${qualificationSplit(p)}
       ${qualificationDetails(p.qualification_check)}
       ${posRow('🐋 合約大額帳號', '候選樣本淨值前N', p.whale, '#d29922')}
       <div class="meta">註：兩群依不同規則篩選、可能重疊；聰明錢含近期交易資格篩選與歷史獲利補入，大額帳號依候選帳號淨值排序${p.overlap!=null?`（目前重疊 <b>${p.overlap}</b> 人）`:''}；不代表全市場投資人。觀望=此平台無持倉；表態傾向只計有開倉者。<br>👉 聰明錢與巨鯨方向相反時＝值得注意的分歧訊號。</div>
