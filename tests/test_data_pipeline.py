@@ -83,9 +83,9 @@ def test_limits_reject_unbounded_database_queries(client):
 
 def test_oi_provenance_and_zero_values(client):
     c, fake = client
-    fake.hl_scan = [{'symbol':'BTC','open_interest_usd':100}, {'symbol':'ETH','open_interest_usd':0}]
-    fake.market_caps = {'BTC':{'market_cap':1000,'volume_24h':20}, 'ETH':{'market_cap':200,'volume_24h':0}}
-    fake.deriv_agg = {'BTC':{'open_interest_usd':400}}
+    fake.hl_scan = [{'symbol':'BTC','price':100,'open_interest_usd':100}, {'symbol':'ETH','price':20,'open_interest_usd':0}]
+    fake.market_caps = {'BTC':{'market_cap':1000,'volume_24h':20,'reference_price':100}, 'ETH':{'market_cap':200,'volume_24h':0,'reference_price':20}}
+    fake.deriv_agg = {'BTC':{'open_interest_usd':400,'reference_price':100}}
     rows = c.get('/hl_market').json()['coins']
     assert rows[0]['hl_open_interest_usd'] == 100
     assert rows[0]['open_interest_source'] == 'coingecko_aggregated'
@@ -256,3 +256,40 @@ def test_valuation_age_with_warm_market_data(client):
     assert meta['market_caps']['stale']
     assert not meta['aggregate_oi']['stale']
     assert meta['market_caps']['age_seconds'] >= 2500
+
+
+def test_derivatives_filter_invalid_and_duplicate_contracts():
+    from crypig.clients.market_data import MarketDataClient
+    now=200000
+    def row(symbol='BTCUSDT', **extra):
+        return dict(dict(market='Exchange',symbol=symbol,index_id='BTC',contract_type='perpetual',
+                         open_interest=100,last_traded_at=now-10,expired_at=None,price='50000',funding_rate=0),**extra)
+    rows=[row(),row(open_interest=120,last_traded_at=now-1),row('NEG',open_interest=-1),
+          row('NAN',open_interest=float('nan')),row('OLD',last_traded_at=now-86401),
+          row('EXP',expired_at=now-1),row('FUT',contract_type='futures'),row('ZERO',open_interest=0)]
+    result=MarketDataClient.normalize_derivatives(rows,now)['BTC']
+    assert result['contracts']==2 and result['open_interest_usd']==120
+    assert result['unit']=='USD' and result['reference_price']==50000
+    with pytest.raises(ValueError):MarketDataClient.normalize_derivatives([row(open_interest=-1)],now)
+
+
+def test_price_mismatch_rejects_caps_and_falls_back_to_hl(client):
+    c,fake=client
+    fake.hl_scan=[{'symbol':'BTC','price':100,'open_interest_usd':10}]
+    fake.market_caps={'BTC':{'market_cap':1000,'volume_24h':20,'reference_price':1}}
+    fake.deriv_agg={'BTC':{'open_interest_usd':999,'reference_price':1}}
+    row=c.get('/hl_market').json()['coins'][0]
+    assert row['market_cap'] is None and row['oi_cap'] is None
+    assert row['open_interest_usd']==10 and row['open_interest_source']=='hyperliquid'
+
+
+def test_macro_does_not_divide_mixed_underlying_oi_by_crypto_cap():
+    from crypig.clients.market_data import MarketDataClient
+    c=MarketDataClient()
+    try:
+        c._client.get=Mock(return_value=Mock(json=lambda:{'data':{'total_market_cap':{'usd':100},'total_volume':{'usd':20}}}))
+        c.aggregate_derivatives=Mock(return_value={'STOCK':{'open_interest_usd':50}})
+        result=c.global_macro()
+        assert result['open_interest']==50 and result['oi_cap'] is None
+        assert '非加密' in result['oi_coverage']
+    finally:c.close()

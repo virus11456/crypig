@@ -71,3 +71,23 @@ all symbol candidates or aggregate derivative asset identities.
 
 References: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint/perpetuals
 and https://docs.coingecko.com/reference/coins-markets
+
+## Phase 4: derivative coverage and cross-source checks
+
+Normalize USD OI from perpetual contracts only; discard invalid/negative OI,
+expired contracts, missing/future trade times, and contracts without a trade in
+24 hours. Deduplicate exchange/ticker by latest trade. This is a coverage policy,
+not proof that OI itself was updated at the last-trade timestamp.
+
+Before using CoinGecko valuation/OI for a Hyperliquid symbol, require a positive
+finite reference price within 20% of the HL quote. This is a conservative mismatch
+guard, not asset identity certification. No symbol candidates are promoted to
+verified IDs by this heuristic. Macro OI includes non-crypto underlyings, so the
+UI now describes its coverage and omits the invalid crypto-market-cap ratio.
+
+Validation: 18 Python and 15 frontend tests. Audit of 26,418 public derivative
+rows found 330 futures and one negative OI entry. CoinGecko documents OI in USD:
+https://docs.coingecko.com/reference/derivatives-tickers
+
+Still requiring audit: settlement intervals for cross-exchange funding-rate
+annualization in legacy agent signals; full identity registry for candidates.

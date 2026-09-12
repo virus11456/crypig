@@ -58,30 +58,55 @@ class MarketDataClient:
         resp = self._client.get("https://api.coingecko.com/api/v3/derivatives")
         resp.raise_for_status()
         data = resp.json()
-        if not isinstance(data, list):       # 限流/錯誤時回的是 dict，視為無資料
-            return self._deriv_cache or {}
-        agg: dict[str, dict] = defaultdict(
-            lambda: {"open_interest_usd": 0.0, "_fr": [], "contracts": 0})
-        for x in data:
-            if not isinstance(x, dict):
-                continue
-            base = (x.get("index_id") or "").upper()
-            oi = x.get("open_interest")
-            if not base or not oi:
-                continue
-            a = agg[base]
-            a["open_interest_usd"] += float(oi)
-            a["contracts"] += 1
-            fr = x.get("funding_rate")
-            if fr is not None:
-                a["_fr"].append(float(fr))
-        out: dict[str, dict] = {}
-        for base, a in agg.items():
-            frs = a.pop("_fr")
-            a["funding_rate_med"] = statistics.median(frs) if frs else 0.0
-            out[base] = a
+        out = self.normalize_derivatives(data)
         self._deriv_cache = out
         self._deriv_ts = time.time()
+        return out
+
+    @staticmethod
+    def normalize_derivatives(data, now=None):
+        """USD OI of deduplicated perpetuals traded within 24 hours; not all-market coverage."""
+        now = time.time() if now is None else now
+        if not isinstance(data, list) or not data:
+            raise ValueError("Empty derivatives response")
+        def number(value):
+            try:
+                value = float(value) if not isinstance(value, bool) else float('nan')
+                return value if math.isfinite(value) else None
+            except (TypeError, ValueError):
+                return None
+        selected = {}
+        for row in data:
+            if not isinstance(row, dict) or row.get("contract_type") != "perpetual":
+                continue
+            base, market, symbol = row.get("index_id"), row.get("market"), row.get("symbol")
+            if not all(isinstance(v, str) and v for v in (base, market, symbol)):
+                continue
+            oi, traded, price = (number(row.get(k)) for k in ("open_interest", "last_traded_at", "price"))
+            expiry = row.get("expired_at")
+            if expiry is not None and (number(expiry) is None or number(expiry) <= now):
+                continue
+            if oi is None or oi < 0 or traded is None or not now-86400 <= traded <= now+300 or price is None or price <= 0:
+                continue
+            key = (market, symbol)
+            if key not in selected or traded > selected[key][1]:
+                selected[key] = (row, traded, oi, price)
+        groups = defaultdict(list)
+        for row, traded, oi, price in selected.values():
+            groups[row["index_id"].upper()].append((row, traded, oi, price))
+        out = {}
+        for base, rows in groups.items():
+            rates = [number(r[0].get("funding_rate")) for r in rows]
+            rates = [r for r in rates if r is not None]
+            out[base] = {"open_interest_usd": sum(r[2] for r in rows),
+                         "contracts": len(rows), "exchanges": len({r[0]["market"] for r in rows}),
+                         "reference_price": statistics.median(r[3] for r in rows),
+                         "oldest_trade_at": min(r[1] for r in rows),
+                         "latest_trade_at": max(r[1] for r in rows),
+                         "coverage": "perpetuals_traded_within_24h", "unit": "USD",
+                         "funding_rate_med": statistics.median(rates) if rates else 0.0}
+        if not out:
+            raise ValueError("No valid derivatives")
         return out
 
     # symbol -> CoinGecko coin id（取各幣市值/成交量用）
@@ -111,7 +136,8 @@ class MarketDataClient:
             oi = None
         out = {
             "market_cap": cap, "volume_24h": vol, "open_interest": oi,
-            "oi_cap": (oi / cap) if (oi and cap) else None,
+            "oi_cap": None,  # derivative coverage can include non-crypto underlyings
+            "oi_coverage": "CoinGecko 有效永續合約樣本，可能包含非加密標的；不計算全市場 OI/Cap。",
             "vol_cap": (vol / cap) if cap else None,
             "btc_dominance": float(g.get("market_cap_percentage", {}).get("btc", 0.0)),
         }
@@ -159,6 +185,7 @@ class MarketDataClient:
                 continue
             out[symbol] = {"market_cap": cap, "volume_24h": volume if valid(volume) else None,
                            "asset_id": row["id"],
+                           "reference_price": row.get("current_price"),
                            "match_method": "asset_id" if expected else "symbol_candidate",
                            "source_updated_at": row.get("last_updated")}
         return out

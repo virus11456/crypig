@@ -393,11 +393,12 @@ async function loadMacro(){
     document.getElementById('macro').innerHTML=`<div class="box">
       <h2>🌐 全市場宏觀 <small>整體槓桿與換手環境（來源 CoinGecko 聚合）</small></h2>
       ${mc?`<div class="vline" style="border-left-color:${mc.c}">📍 現在：${mc.t}</div>`:''}
+      <div class="meta">${g.oi_coverage||''}</div>
       <div class="kpis">
         <div class="kpi"><div class="v">${bigMoney(g.market_cap)}</div><div class="k">總市值</div></div>
         <div class="kpi"><div class="v">${bigMoney(g.volume_24h)}</div><div class="k">24h 成交量</div></div>
-        <div class="kpi"><div class="v">${bigMoney(g.open_interest)}</div><div class="k">全市場未平倉 OI</div></div>
-        <div class="kpi"><div class="v" style="color:#58a6ff">${g.oi_cap==null?'—':(g.oi_cap*100).toFixed(2)+'%'}</div><div class="k">OI/Cap 槓桿水位</div></div>
+        <div class="kpi"><div class="v">${bigMoney(g.open_interest)}</div><div class="k">已覆蓋永續合約 OI</div></div>
+        <div class="kpi"><div class="v" style="color:#58a6ff">${g.oi_cap==null?'—':(g.oi_cap*100).toFixed(2)+'%'}</div><div class="k">OI/Cap（樣本範圍不同時不計算）</div></div>
         <div class="kpi"><div class="v" style="color:#58a6ff">${g.vol_cap==null?'—':(g.vol_cap*100).toFixed(2)+'%'}</div><div class="k">Vol/Cap 換手率</div></div>
         <div class="kpi"><div class="v">${(g.btc_dominance||0).toFixed(1)}%</div><div class="k">BTC 市佔</div></div>
       </div>
@@ -505,7 +506,7 @@ function renderTable(){
       <h2 style="margin:0">📋 幣別總表 <small>共 ${MROWS.length} 幣 · BTC/ETH/SOL 完整4訊號決策、其餘為聰明錢+資金費率輕量評分 · 點標題排序</small></h2>
       <input class="filt" placeholder="搜尋幣別…" oninput="MFILT=this.value.trim().toUpperCase();renderMBody()" value="${MFILT}">
     </div>
-    <div class="meta" style="margin:-4px 0 8px">ℹ️ <b>標記價／溢價</b>來自 Hyperliquid，目前清單排除已下架市場。OI 優先採 CoinGecko 跨交易所聚合，缺資料時採 HL；來源見 OI/Cap 標示。<b>市值／OI&#8202;Cap／Vol&#8202;Cap</b>來自 CoinGecko，僅 ${withCap}/${MROWS.length} 幣取得資料。「代號配對」尚未逐幣核實身分；同名有歧義或資料缺漏顯示「—」。目前抓取市值前 250 名。日線背離使用已收盤日線，與綜合決策中的其他週期訊號不同。</div>
+    <div class="meta" style="margin:-4px 0 8px">ℹ️ <b>標記價／溢價</b>來自 Hyperliquid，目前清單排除已下架市場。OI 優先採 CoinGecko 跨交易所聚合，缺資料時採 HL；來源見 OI/Cap 標示。<b>市值／OI&#8202;Cap／Vol&#8202;Cap</b>來自 CoinGecko，僅 ${withCap}/${MROWS.length} 幣取得資料。「代號配對」尚未逐幣核實身分；同名有歧義、資料缺漏或來源價格相差超過 20% 時不採用。跨所 OI 僅涵蓋近 24 小時有成交的有效永續合約樣本，不能視為所有交易所總額。目前抓取市值前 250 名。日線背離使用已收盤日線，與綜合決策中的其他週期訊號不同。</div>
     <div class="scroll"><table class="tbl"><thead><tr>${head}</tr></thead><tbody id="mbody">${mBodyHTML()}</tbody></table></div></div>`;
   setSum('sum-table', `共 <b>${MROWS.length}</b> 幣 · 判斷·聰明錢/巨鯨多空·背離·費率·市值 · 點開可排序/篩選`);
 }

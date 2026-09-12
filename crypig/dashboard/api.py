@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 import os
 from contextlib import asynccontextmanager
@@ -708,12 +709,24 @@ def hl_market() -> dict:
     for c in coins:
         s = c["symbol"]
         info = tm.get(s)
+        def price_matches(reference):
+            price = c.get("price")
+            return all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v > 0
+                       for v in (reference, price)) and abs(reference / price - 1) <= 0.2
+        cap_matches = info is not None and price_matches(info.get("reference_price"))
+        c["valuation_check"] = "price_consistent_candidate" if cap_matches else "missing_or_price_mismatch"
+        if not cap_matches:
+            info = None
         cap = info["market_cap"] if info else None
         vol = info["volume_24h"] if info else None
         c["market_cap"] = cap
         c["volume_24h"] = vol
         c["vol_cap"] = (vol / cap) if (cap and vol is not None) else None
         agg = deriv.get(s)
+        if agg and not price_matches(agg.get("reference_price")):
+            agg = None
+        c["oi_contracts"] = agg.get("contracts") if agg else None
+        c["oi_coverage"] = agg.get("coverage") if agg else "hyperliquid_only"
         oi = agg["open_interest_usd"] if (agg and agg.get("open_interest_usd")) else c["open_interest_usd"]
         c["hl_open_interest_usd"] = c["open_interest_usd"]
         c["open_interest_source"] = "coingecko_aggregated" if agg and agg.get("open_interest_usd") else "hyperliquid"
