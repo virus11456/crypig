@@ -244,3 +244,15 @@ def test_delisted_contexts_are_excluded_without_shifting_symbol_alignment():
             c.market_contexts()
     finally:
         c.close()
+
+
+def test_valuation_age_with_warm_market_data(client):
+    c, fake = client
+    fake.hl_scan = [{'symbol':'BTC','open_interest_usd':100}]
+    fake._md = SimpleNamespace(_top_ts=time.time()-2500, _deriv_ts=time.time()-10)
+    response = c.get('/hl_market')
+    assert response.status_code == 200
+    meta = response.json()['meta']['valuations']
+    assert meta['market_caps']['stale']
+    assert not meta['aggregate_oi']['stale']
+    assert meta['market_caps']['age_seconds'] >= 2500
