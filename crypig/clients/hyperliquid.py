@@ -201,15 +201,17 @@ class HyperliquidClient:
         """單帳號最近成交（最多 2000 筆，含每筆平倉 closedPnl）。不快取原始成交
         （數百帳號×2000 筆會吃爆記憶體導致容器 OOM；勝率結果由上層快取）。"""
         data = self._post_info({"type": "userFills", "user": address})
-        return data if isinstance(data, list) else []
+        if not isinstance(data, list):
+            raise ValueError("Invalid fills response")
+        return data
 
-    def winrate_bulk(self, addresses: list[str], lookback: int = 100,
+    def qualification_bulk(self, addresses: list[str], lookback: int = 100,
                      workers: int = 4, rate_per_min: float = 0.0) -> dict[str, dict]:
         """並發抓各帳號成交、『即時算完勝率就丟掉原始成交』，只回小量統計。
 
         記憶體安全：同時最多 workers 份原始成交在記憶體（非全部 N×2000）。
         rate_per_min>0 時全域節流 dispatch 速率（userFills 權重高，避免觸發 HL 限流）。
-        回 {address: {trades, win_rate, recent_pnl, span_hours}}。
+        回各帳號 status 與成功時的 stats；空紀錄、無非零損益、限流、讀取失敗及格式異常分開。
         """
         import threading
         interval = 60.0 / rate_per_min if rate_per_min and rate_per_min > 0 else 0.0
@@ -225,9 +227,19 @@ class HyperliquidClient:
                 if wait:
                     time.sleep(wait)
             try:
-                return addr, self.fills_winrate(self.user_fills(addr), lookback)
+                fills = self.user_fills(addr)
+                if not fills:
+                    return addr, {"status":"no_fills"}
+                stats = self.fills_winrate(fills, lookback)
+                return addr, {"status":"ok", "stats":stats} if stats else {"status":"no_scored_closes"}
+            except httpx.HTTPStatusError as exc:
+                return addr, {"status":"rate_limited" if exc.response.status_code==429 else "request_failed"}
+            except httpx.RequestError:
+                return addr, {"status":"request_failed"}
+            except (ValueError, TypeError, KeyError, OverflowError):
+                return addr, {"status":"invalid_data"}
             except Exception:
-                return addr, None
+                return addr, {"status":"request_failed"}
         out: dict[str, dict] = {}
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
             for addr, wr in ex.map(fetch, addresses):
@@ -235,16 +247,29 @@ class HyperliquidClient:
                     out[addr] = wr
         return out
 
+    def winrate_bulk(self, addresses, lookback=100, workers=4, rate_per_min=0.0):
+        """Compatibility view for callers that only need valid statistics."""
+        return {a:r["stats"] for a,r in self.qualification_bulk(
+            addresses,lookback,workers,rate_per_min).items() if r["status"]=="ok"}
+
     @staticmethod
     def fills_winrate(fills: list[dict], lookback: int = 100) -> dict | None:
         """從成交算近 lookback 筆平倉的勝率、獲利、時間跨度。無足夠平倉回 None。
 
         span_hours：近 lookback 筆平倉橫跨幾小時——用來剔除『幾小時內刷完上百筆』
-        的高頻/做市商（他們多空中性，方向訊號無意義）。fills 為新到舊排列。
+        的高頻/做市商（他們多空中性，方向訊號無意義）。採樣前依時間由新到舊排序。
         """
-        closes = [x for x in fills if (x.get("closedPnl") not in (None, "0", "0.0")
-                                       and float(x.get("closedPnl") or 0) != 0.0)]
-        closes = closes[:lookback]
+        import math
+        closes = []
+        for x in fills:
+            if not isinstance(x,dict) or "closedPnl" not in x or "time" not in x:
+                raise ValueError("Malformed fill")
+            pnl, stamp = float(x["closedPnl"]), float(x["time"])
+            if isinstance(x["closedPnl"],bool) or isinstance(x["time"],bool) or not math.isfinite(pnl) or not math.isfinite(stamp) or stamp<=0:
+                raise ValueError("Invalid fill values")
+            if pnl != 0:
+                closes.append(x)
+        closes = sorted(closes,key=lambda x:float(x["time"]),reverse=True)[:lookback]
         if not closes:
             return None
         pnls = [float(x.get("closedPnl") or 0) for x in closes]

@@ -19,8 +19,8 @@ def test_positions_finish_before_qualification_and_selection_is_frozen(tmp_path,
     gate=Event();entered=Event()
     worker=Mock();worker.top_traders.return_value=[('new',100)]
     def fills(*args,**kwargs):
-        entered.set();assert gate.wait(3);return {'new':record(pnl=500)}
-    worker.winrate_bulk.side_effect=fills
+        entered.set();assert gate.wait(3);return {'new':{'status':'ok','stats':record(pnl=500)}}
+    worker.qualification_bulk.side_effect=fills
     monkeypatch.setattr(module,'HyperliquidClient',lambda:worker)
     agent=SmartMoneyAgent(cfg);client=Mock();agent._client=client
     client.top_traders.return_value=[('fallback',99)]
@@ -32,7 +32,7 @@ def test_positions_finish_before_qualification_and_selection_is_frozen(tmp_path,
         assert agent.qualification_status()['refreshing']
         assert {x['addr'] for x in agent._smart_sel}=={'old','fallback'}
         for _ in range(5):agent._schedule_qualification(cfg.agents.smart_money)
-        assert worker.winrate_bulk.call_count==1
+        assert worker.qualification_bulk.call_count==1
         gate.set();agent._qualification_future.result(3)
         assert {x['addr'] for x in agent._smart_sel}=={'old','fallback'}
         agent._agg_ts=0;agent._coin_aggregates()
@@ -65,7 +65,7 @@ def test_completed_negative_qualification_revokes_old_entry_but_missing_retains_
     cfg=Config(posseries_db=str(tmp_path/'pool.db'));store=PosSeriesStore(cfg.posseries_db)
     stamp=time.time()-100;store.upsert_smart_pool({'bad':record(stamp),'missing':record(stamp)})
     worker=Mock();worker.top_traders.return_value=[('bad',10),('missing',10)]
-    worker.winrate_bulk.return_value={'bad':record(pnl=-1)}
+    worker.qualification_bulk.return_value={'bad':{'status':'ok','stats':record(pnl=-1)},'missing':{'status':'request_failed'}}
     monkeypatch.setattr(module,'HyperliquidClient',lambda:worker)
     agent=SmartMoneyAgent(cfg)
     try:
@@ -76,3 +76,48 @@ def test_completed_negative_qualification_revokes_old_entry_but_missing_retains_
         assert agent.qualification_status()['rejected']==1
     finally:
         agent.close();store.close()
+
+
+def test_fill_outcomes_separate_empty_unscored_rate_limit_and_invalid(monkeypatch):
+    import httpx
+    from crypig.clients.hyperliquid import HyperliquidClient
+    client=HyperliquidClient()
+    def fills(addr):
+        if addr=='empty':return []
+        if addr=='zero':return [{'closedPnl':'0','time':1000}]
+        if addr=='invalid':return [{'closedPnl':'nan','time':1000}]
+        if addr=='limited':
+            r=httpx.Response(429,request=httpx.Request('POST','https://api.hyperliquid.xyz/info'))
+            raise httpx.HTTPStatusError('limit',request=r.request,response=r)
+        if addr=='failed':raise httpx.ReadTimeout('timeout')
+        return [{'closedPnl':'2','time':1000}]
+    monkeypatch.setattr(client,'user_fills',fills)
+    try:
+        r=client.qualification_bulk(['empty','zero','invalid','limited','failed','valid'],rate_per_min=0)
+        assert {a:x['status'] for a,x in r.items()}=={'empty':'no_fills','zero':'no_scored_closes','invalid':'invalid_data','limited':'rate_limited','failed':'request_failed','valid':'ok'}
+        assert client.winrate_bulk(['zero','valid'])=={'valid':r['valid']['stats']}
+    finally:client.close()
+
+
+def test_recent_fill_sample_is_chronological_and_malformed_payload_is_not_empty(monkeypatch):
+    from crypig.clients.hyperliquid import HyperliquidClient
+    import pytest
+    r=HyperliquidClient.fills_winrate([{'closedPnl':'100','time':1000},{'closedPnl':'-1','time':3000},{'closedPnl':'2','time':2000}],2)
+    assert r['recent_pnl']==1 and r['win_rate']==.5
+    client=HyperliquidClient();monkeypatch.setattr(client,'_post_info',lambda _: {'error':'unavailable'})
+    try:
+        with pytest.raises(ValueError):client.user_fills('addr')
+    finally:client.close()
+
+
+def test_successful_empty_histories_are_not_classified_as_outage(tmp_path,monkeypatch):
+    cfg=Config(posseries_db=str(tmp_path/'pool.db'))
+    worker=Mock();worker.top_traders.return_value=[('a',10)]
+    worker.qualification_bulk.return_value={'a':{'status':'no_fills'}}
+    monkeypatch.setattr(module,'HyperliquidClient',lambda:worker)
+    agent=SmartMoneyAgent(cfg)
+    try:
+        agent._refresh_qualification(cfg.agents.smart_money)
+        q=agent.qualification_status();assert not q['failed'] and not q['partial_failure']
+        assert q['reasons']=={'no_fills':1} and q['qualified']==0 and q['observed']==0
+    finally:agent.close()

@@ -189,3 +189,8 @@ test('qualification coverage distinguishes fallback accounts from verified posit
  assert.match(text,/實際取得持倉 2 個（已驗證 1、補入 1）/);
  assert.match(text,/新資格結果下一輪套用/);
 });
+test('qualification details disclose source limits without declaring empty histories API failures',()=>{
+ const h=setup();const text=h.run(`qualificationDetails({completed_at:1789227100,requested:3,qualified:0,reasons:{no_fills:1,no_scored_closes:1,rate_limited:1},criteria:{},partial_failure:true})`);
+ assert.match(text,/空成交紀錄 1 個/);assert.match(text,/非零平倉損益 1 個/);assert.match(text,/來源限流 1 個/);
+ assert.match(text,/不代表完整交易歷史/);
+});

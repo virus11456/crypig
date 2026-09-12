@@ -673,6 +673,14 @@ async function loadDefi(){
     setSum('sum-defi', `DeFi TVL $${tvl.value?(tvl.value/1e9).toFixed(1):'—'}B ｜ 穩定幣 $${sc.value?(sc.value/1e9).toFixed(0):'—'}B`);
   }catch(e){document.getElementById('defi').innerHTML='<div class="box empty">資金動向載入失敗：'+e+'</div>';}
 }
+function qualificationDetails(q){
+  if(!q)return '';
+  if(q.refreshing)return '<p class="meta">帳號資格背景檢查中；本輪名單保持固定。</p>';
+  if(!q.completed_at)return '<p class="meta">'+(q.failed?'本次資格檢查失敗，尚無完成結果。':'本程序尚未完成資格檢查。')+'</p>';
+  const labels={ok:'有可用損益統計',no_fills:'來源回傳空成交紀錄',no_scored_closes:'未找到非零平倉損益',rate_limited:'來源限流',request_failed:'讀取失敗',invalid_data:'資料格式異常'};
+  const criteria={too_few_trades:'樣本筆數不足',nonpositive_pnl:'樣本獲利未大於零',short_span:'交易時間跨度不足'};
+  return `<p class="meta">最近背景檢查：${new Date(q.completed_at*1000).toLocaleString()}｜${q.requested??'—'} 個帳號。${q.failed?'本次資格檢查失敗。':q.partial_failure?'部分來源讀取失敗或資料異常。':''}<br>${Object.entries(q.reasons||{}).map(([k,v])=>(labels[k]||'其他')+' '+v+' 個').join('；')}<br>${Object.entries(q.criteria||{}).map(([k,v])=>(criteria[k]||'其他')+' '+v+' 個').join('；')}。合格 ${q.qualified??'—'} 個。<br>空紀錄只代表來源最近可回傳的範圍；本統計採非零平倉損益紀錄，不代表完整交易歷史或完整帳戶報酬。讀取失敗與無可用統計者保留尚未過期資格的原時間。</p>`;
+}
 async function loadPositioning(){
   try{
     const p=await apiJSON('/positioning');
@@ -691,6 +699,7 @@ async function loadPositioning(){
       ${pc?`<div class="vline" style="border-left-color:${pc.c}">📍 現在：${pc.t}</div>`:''}
       ${posRow('🧠 聰明錢', '交易資格篩選＋歷史獲利補入', p.smart, '#58a6ff')}
       ${p.qualification?`<p class="meta">本輪名單 ${p.qualification.selected} 個：已驗證 ${p.qualification.qualified} 個、僅歷史獲利補入 ${p.qualification.pnl_only} 個。實際取得持倉 ${p.qualification.positions_received} 個（已驗證 ${p.qualification.positions_qualified}、補入 ${p.qualification.positions_pnl_only}）。<br>名單選定：${new Date(p.qualification.selected_at*1000).toLocaleString()}${p.qualification.oldest_verified_at?'｜最早資格檢查：'+new Date(p.qualification.oldest_verified_at*1000).toLocaleString():''}。新資格結果下一輪套用。</p>`:''}
+      ${qualificationDetails(p.qualification_check)}
       ${posRow('🐋 合約大額帳號', '候選樣本淨值前N', p.whale, '#d29922')}
       <div class="meta">註：兩群依不同規則篩選、可能重疊；聰明錢含近期交易資格篩選與歷史獲利補入，大額帳號依候選帳號淨值排序${p.overlap!=null?`（目前重疊 <b>${p.overlap}</b> 人）`:''}；不代表全市場投資人。觀望=此平台無持倉；表態傾向只計有開倉者。<br>👉 聰明錢與巨鯨方向相反時＝值得注意的分歧訊號。</div>
     </div>`;

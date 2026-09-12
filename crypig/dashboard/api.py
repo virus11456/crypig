@@ -400,7 +400,7 @@ def positioning() -> dict:
                           "short_pct": 0.45, "long_pct": 0.55, "winrate_median": None,
                           "lev_median": 2.8, "lev_avg": 3.0, "lev_max": 7.0}}
     require_snapshot(orc.trader_summary)
-    return orc.trader_summary
+    return {**orc.trader_summary, "qualification_check": orchestrator().cycle_status().get("qualification")}
 
 
 @app.get("/whale_history")

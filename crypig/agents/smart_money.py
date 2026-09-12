@@ -119,12 +119,14 @@ class SmartMoneyAgent(Agent):
             off = self._smart_offset % len(cands)
             window = [cands[(off+i)%len(cands)] for i in range(batch)]
             self._smart_offset = (off+batch)%len(cands)
-            results = client.winrate_bulk(window, cfg.fills_lookback, workers=3,
+            outcomes = client.qualification_bulk(window, cfg.fills_lookback, workers=3,
                                           rate_per_min=getattr(cfg,"fills_rate_per_min",50))
-            if not results:
-                raise ValueError("No usable qualification observations")
+            from collections import Counter
+            reasons = Counter(outcomes.get(a,{"status":"request_failed"})["status"] for a in window)
+            results = {a:r["stats"] for a,r in outcomes.items() if a in window and r["status"]=="ok"}
             now = time.time()
             fresh, rejected = {}, []
+            criteria = Counter()
             for addr,wr in results.items():
                 if addr not in window or not wr:
                     continue
@@ -133,10 +135,15 @@ class SmartMoneyAgent(Agent):
                     fresh[addr] = {**wr,"ts":now}
                 else:
                     rejected.append(addr)
+                    reason = "too_few_trades" if wr["trades"]<cfg.fills_min_trades else "nonpositive_pnl" if wr["recent_pnl"]<=0 else "short_span"
+                    criteria[reason] += 1
             store.publish_smart_pool(fresh, rejected, cfg.smart_pool_ttl_hours*3600, now)
             with self._qualification_lock:
                 self._qualification_state = {**self._qualification_state,
-                    "refreshing":False, "completed_at":now, "failed":False,
+                    "refreshing":False, "completed_at":now,
+                    "failed":sum(reasons[k] for k in ("request_failed","rate_limited","invalid_data"))==len(window),
+                    "partial_failure":any(reasons[k] for k in ("request_failed","rate_limited","invalid_data")),
+                    "reasons":dict(reasons), "criteria":dict(criteria),
                     "duration_seconds":round(time.monotonic()-started,3),
                     "requested":len(window), "observed":len(results),
                     "qualified":len(fresh), "rejected":len(rejected),
