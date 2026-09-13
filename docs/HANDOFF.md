@@ -4,7 +4,7 @@
 
 ## 接手入口
 
-唯一繼續維護的程式庫為 `virus11456/crypig`，正式網站為 https://hypeboss.cc/ 。目前功能更新集中在 `fix/data-loading-and-provenance`，PR #2 尚未合併；接手時先確認遠端最新版本與工作目錄差異。不要把預設分支誤認為最新已部署程式。
+唯一繼續維護的程式庫為 `virus11456/crypig`，正式網站為 https://hypeboss.cc/ 。PR #2 已於 2026-09-14 合併，合併版本 `4cb27ca5cd221bca73ecf63e0d7eddec7e158cdc`。後續正式分支為 `claude/brave-ptolemy-nn1nd8`，接手時先確認遠端最新版本與工作目錄差異。
 
 最近已驗證部署的功能版本為 `2329d312ebfc6248de6456a16122604eb3fb28b8`。本交接文件是後續文件更新，不代表重新部署或重新驗證網站。後續實作請同步維護 CHANGELOG.md 與本文件。
 
@@ -61,3 +61,5 @@
 Vercel 建置使用 `node scripts/build-vercel.cjs`，從 Python 的 INDEX_HTML 匯出同一份靜態首頁與圖示，使用 Build Output API。舊的預設 mock serverless 入口已移除，不在 Vercel 啟動採集或建立另一套 SQLite。資料與匯出接口轉送到既有 `https://hypeboss.cc` 正式後端。
 
 此配置依賴 hypeboss.cc 仍指向現有後端，不能直接把其 DNS 改到 Vercel，否則可能形成回送循環。若日後要遷移主網域，必須先建立獨立後端網域並修改轉送來源。GitHub 合併與 Vercel 最終驗證狀態見後續紀錄。
+
+Vercel 既有專案 hypeboss 已改連 virus11456/crypig，根目錄為程式庫根目錄，框架為 Other，正式分支追蹤 claude/brave-ptolemy-nn1nd8。此紀錄提交時首次新版部署尚待驗證；不可把設定完成當成部署成功。
