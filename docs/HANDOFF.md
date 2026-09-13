@@ -54,3 +54,10 @@
 若以標準輸入傳送部署腳本，臨時容器命令應隔離標準輸入（例如 `</dev/null`），避免消耗後續部署指令。
 
 每批更新必須提交程式、相關測試及開發紀錄至 GitHub。公開紀錄不要包含憑證、私鑰、環境秘密、資料庫備份或私人管理資訊。GitHub提交與正式部署分開記錄，不能只做本機修改就宣稱已上傳。
+
+
+## Vercel 同步配置（2026-09-14）
+
+Vercel 建置使用 `node scripts/build-vercel.cjs`，從 Python 的 INDEX_HTML 匯出同一份靜態首頁與圖示，使用 Build Output API。舊的預設 mock serverless 入口已移除，不在 Vercel 啟動採集或建立另一套 SQLite。資料與匯出接口轉送到既有 `https://hypeboss.cc` 正式後端。
+
+此配置依賴 hypeboss.cc 仍指向現有後端，不能直接把其 DNS 改到 Vercel，否則可能形成回送循環。若日後要遷移主網域，必須先建立獨立後端網域並修改轉送來源。GitHub 合併與 Vercel 最終驗證狀態見後續紀錄。

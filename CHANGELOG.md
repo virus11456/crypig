@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### 2026-09-14（Vercel 前端同步）
+
+- Vercel 從相同 INDEX_HTML 建置靜態前端，接口共用現有正式後端，避免重複採集與歷史分散。
+- 移除預設 mock 的舊 serverless 入口；Vercel 不另啟動 Python 分析或 SQLite。
+- 此配置要求 hypeboss.cc 保留現有後端 DNS；改主網域前須先建立獨立後端來源。
+
+
 ### 2026-09-13（資料正確性、行為觀察與 LTH 切換）
 
 - 最新已驗證部署功能版本：`2329d312ebfc6248de6456a16122604eb3fb28b8`，位於 `fix/data-loading-and-provenance`；PR #2 尚未合併。

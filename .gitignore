@@ -6,3 +6,5 @@ config.yaml
 kg_store.json
 *.db
 .env
+
+.vercel/
