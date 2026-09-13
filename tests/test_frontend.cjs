@@ -288,3 +288,14 @@ test('LTH 7/30 day controls change bars and summary, preserve selection and skip
  h.run('LTH_INFO.history.splice(28,1);renderLTH()');assert.match(h.elements.get('lth').innerHTML,/bar-count:5/);
  h.run("setLTHRange('30d')");assert.match(h.elements.get('lth').innerHTML,/bar-count:28/);
 });
+
+test('LTH exposes acquisition time separately from source age and refresh failure',()=>{
+ const h=setup();h.run(`LTH_INFO={as_of:'2026-09-11',balance_btc:100,changes_btc:{},history:[],note:'',meta:{updated_at:1789223000,source_age_days:3,refresh_failed:true,stale:true,persist_failed:true,refresh_interval_seconds:21600}};renderLTH()`);
+ const html=h.elements.get('lth').innerHTML;
+ assert.match(html,/來源日期距 UTC 今天 3 天/);assert.match(html,/取得時間/);
+ assert.match(html,/更新失敗/);assert.match(html,/每小時重試一次/);assert.match(html,/快取保存失敗/);
+ assert.match(html,/取得時間不代表來源日期更新/);
+ h.run('LTH_INFO.meta={};renderLTH()');
+ assert.match(h.elements.get('lth').innerHTML,/取得時間：未提供/);
+ assert.doesNotMatch(h.elements.get('lth').innerHTML,/UTC 今天 0 天/);
+});

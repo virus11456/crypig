@@ -93,6 +93,7 @@ async def lifespan(app: FastAPI):
     yield
     _history_cache.close()
     if _orc is not None:
+        _orc.lth_supply.close()
         for agent in _orc.agents:
             if hasattr(agent, "qualification_status"):
                 agent.close()
@@ -499,24 +500,20 @@ def stablecoins() -> dict:
 
 
 def _load_lth_history() -> dict:
-    from ..clients.lth_history import build_lth, SLUG
+    from ..clients.lth_history import build_lth
     if orchestrator().config.use_mock:
         from datetime import date, timedelta
         data = build_lth([{"d":(date.today()-timedelta(days=31-i)).isoformat(),
                            "longTermHodlerSupplyBtc":16000000+i*100} for i in range(32)])
         data["note"] = "示範資料，非真實鏈上資料。" + data["note"]
         return data
-    from ..clients.bitcoin_data import BitcoinDataClient
-    client = BitcoinDataClient()
-    try:
-        return build_lth(client.fetch_history(SLUG, ttl=0))
-    finally:
-        client.close()
+    data, meta = orchestrator().lth_supply.read()
+    return {**require_snapshot(data), "meta": meta}
 
 
 @app.get("/lth_history")
 def lth_history() -> dict:
-    return history_response("lth_daily_supply_v1", _load_lth_history)
+    return _load_lth_history()
 
 
 @app.get("/onchain_whale")

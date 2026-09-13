@@ -71,6 +71,8 @@ class Orchestrator:
             self._analysis_restored = True
             for key, value in saved["state"].items():
                 setattr(self, key, copy.deepcopy(value))
+        from .storage.lth_supply import LTHSupply
+        self.lth_supply = LTHSupply(Path(self.config.decisions_db).parent / "history_cache")
         self.agents = []
         a = self.config.agents
         if a.smart_money.enabled:
@@ -80,7 +82,11 @@ class Orchestrator:
         if a.divergence.enabled:
             self.agents.append(DivergenceAgent(self.config))
         if a.lth.enabled:
-            self.agents.append(LTHAgent(self.config))
+            cfg = a.lth
+            shared = (cfg.metric_slug == "long-term-hodler-supply-btc"
+                      and cfg.value_key in ("", "longTermHodlerSupplyBtc")
+                      and cfg.onchain_symbol == "BTC" and cfg.source == "bitcoin-data")
+            self.agents.append(LTHAgent(self.config, history=self.lth_supply if shared else None))
 
     def run_cycle(self) -> dict:
         # 非重入：已有一輪在跑就直接回（請求端不再各自啟動並發輪→不互相覆蓋、不打爆 HL）

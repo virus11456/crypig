@@ -913,9 +913,14 @@ function renderLTH(){
   const all=orderedPoints((r.history||[]).map(x=>({t:Date.parse(x.date)/1000,v:x.btc})),'v');
   const bars=[];
   for(let i=1;i<all.length;i++)if(all[i].t>all.at(-1).t-days*86400&&all[i].t-all[i-1].t===86400)bars.push({t:all[i].t,v:all[i].v-all[i-1].v});
+  const meta=r.meta||{};
+  const fetched=typeof meta.updated_at==='number'?new Date(meta.updated_at*1000).toLocaleString():'未提供';
+  const sourceAge=Number.isInteger(meta.source_age_days)&&meta.source_age_days>=0?`來源日期距 UTC 今天 ${meta.source_age_days} 天；`:'';
+  const refreshState=meta.refresh_failed?'更新失敗，保留上次日資料，最多每小時重試一次。':meta.refreshing?'背景更新中，保留上次日資料。':meta.stale?'快取待更新。':'';
   el.innerHTML=`<div class="box">${toggle}<p><b>${supplyBehavior(r,'LTH 供給')}</b></p>
     <p>目前 ${signedBTC(r.balance_btc).replace(/^\+/,'')}｜近 1 天 ${signedBTC(r.changes_btc?.['1'])}｜近 7 天 ${signedBTC(r.changes_btc?.['7'])}｜近 30 天 ${signedBTC(r.changes_btc?.['30'])}</p>
     <p class="meta">截至 ${r.as_of}。${LTH_ERR||((r.meta?.stale||Date.now()-Date.parse(r.as_of)>3*86400000)?'資料延遲，保留上次資料。':'')} ${r.note}</p>
+    <p class="meta">${sourceAge}取得時間：${fetched}。${refreshState}${meta.persist_failed?'快取保存失敗。':''}${meta.refresh_interval_seconds?'日資料最多重用 6 小時，UTC 換日重查；取得時間不代表來源日期更新。':''}</p>
     <p class="meta">近 ${days} 天每日供給差額；缺日不畫成單日變化。下降只能說明 LTH 分類供給減少，要判斷賣出仍需舊幣支出與流向證據。</p>
     ${barChart(bars,{tip:p=>'供給差額 '+signedBTC(p.v)})}<p class="meta">來源：<a href="https://bitcoin-data.com/v1/long-term-hodler-supply-btc" target="_blank" rel="noopener">bitcoin-data LTH 日供給</a></p></div>`;
   setSum('sum-lth','近'+days+'天 '+signedBTC(r.changes_btc?.[String(days)]));

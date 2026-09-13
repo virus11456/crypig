@@ -13,8 +13,9 @@ from ..storage.snapshots import SnapshotStore
 class LTHAgent(Agent):
     name = "lth_supply"
 
-    def __init__(self, config):
+    def __init__(self, config, history=None):
         super().__init__(config)
+        self._history = history
         self._store = SnapshotStore(config.snapshot_db)
         self._client: BitcoinDataClient | None = None
 
@@ -24,6 +25,13 @@ class LTHAgent(Agent):
             if symbol != cfg.onchain_symbol:
                 return {"threshold_days": cfg.threshold_days, "lth_supply": None,
                         "note": f"鏈上 LTH 為 {cfg.onchain_symbol} 指標，{symbol} 不適用"}
+            if self._history is not None:
+                data, meta = self._history.read()
+                return {"threshold_days": cfg.threshold_days,
+                        "lth_supply": data["balance_btc"] if data else None,
+                        "as_of": data["as_of"] if data else None,
+                        "freshness": meta,
+                        "note": "日資料更新失敗，等待重試" if meta["refresh_failed"] else "日資料等待背景取得"}
             if self._client is None:
                 self._client = BitcoinDataClient()
             try:
@@ -55,11 +63,15 @@ class LTHAgent(Agent):
                 relations=[], raw=raw,
             )
 
+        freshness = raw.get("freshness", {})
+        state = ("更新失敗，保留上次日資料；" if freshness.get("refresh_failed") else
+                 "背景更新中，保留上次日資料；" if freshness.get("refreshing") else
+                 "快取待更新；" if freshness.get("stale") else "")
         # Daily supply is descriptive: ageing and transfers are not trade evidence.
         return Observation(
             source=self.name, symbol=symbol, signal_type="lth_supply",
             direction="neutral", magnitude=0.0, status="informational",
-            summary=f"{symbol} 長期持有者供給 {supply:,.0f} BTC（截至 {raw.get('as_of') or '來源日期未提供'}）；請看獨立日資料分析。供給變化不直接代表買賣。",
+            summary=f"{symbol} 長期持有者供給 {supply:,.0f} BTC（截至 {raw.get('as_of') or '來源日期未提供'}）；{state}請看獨立日資料分析。供給變化不直接代表買賣。",
             entities=[("cohort", "long_term_holders"), ("asset", symbol)],
             relations=[], raw=raw,
         )
