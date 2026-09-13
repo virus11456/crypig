@@ -55,7 +55,7 @@ def _parse_iso(s: str | None) -> float | None:
 
 
 class RedditClient:
-    def __init__(self, timeout: float = 15.0):
+    def __init__(self, timeout: float = 15.0, cache_path=None):
         # 帶具識別性的 User-Agent；Reddit 對預設/空 UA 較易擋
         self._client = httpx.Client(
             timeout=timeout, follow_redirects=True,
@@ -66,6 +66,16 @@ class RedditClient:
         self._sub_titles: dict[str, list[str]] = {}  # 每版最近一次快照(標題清單)
         self._sub_attempts: dict[str, dict] = {}
         self._sub_ts: dict[str, float] = {}        # 每版最近一次抓取時間
+        self._cache_path = cache_path
+        self._restored_boards = 0
+        self._persist_failed = False
+        if cache_path:
+            from ..storage.reddit_cache import load
+            saved = load(cache_path, _SUBS, time.time())
+            if saved:
+                self._sub_titles, self._sub_ts = saved['titles'], saved['times']
+                self._sub_attempts, self._idx = saved['attempts'], saved['idx']
+                self._restored_boards = len(self._sub_ts)
 
     @property
     def enabled(self) -> bool:
@@ -126,6 +136,15 @@ class RedditClient:
             self._sub_ts[sub] = now
 
         self._sub_attempts[sub] = {"attempted_at": now, "refresh_failed": not bool(fresh)}
+        if self._cache_path:
+            from ..storage.reddit_cache import save
+            try:
+                save(self._cache_path, {"version": 1, "subs": _SUBS, "idx": self._idx % len(_SUBS),
+                                       "titles": self._sub_titles, "times": self._sub_ts,
+                                       "attempts": self._sub_attempts})
+                self._persist_failed = False
+            except (OSError, ValueError, TypeError):
+                self._persist_failed = True
         # A six-board rotation takes about two hours; allow one extra hour for delays.
         max_age = 3 * 3600
         active = {name: rows for name, rows in self._sub_titles.items()
@@ -137,7 +156,8 @@ class RedditClient:
                                     "stale" if name not in active else
                                     "failed_retained" if self._sub_attempts.get(name, {}).get("refresh_failed") else "available"}
                    for name in _SUBS}
-        freshness = {"attempted_sub": sub, "attempted_at": now,
+        freshness = {"restored_boards": self._restored_boards, "persist_failed": self._persist_failed,
+                     "attempted_sub": sub, "attempted_at": now,
                      "refresh_failed": not bool(fresh), "sources": sources,
                      "max_age_seconds": max_age, "has_collected": bool(self._sub_ts),
                      "included_subs": len(active), "configured_subs": len(_SUBS),

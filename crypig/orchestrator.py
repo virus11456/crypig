@@ -418,7 +418,7 @@ class Orchestrator:
         try:
             if self._rd is None:
                 from .clients.reddit import RedditClient
-                self._rd = RedditClient()
+                self._rd = RedditClient(cache_path=Path(self.config.decisions_db).parent / "reddit_boards.json")
             buzz = self._timed("reddit", self._rd.crypto_buzz)
             if buzz:
                 meta = buzz.get("freshness", {})

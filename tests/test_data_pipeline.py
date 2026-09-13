@@ -691,3 +691,28 @@ def test_reddit_rotation_failure_keeps_original_time_and_expires_old_boards(monk
         assert expired['freshness']['included_subs']==0
         assert expired['freshness']['sources'][_SUBS[0]]['status']=='stale'
     finally:c.close()
+
+
+def test_reddit_restart_restores_boards_times_and_rotation(tmp_path, monkeypatch):
+    from crypig.clients.reddit import RedditClient, _SUBS
+    from crypig.storage.reddit_cache import load
+    now=[100000.]
+    monkeypatch.setattr('crypig.clients.reddit.time.time',lambda:now[0])
+    path=tmp_path/'boards.json'
+    a=RedditClient(cache_path=path)
+    monkeypatch.setattr(a,'_fetch_sub',lambda sub:[('bitcoin surge',99900.)])
+    a.crypto_buzz();a.close();now[0]+=400
+    b=RedditClient(cache_path=path);seen=[]
+    monkeypatch.setattr(b,'_fetch_sub',lambda sub:seen.append(sub) or [])
+    try:
+        out=b.crypto_buzz()
+        assert seen==[_SUBS[1]] and out['total_posts']==1
+        assert out['freshness']['sources'][_SUBS[0]]['fetched_at']==100000.
+        assert out['freshness']['restored_boards']==1
+        monkeypatch.setattr('crypig.storage.reddit_cache.save',lambda *a: (_ for _ in ()).throw(OSError('disk full')))
+        now[0]+=400
+        assert b.crypto_buzz()['freshness']['persist_failed']
+        assert load(path,_SUBS,now[0])['idx']==2
+    finally:b.close()
+    path.write_text('{broken')
+    assert load(path,_SUBS,now[0]) is None

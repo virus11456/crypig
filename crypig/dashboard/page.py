@@ -1417,7 +1417,7 @@ function redditFreshness(r){
     const state=v.status==='stale'?'過舊，未納入':old?'已過舊，等待下一輪排除':v.status==='not_collected'?'尚無可用資料':v.status==='failed_retained'?'更新失敗，沿用舊資料':'已有資料';
     return `${name}：${state}${v.fetched_at?'（取得 '+ago(v.fetched_at)+'）':''}`;
   });
-  return `每輪更新一版；本輪 ${f.attempted_sub||'—'} ${f.refresh_failed?'未取得可用貼文':'已取得'}｜本次彙總 ${f.included_subs}/${f.configured_subs} 版。超過 3 小時的版快照於彙總時排除。${rows.join('；')}。未取得可能是連線失敗、限流、格式不符或空 RSS。`;
+  return `${f.persist_failed?'本次快照保存失敗，重啟可能無法恢復；':''}每輪更新一版；本輪 ${f.attempted_sub||'—'} ${f.refresh_failed?'未取得可用貼文':'已取得'}｜本次彙總 ${f.included_subs}/${f.configured_subs} 版。超過 3 小時的版快照於彙總時排除。${rows.join('；')}。未取得可能是連線失敗、限流、格式不符或空 RSS。`;
 }
 async function loadReddit(){
   try{
