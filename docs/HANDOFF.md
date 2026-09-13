@@ -6,7 +6,7 @@
 
 唯一繼續維護的程式庫為 `virus11456/crypig`，正式網站為 https://hypeboss.cc/ 。PR #2 已於 2026-09-14 合併，合併版本 `4cb27ca5cd221bca73ecf63e0d7eddec7e158cdc`。後續正式分支為 `claude/brave-ptolemy-nn1nd8`，接手時先確認遠端最新版本與工作目錄差異。
 
-最近已驗證部署的功能版本為 `2329d312ebfc6248de6456a16122604eb3fb28b8`。本交接文件是後續文件更新，不代表重新部署或重新驗證網站。後續實作請同步維護 CHANGELOG.md 與本文件。
+最近已驗證部署的功能版本為 `09af862a015eeb829f93865f0ceea3a6e9b70d9c`（第二十五批，2026-09-14）。VPS及Vercel均已驗證，詳見 [第二十五批紀錄](releases/2026-09-14-derivatives.md)。本文件後續提交不代表重新建置VPS映像。後續實作請同步維護 CHANGELOG.md 與本文件。
 
 ## 產品目的
 
@@ -73,3 +73,5 @@ Vercel Production Ready 版本為 `224e0a6`，Git 來源為 virus11456/crypig，
 VPS 工作目錄當下也為 `224e0a6` 且乾淨；四個關鍵執行檔（orchestrator、whale、market_data、page）容器雜湊與該提交一致，容器 healthy。VPS 當下仍使用舊修正分支名稱；內容已合併，後續部署應統一追蹤正式分支。Vercel 的資料路徑仍轉送 hypeboss.cc，不能改其 DNS 形成回送。
 
 目前工作環境沒有舊日期的本機目錄及其四份 outputs 原始紀錄；本次依遠端庫內 HANDOFF、CHANGELOG、OPTIMIZATION、Vercel 部署紀錄與實際服務重新核對，不能宣稱已復原或合併遺失的本機紀錄。舊版部署說明與 CHANGELOG 歷史段落是當時狀態，本節查核優先。
+
+上述路徑初查後，第二十五批已將VPS切換至正式分支並部署 `09af862`；容器healthy，全部43個Python檔案與提交一致。兩站主要接口與實際UI通過驗證，詳見第二十五批紀錄。
