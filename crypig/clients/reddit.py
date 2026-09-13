@@ -55,7 +55,7 @@ def _parse_iso(s: str | None) -> float | None:
 
 
 class RedditClient:
-    def __init__(self, timeout: float = 15.0):
+    def __init__(self, timeout: float = 15.0, cache_path=None):
         # 帶具識別性的 User-Agent；Reddit 對預設/空 UA 較易擋
         self._client = httpx.Client(
             timeout=timeout, follow_redirects=True,
@@ -64,7 +64,18 @@ class RedditClient:
         self._cache_ts = 0.0
         self._idx = 0                              # 輪轉指標：每輪抓 _SUBS[_idx]
         self._sub_titles: dict[str, list[str]] = {}  # 每版最近一次快照(標題清單)
+        self._sub_attempts: dict[str, dict] = {}
         self._sub_ts: dict[str, float] = {}        # 每版最近一次抓取時間
+        self._cache_path = cache_path
+        self._restored_boards = 0
+        self._persist_failed = False
+        if cache_path:
+            from ..storage.reddit_cache import load
+            saved = load(cache_path, _SUBS, time.time())
+            if saved:
+                self._sub_titles, self._sub_ts = saved['titles'], saved['times']
+                self._sub_attempts, self._idx = saved['attempts'], saved['idx']
+                self._restored_boards = len(self._sub_ts)
 
     @property
     def enabled(self) -> bool:
@@ -74,23 +85,34 @@ class RedditClient:
         """回某子版熱門貼文 (標題, 發布epoch) 清單。429 時退避重試一次。"""
         url = f"https://www.reddit.com/r/{sub}/hot/.rss?limit=50"
         content = None
+        self._fetch_outcome = {"reason": "request_failed", "attempts": 0}
         for attempt in range(2):
+            self._fetch_outcome["attempts"] = attempt + 1
             try:
                 r = self._client.get(url)
+                self._fetch_outcome["http_status"] = r.status_code
                 if r.status_code == 200:
                     content = r.content
                     break
                 if r.status_code == 429 and attempt == 0:
                     time.sleep(5.0)   # Reddit 限流，退避後再試一次
                     continue
+                self._fetch_outcome["reason"] = "rate_limited" if r.status_code == 429 else "access_denied" if r.status_code in (401, 403) else "http_error"
+                return []
+            except httpx.TimeoutException:
+                self._fetch_outcome["reason"] = "timeout"
                 return []
             except Exception:
+                self._fetch_outcome["reason"] = "request_failed"
                 return []
         if content is None:
             return []
         try:
             root = ET.fromstring(content)
+            if _local(root.tag) != "feed":
+                raise ValueError("Expected Atom feed")
         except Exception:
+            self._fetch_outcome["reason"] = "invalid_data"
             return []
         out: list[tuple[str, float | None]] = []
         for e in root.iter():
@@ -105,6 +127,7 @@ class RedditClient:
                     ts = _parse_iso(ch.text)
             if title:
                 out.append((title, ts))
+        self._fetch_outcome["reason"] = "ok" if out else "empty_feed"
         return out
 
     def crypto_buzz(self, ttl: float = 300.0) -> dict:
@@ -119,16 +142,47 @@ class RedditClient:
         # 本輪只抓一個版
         sub = _SUBS[self._idx % len(_SUBS)]
         self._idx += 1
+        self._fetch_outcome = {}
         fresh = self._fetch_sub(sub)
         if fresh:
             self._sub_titles[sub] = fresh
             self._sub_ts[sub] = now
 
+        self._sub_attempts[sub] = {"attempted_at": now, "refresh_failed": not bool(fresh),
+                                   "reason": "ok" if fresh else self._fetch_outcome.get("reason", "unavailable"),
+                                   **{k: v for k, v in self._fetch_outcome.items() if k in ("attempts", "http_status")}}
+        if self._cache_path:
+            from ..storage.reddit_cache import save
+            try:
+                save(self._cache_path, {"version": 1, "subs": _SUBS, "idx": self._idx % len(_SUBS),
+                                       "titles": self._sub_titles, "times": self._sub_ts,
+                                       "attempts": self._sub_attempts})
+                self._persist_failed = False
+            except (OSError, ValueError, TypeError):
+                self._persist_failed = True
+        # A six-board rotation takes about two hours; allow one extra hour for delays.
+        max_age = 3 * 3600
+        active = {name: rows for name, rows in self._sub_titles.items()
+                  if 0 <= now - self._sub_ts.get(name, 0) <= max_age}
+        sources = {name: {**self._sub_attempts.get(name, {}),
+                          "fetched_at": self._sub_ts.get(name),
+                          "included": name in active,
+                          "status": "not_collected" if name not in self._sub_ts else
+                                    "stale" if name not in active else
+                                    "failed_retained" if self._sub_attempts.get(name, {}).get("refresh_failed") else "available"}
+                   for name in _SUBS}
+        freshness = {"restored_boards": self._restored_boards, "persist_failed": self._persist_failed,
+                     "attempted_sub": sub, "attempted_at": now,
+                     "refresh_failed": not bool(fresh), "sources": sources,
+                     "max_age_seconds": max_age, "has_collected": bool(self._sub_ts),
+                     "included_subs": len(active), "configured_subs": len(_SUBS),
+                     "oldest_fetched_at": min((self._sub_ts[n] for n in active), default=None)}
+
         # 用所有版的最近快照彙整(跨版去重，避免轉貼重複計數)；同時記下貼文時間範圍
         titles: list[str] = []
         seen: set[str] = set()
         post_ts: list[float] = []
-        for lst in self._sub_titles.values():
+        for lst in active.values():
             for item in lst:
                 title, pts = item if isinstance(item, tuple) else (item, None)
                 k = title.strip().lower()
@@ -137,8 +191,6 @@ class RedditClient:
                     titles.append(title)
                     if pts:
                         post_ts.append(pts)
-        if not titles:
-            return self._cache or {}
 
         coins: dict[str, dict] = {}
         for title in titles:
@@ -157,9 +209,10 @@ class RedditClient:
             # 情緒%＝標題偏多比例(0~100)；標題無情緒詞時為 None（顯示「—」）
             b["sentiment"] = round(b["bull"] / tot * 100, 1) if tot else None
         out = {
+            "freshness": freshness,
             "coins": coins,
             "total_posts": len(titles),
-            "subs": len(self._sub_titles),   # 已收集到資料的版數(輪轉中會慢慢長到 subs_total)
+            "subs": len(active),   # 已收集到資料的版數(輪轉中會慢慢長到 subs_total)
             "subs_total": len(_SUBS),
             "source": "reddit_rss",
             # 貼文時間範圍（hot 熱帖，非固定窗）：最新貼文、最舊貼文、跨度小時

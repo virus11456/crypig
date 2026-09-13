@@ -95,7 +95,7 @@ class PosSeriesStore:
             " VALUES (?,?,?,?,?,?,?,?)",
             (ts, market.get("gap"), market.get("crowd_m"), market.get("smart_avg"),
              int(market.get("n_div") or 0), int(market.get("n_top") or 0),
-             int(market.get("n_bottom") or 0), 1 if market.get("diverging") else 0))
+             int(market.get("n_bottom") or 0), None if market.get("diverging") is None else int(market["diverging"])))
         self._conn.commit()
 
     def radar_history(self, limit: int = 400) -> list[dict]:
@@ -104,13 +104,13 @@ class PosSeriesStore:
             "SELECT * FROM radar_hist ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
         return [{"ts": r["ts"], "gap": r["gap"], "crowd_m": r["crowd_m"],
                  "smart_avg": r["smart_avg"], "n_div": r["n_div"], "n_top": r["n_top"],
-                 "n_bottom": r["n_bottom"], "diverging": bool(r["diverging"])}
+                 "n_bottom": r["n_bottom"], "diverging": None if r["diverging"] is None else bool(r["diverging"])}
                 for r in reversed(rows)]
 
     # ---- 聰明錢累積池（跨輪累加、TTL 汰舊，避免一次抓太多被限流）----
     def load_smart_pool(self, ttl_sec: float, now: float) -> dict[str, dict]:
         rows = self._conn.execute(
-            "SELECT * FROM smart_pool WHERE ? - ts < ?", (now, ttl_sec)).fetchall()
+            "SELECT * FROM smart_pool WHERE ts > 0 AND ts <= ? AND ? - ts < ?", (now, now, ttl_sec)).fetchall()
         return {r["addr"]: {"win_rate": r["win_rate"], "recent_pnl": r["recent_pnl"],
                             "span_hours": r["span_hours"], "trades": r["trades"], "ts": r["ts"]}
                 for r in rows}
@@ -122,6 +122,15 @@ class PosSeriesStore:
             [(a, v.get("win_rate"), v.get("recent_pnl"), v.get("span_hours"),
               v.get("trades"), v.get("ts")) for a, v in entries.items()])
         self._conn.commit()
+
+    def publish_smart_pool(self, fresh, rejected, ttl_sec, now):
+        """Publish a completed qualification batch atomically; failed reads keep old dates."""
+        with self._conn:
+            self._conn.executemany("DELETE FROM smart_pool WHERE addr=?", [(a,) for a in rejected])
+            self._conn.executemany(
+                "INSERT OR REPLACE INTO smart_pool(addr,win_rate,recent_pnl,span_hours,trades,ts) VALUES (?,?,?,?,?,?)",
+                [(a,v["win_rate"],v["recent_pnl"],v["span_hours"],v["trades"],v["ts"]) for a,v in fresh.items()])
+            self._conn.execute("DELETE FROM smart_pool WHERE ? - ts >= ? OR ts > ? OR ts <= 0", (now,ttl_sec,now))
 
     def prune_smart_pool(self, ttl_sec: float, now: float) -> None:
         self._conn.execute("DELETE FROM smart_pool WHERE ? - ts >= ?", (now, ttl_sec))

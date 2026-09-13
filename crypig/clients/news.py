@@ -10,6 +10,7 @@ RSS 非 IP 限流，client 自帶 TTL 快取即可。
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import re
 import time
 from xml.etree import ElementTree as ET
@@ -90,6 +91,15 @@ def _parse_ts(s: str | None) -> int | None:
         return None
 
 
+class FeedItems(list):
+    """Keep each concurrent publisher's diagnostic attached to its own batch."""
+    def __init__(self, items=(), *, reason, http_status=None):
+        super().__init__(items)
+        self.diagnostic = {"reason": reason, "attempted_at": time.time()}
+        if http_status is not None:
+            self.diagnostic["http_status"] = http_status
+
+
 class NewsClient:
     def __init__(self, timeout: float = 15.0):
         self._client = httpx.Client(
@@ -100,11 +110,19 @@ class NewsClient:
     def _fetch_feed(self, source: str, url: str) -> list[dict]:
         try:
             r = self._client.get(url)
-            if r.status_code != 200:
-                return []
-            root = ET.fromstring(r.content)
+        except httpx.TimeoutException:
+            return FeedItems(reason="timeout")
         except Exception:
-            return []
+            return FeedItems(reason="request_failed")
+        if r.status_code != 200:
+            reason = "rate_limited" if r.status_code == 429 else "access_denied" if r.status_code in (401, 403) else "http_error"
+            return FeedItems(reason=reason, http_status=r.status_code)
+        try:
+            root = ET.fromstring(r.content)
+            if root.tag != "rss" or root.find("channel") is None:
+                raise ValueError("Expected RSS channel")
+        except Exception:
+            return FeedItems(reason="invalid_data", http_status=r.status_code)
         items = []
         for it in root.iter("item"):
             title = (it.findtext("title") or "").strip()
@@ -117,17 +135,32 @@ class NewsClient:
             coins = _tag_coins(title + " " + desc)
             items.append({"title": title, "link": link, "source": source, "ts": ts,
                           "sentiment": sentiment, "net": net, "coins": coins})
-        return items
+        return FeedItems(items, reason="ok" if items else "empty_feed", http_status=r.status_code)
 
     def analyze(self, ttl: float = 600.0, limit: int = 60) -> dict:
         """彙整新聞：整體偏多/偏空、各幣新聞淨情緒、標題清單（含利多/利空＋影響幣）。"""
         if self._cache is not None and time.time() - self._ts < ttl:
             return self._cache
         items: list[dict] = []
-        for source, url in _FEEDS.items():
-            items += self._fetch_feed(source, url)
+        # Bounded fan-out across distinct publishers; preserve feed order for ties.
+        with ThreadPoolExecutor(max_workers=3, thread_name_prefix="news-rss") as pool:
+            batches = list(pool.map(lambda feed: self._fetch_feed(*feed), _FEEDS.items()))
+        for batch in batches:
+            items.extend(batch)
+        attempted_at = time.time()
+        source_status = {name: {"status": "received" if batch else "unavailable",
+                                "items": len(batch), "attempted_at": attempted_at,
+                                **getattr(batch, "diagnostic", {"reason": "ok" if batch else "unavailable"})}
+                         for name, batch in zip(_FEEDS, batches)}
+        received = sum(bool(batch) for batch in batches)
+        metadata = {"attempted_at": attempted_at, "sources": source_status,
+                    "received_sources": received, "configured_sources": len(_FEEDS),
+                    "refresh_failed": not received, "partial": received < len(_FEEDS)}
         if not items:
-            return self._cache or {"items": [], "summary": {}, "total": 0}
+            previous = self._cache or {"items": [], "summary": {}, "total": 0}
+            out = {**previous, "freshness": {**previous.get("freshness", {}), **metadata}}
+            self._cache, self._ts = out, attempted_at
+            return out
         # 依時間新到舊（無時間者排後）
         items.sort(key=lambda x: x["ts"] or 0, reverse=True)
 
@@ -147,13 +180,16 @@ class NewsClient:
                     b["bear"] += 1
         top_coins = sorted(coin_stats.items(), key=lambda kv: kv[1]["mentions"], reverse=True)[:12]
         out = {
+            "freshness": {**metadata, "fetched_at": attempted_at,
+                          "newest_published_at": max((i["ts"] for i in items if i["ts"]), default=None)},
             "items": items[:limit],
             "summary": {
                 "bull": bull, "bear": bear, "neutral": neutral,
                 "net": bull - bear,
                 "bias": "偏多" if bull - bear > 2 else "偏空" if bull - bear < -2 else "中性",
                 "top_coins": [{"symbol": s, **v} for s, v in top_coins],
-                "sources": len(_FEEDS),
+                "sources": sum(bool(batch) for batch in batches),
+                "configured_sources": len(_FEEDS),
             },
             "total": len(items),
         }

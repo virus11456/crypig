@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import math
 import os
 import statistics
 import time
@@ -15,7 +16,7 @@ from collections import defaultdict
 
 import httpx
 
-_FUNDING_PER_YEAR = 3 * 365   # CoinGecko funding 為 %/8h → 一年 3*365 期
+
 
 # 通用 timeframe -> 各交易所 bar 代碼
 _OKX_BAR = {
@@ -50,37 +51,62 @@ class MarketDataClient:
 
         回傳 {base: {open_interest_usd, funding_rate_med, contracts}}。
         funding_rate_med 取各所中位數（避免小交易所離群值拉歪），
-        單位百分比/8h（CoinGecko 原始單位）。
+        原始費率不假設結算週期，不可直接跨所統一年化。
         """
         if self._deriv_cache is not None and time.time() - self._deriv_ts < ttl:
             return self._deriv_cache
         resp = self._client.get("https://api.coingecko.com/api/v3/derivatives")
         resp.raise_for_status()
         data = resp.json()
-        if not isinstance(data, list):       # 限流/錯誤時回的是 dict，視為無資料
-            return self._deriv_cache or {}
-        agg: dict[str, dict] = defaultdict(
-            lambda: {"open_interest_usd": 0.0, "_fr": [], "contracts": 0})
-        for x in data:
-            if not isinstance(x, dict):
-                continue
-            base = (x.get("index_id") or "").upper()
-            oi = x.get("open_interest")
-            if not base or not oi:
-                continue
-            a = agg[base]
-            a["open_interest_usd"] += float(oi)
-            a["contracts"] += 1
-            fr = x.get("funding_rate")
-            if fr is not None:
-                a["_fr"].append(float(fr))
-        out: dict[str, dict] = {}
-        for base, a in agg.items():
-            frs = a.pop("_fr")
-            a["funding_rate_med"] = statistics.median(frs) if frs else 0.0
-            out[base] = a
+        out = self.normalize_derivatives(data)
         self._deriv_cache = out
         self._deriv_ts = time.time()
+        return out
+
+    @staticmethod
+    def normalize_derivatives(data, now=None):
+        """USD OI of deduplicated perpetuals traded within 24 hours; not all-market coverage."""
+        now = time.time() if now is None else now
+        if not isinstance(data, list) or not data:
+            raise ValueError("Empty derivatives response")
+        def number(value):
+            try:
+                value = float(value) if not isinstance(value, bool) else float('nan')
+                return value if math.isfinite(value) else None
+            except (TypeError, ValueError):
+                return None
+        selected = {}
+        for row in data:
+            if not isinstance(row, dict) or row.get("contract_type") != "perpetual":
+                continue
+            base, market, symbol = row.get("index_id"), row.get("market"), row.get("symbol")
+            if not all(isinstance(v, str) and v for v in (base, market, symbol)):
+                continue
+            oi, traded, price = (number(row.get(k)) for k in ("open_interest", "last_traded_at", "price"))
+            expiry = row.get("expired_at")
+            if expiry is not None and (number(expiry) is None or number(expiry) <= now):
+                continue
+            if oi is None or oi < 0 or traded is None or not now-86400 <= traded <= now+300 or price is None or price <= 0:
+                continue
+            key = (market, symbol)
+            if key not in selected or traded > selected[key][1]:
+                selected[key] = (row, traded, oi, price)
+        groups = defaultdict(list)
+        for row, traded, oi, price in selected.values():
+            groups[row["index_id"].upper()].append((row, traded, oi, price))
+        out = {}
+        for base, rows in groups.items():
+            rates = [number(r[0].get("funding_rate")) for r in rows]
+            rates = [r for r in rates if r is not None]
+            out[base] = {"open_interest_usd": sum(r[2] for r in rows),
+                         "contracts": len(rows), "exchanges": len({r[0]["market"] for r in rows}),
+                         "reference_price": statistics.median(r[3] for r in rows),
+                         "oldest_trade_at": min(r[1] for r in rows),
+                         "latest_trade_at": max(r[1] for r in rows),
+                         "coverage": "perpetuals_traded_within_24h", "unit": "USD",
+                         "funding_rate_med": statistics.median(rates) if rates else 0.0}
+        if not out:
+            raise ValueError("No valid derivatives")
         return out
 
     # symbol -> CoinGecko coin id（取各幣市值/成交量用）
@@ -110,7 +136,8 @@ class MarketDataClient:
             oi = None
         out = {
             "market_cap": cap, "volume_24h": vol, "open_interest": oi,
-            "oi_cap": (oi / cap) if (oi and cap) else None,
+            "oi_cap": None,  # derivative coverage can include non-crypto underlyings
+            "oi_coverage": "CoinGecko 有效永續合約樣本，可能包含非加密標的；不計算全市場 OI/Cap。",
             "vol_cap": (vol / cap) if cap else None,
             "btc_dominance": float(g.get("market_cap_percentage", {}).get("btc", 0.0)),
         }
@@ -133,34 +160,52 @@ class MarketDataClient:
             return "squeeze"
         return "normal"
 
-    def top_markets(self, per_page: int = 250, ttl: float = 600.0) -> dict[str, dict]:
-        """CoinGecko 前 N 大市值幣的 {SYMBOL: {market_cap, volume_24h}}（一次抓、快取）。
+    @classmethod
+    def normalize_markets(cls, raw: list) -> dict[str, dict]:
+        if not isinstance(raw, list) or not raw:
+            raise ValueError("Empty market response")
+        groups = defaultdict(list)
+        for row in raw:
+            if not isinstance(row, dict):
+                raise ValueError("Invalid market row")
+            symbol = row.get("symbol")
+            if isinstance(symbol, str) and symbol and isinstance(row.get("id"), str):
+                groups[symbol.upper()].append(row)
+        out = {}
+        for symbol, rows in groups.items():
+            expected = cls._CG_ID.get(symbol)
+            candidates = [r for r in rows if r["id"] == expected] if expected else rows
+            if len(candidates) != 1:
+                continue  # ambiguous or known ID missing: never pick the biggest namesake
+            row = candidates[0]
+            cap, volume = row.get("market_cap"), row.get("total_volume")
+            def valid(value):
+                return not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value) and value >= 0
+            if not valid(cap) or cap == 0:
+                continue
+            out[symbol] = {"market_cap": cap, "volume_24h": volume if valid(volume) else None,
+                           "asset_id": row["id"],
+                           "reference_price": row.get("current_price"),
+                           "match_method": "asset_id" if expected else "symbol_candidate",
+                           "source_updated_at": row.get("last_updated")}
+        return out
 
-        用來補全市場列表中各幣的市值與量（同名取市值最大者）。CoinGecko 對雲端
-        IP 會限流，故：失敗時沿用上次好的快取（不回空），TTL 拉長到 10 分鐘。
-        """
+    def top_markets(self, per_page: int = 250, ttl: float = 600.0) -> dict[str, dict]:
+        """One page per refresh; reject ambiguous symbols and preserve valid cache on errors."""
         if self._top_cache is not None and time.time() - self._top_ts < ttl:
             return self._top_cache
         try:
-            raw = self._client.get(
+            response = self._client.get(
                 "https://api.coingecko.com/api/v3/coins/markets",
                 params={"vs_currency": "usd", "order": "market_cap_desc",
-                        "per_page": str(per_page), "page": "1"}).json()
+                        "per_page": str(per_page), "page": "1"})
+            response.raise_for_status()
+            out = self.normalize_markets(response.json())
+            if out:
+                self._top_cache, self._top_ts = out, time.time()
         except Exception:
-            return self._top_cache or {}
-        out: dict[str, dict] = {}
-        if isinstance(raw, list):
-            for m in raw:
-                if not isinstance(m, dict):
-                    continue
-                sym = (m.get("symbol") or "").upper()
-                if sym and sym not in out:        # 同名取第一個(市值最大)
-                    out[sym] = {"market_cap": float(m.get("market_cap") or 0.0),
-                                "volume_24h": float(m.get("total_volume") or 0.0)}
-        if out:
-            self._top_cache, self._top_ts = out, time.time()
-            return out
-        return self._top_cache or {}              # 限流回非 list → 用上次快取
+            pass
+        return self._top_cache or {}
 
     def coin_macro(self, symbols: list[str], ttl: float = 120.0) -> dict[str, dict]:
         """各幣 OI/Cap、Vol/Cap、資金費率(年化)與異常分級。快取以減少 CoinGecko 呼叫。"""
@@ -185,14 +230,14 @@ class MarketDataClient:
             vol = float(m.get("total_volume") or 0.0)
             d = deriv.get(s, {})
             oi = float(d.get("open_interest_usd") or 0.0)
-            # CoinGecko funding 為 %/8h → 年化小數
-            fund_ann = float(d.get("funding_rate_med") or 0.0) / 100 * _FUNDING_PER_YEAR
+            fund_ann = None  # settlement intervals are not provided by this endpoint
             out[s] = {
                 "market_cap": cap, "volume_24h": vol, "open_interest": oi,
                 "oi_cap": (oi / cap) if (oi and cap) else None,
                 "vol_cap": (vol / cap) if cap else None,
                 "funding_ann": fund_ann,
-                "funding_flag": self._funding_flag(fund_ann),
+                "funding_flag": None,
+                "funding_note": "結算週期未知，不進行年化換算",
             }
         if out:                              # 只快取成功結果（空的就讓下次重試）
             self._coin_cache, self._coin_key, self._coin_ts = out, key, time.time()

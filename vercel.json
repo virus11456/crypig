@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/api/index" }
-  ]
+  "framework": null,
+  "buildCommand": "node scripts/build-vercel.cjs",
+  "installCommand": "echo No frontend dependencies required"
 }
