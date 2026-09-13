@@ -1,6 +1,6 @@
 # Crypig 開發交接
 
-更新日期：2026-09-13。
+更新日期：2026-09-14。
 
 ## 接手入口
 
@@ -39,7 +39,7 @@
 
 ## 待處理
 
-1. 檢查 Hyperliquid 市場資料、CoinGecko derivatives、LTH 日資料與資格榜單的跨 client 重複請求，考慮共用不可變快照及合理刷新週期。這是靜態檢查發現，尚未完成去重或量測節省比例。
+1. 繼續檢查 Hyperliquid 市場資料、LTH 日資料與資格榜單的跨 client 重複請求。CoinGecko derivatives 已實作同輪不可變快照去重，測試與部署狀態見 CHANGELOG 及批次紀錄；尚未量測正式站節省比例。
 2. 保留既有地址聯集去重、固定同輪分析快照，以及帳號歷史重用回應的行為。
 3. 繼續核對資產身分、來源時間、失敗保留與歷史缺口。來源取得時間不能代替來源資料日期。
 4. 評估可區分實體與交易所託管的現貨資料，補足金流及成交證據；目前不宣稱已完整掌握現貨買賣。
@@ -63,3 +63,13 @@ Vercel 建置使用 `node scripts/build-vercel.cjs`，從 Python 的 INDEX_HTML 
 此配置依賴 hypeboss.cc 仍指向現有後端，不能直接把其 DNS 改到 Vercel，否則可能形成回送循環。若日後要遷移主網域，必須先建立獨立後端網域並修改轉送來源。GitHub 合併與 Vercel 最終驗證狀態見後續紀錄。
 
 Vercel 既有專案 hypeboss 已改連 virus11456/crypig，根目錄為程式庫根目錄，框架為 Other，正式分支追蹤 claude/brave-ptolemy-nn1nd8。新版已部署並通過正式畫面與來源數值比對；詳見 [合併與 Vercel 上線紀錄](releases/2026-09-14-vercel.md)。
+
+## 2026-09-14 路徑與合併重新查核
+
+PR #2 已合併。查核當下正式分支為 `224e0a61ce5605817102097b11adc5785fbd566d`，遠端另有 `main` 與 `fix/data-loading-and-provenance`，兩者所有提交均包含在正式分支；沒有待合併的遠端分支。
+
+Vercel Production Ready 版本為 `224e0a6`，Git 來源為 virus11456/crypig，正式分支為 claude/brave-ptolemy-nn1nd8。兩站首頁逐字符合該版本 INDEX_HTML。兩站各17個主要讀取路徑及 www 首頁均回傳200；穩定資料內容一致，行情回應差異僅為讀取時間造成的 age_seconds。
+
+VPS 工作目錄當下也為 `224e0a6` 且乾淨；四個關鍵執行檔（orchestrator、whale、market_data、page）容器雜湊與該提交一致，容器 healthy。VPS 當下仍使用舊修正分支名稱；內容已合併，後續部署應統一追蹤正式分支。Vercel 的資料路徑仍轉送 hypeboss.cc，不能改其 DNS 形成回送。
+
+目前工作環境沒有舊日期的本機目錄及其四份 outputs 原始紀錄；本次依遠端庫內 HANDOFF、CHANGELOG、OPTIMIZATION、Vercel 部署紀錄與實際服務重新核對，不能宣稱已復原或合併遺失的本機紀錄。舊版部署說明與 CHANGELOG 歷史段落是當時狀態，本節查核優先。

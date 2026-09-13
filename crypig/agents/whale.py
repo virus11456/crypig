@@ -35,7 +35,15 @@ class WhaleAgent(Agent):
         self._client: MarketDataClient | None = None
         self._btc: BitcoinDataClient | None = None
         self._hl = None
+        self._cycle_derivatives = None
         self._store = SnapshotStore(config.snapshot_db)
+
+    def begin_cycle(self, derivatives):
+        # Immutable normalized data only; the orchestrator owns the HTTP client.
+        self._cycle_derivatives = derivatives
+
+    def end_cycle(self):
+        self._cycle_derivatives = None
 
     # ---------- fetch ----------
     def fetch(self, symbol: str) -> dict:
@@ -67,9 +75,12 @@ class WhaleAgent(Agent):
                 "note": "舊 wallet-bands 來源待核實，暫停此方向訊號；現貨地址餘額請看獨立分組面板"}
 
     def _fetch_market(self, symbol: str) -> dict:
-        if self._client is None:
-            self._client = MarketDataClient()
-        agg = self._client.aggregate_derivatives().get(symbol, {})
+        derivatives = getattr(self, "_cycle_derivatives", None)
+        if derivatives is None:  # Standalone agent use keeps its existing client.
+            if self._client is None:
+                self._client = MarketDataClient()
+            derivatives = self._client.aggregate_derivatives()
+        agg = derivatives.get(symbol, {})
         oi = agg.get("open_interest_usd")
         funding_ann = None
         if valid_number(oi) and oi >= 0:

@@ -1,6 +1,7 @@
 """協調中台：跑所有 agent → 餵知識圖譜 → 算綜合評分。"""
 from __future__ import annotations
 
+from types import MappingProxyType
 from pathlib import Path
 import logging
 import copy
@@ -50,6 +51,7 @@ class Orchestrator:
         self.reddit: dict = {}                  # Reddit 散戶討論熱度/情緒(公開 RSS，免憑證)
         self.hl_scan: list = []                 # HL 全市場資金費率掃描(背景每輪快取，扛瞬斷)
         self.news: dict = {}                    # 加密新聞分析(利多/利空＋影響幣，免費 RSS)
+        self._cycle_derivatives = None
         self._md: MarketDataClient | None = None
         self._lc = None
         self._dl = None
@@ -118,8 +120,9 @@ class Orchestrator:
             raise
         finally:
             for agent in self.agents:
-                if isinstance(agent, SmartMoneyAgent):
+                if isinstance(agent, (SmartMoneyAgent, WhaleAgent)):
                     agent.end_cycle()
+            self._cycle_derivatives = None
             self._cycle_duration = round(time.monotonic() - started, 3)
             self._cycle_lock.release()
 
@@ -167,6 +170,7 @@ class Orchestrator:
             logger.info("collection_step %s %s %.3fs", name, state, duration)
 
     def _run_cycle_locked(self) -> dict:
+        self._prepare_cycle_derivatives()
         observations: list[Observation] = []
         for agent in self.agents:
             obs = self._timed("agent." + agent.name, agent.run)
@@ -379,6 +383,28 @@ class Orchestrator:
         from .radar_presentation import describe_radar
         return describe_radar({"market": market, "coins": coins[:20]})
 
+    def _prepare_cycle_derivatives(self):
+        """One attempt per analysis cycle, including failures; never relabel old OI."""
+        snapshot = {}
+        if not self.config.use_mock:
+            if self._md is None:
+                self._md = MarketDataClient()
+            try:
+                value = self._timed("market.deriv", self._md.aggregate_derivatives, ttl=0)
+                if not value:
+                    raise ValueError("Empty derivatives snapshot")
+                self.deriv_agg = copy.deepcopy(value)
+                self.valuation_times["aggregate_oi"] = self._md._deriv_ts
+                snapshot = value
+            except Exception:
+                logger.warning("CoinGecko derivatives unavailable; no current-cycle OI")
+        self._cycle_derivatives = MappingProxyType({
+            symbol: MappingProxyType(dict(row)) for symbol, row in snapshot.items()
+        })
+        for agent in self.agents:
+            if isinstance(agent, WhaleAgent):
+                agent.begin_cycle(self._cycle_derivatives)
+
     def _refresh_market_data(self) -> None:
         """每輪(背景)抓一次 CoinGecko：全市場宏觀、各幣市值、跨所聚合 OI。
         全部快取在本物件，請求端只讀，CoinGecko 從『每次刷新都打』降到 20 分鐘 3 支。
@@ -387,15 +413,12 @@ class Orchestrator:
             return
         if self._md is None:
             self._md = MarketDataClient()
-        for name, fn in (("deriv", lambda: self._md.aggregate_derivatives(ttl=0)),
-                         ("macro", self._md.global_macro),
+        for name, fn in (("macro", lambda: self._md.global_macro(
+                             ttl=0, derivatives=self._cycle_derivatives)),
                          ("caps", self._md.top_markets)):
             try:
                 val = self._timed("market." + name, fn)
-                if name == "deriv" and val:
-                    self.deriv_agg = val
-                    self.valuation_times["aggregate_oi"] = self._md._deriv_ts
-                elif name == "macro" and val:
+                if name == "macro" and val:
                     self.macro = val
                 elif name == "caps" and val:
                     self.market_caps = val

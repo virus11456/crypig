@@ -113,7 +113,7 @@ class MarketDataClient:
     _CG_ID = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana",
               "BNB": "binancecoin", "XRP": "ripple", "DOGE": "dogecoin"}
 
-    def global_macro(self, ttl: float = 120.0) -> dict:
+    def global_macro(self, ttl: float = 120.0, *, derivatives=None) -> dict:
         """全市場宏觀：總市值、24h 量、全市場 OI，及 OI/Cap、Vol/Cap。
 
         CoinGecko 對雲端 IP 可能限流→回非預期格式，故全程防護；OI 取不到時
@@ -129,7 +129,7 @@ class MarketDataClient:
         vol = float(g["total_volume"]["usd"])
         oi = None
         try:                                 # 用聚合衍生品(共用快取)算總 OI，省一次重複呼叫
-            deriv = self.aggregate_derivatives()
+            deriv = self.aggregate_derivatives() if derivatives is None else derivatives
             tot = sum(float(v.get("open_interest_usd") or 0.0) for v in deriv.values())
             oi = tot or None
         except Exception:
