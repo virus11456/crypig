@@ -900,18 +900,22 @@ async function loadLTH(){
   catch(e){LTH_ERR='日資料暫時無法更新';renderLTH();}
   renderBigMoney();
 }
+let LTH_RANGE='30d';
+function setLTHRange(range){if(!['7d','30d'].includes(range))return;LTH_RANGE=range;renderLTH();}
 function renderLTH(){
   const r=LTH_INFO, el=document.getElementById('lth');
+  const days=LTH_RANGE==='7d'?7:30;
+  const toggle=`<div class="row" style="justify-content:flex-end"><span class="rtoggle"><button class="${LTH_RANGE==='7d'?'on':''}" aria-pressed="${LTH_RANGE==='7d'}" onclick="setLTHRange('7d')">近7天</button><button class="${LTH_RANGE==='30d'?'on':''}" aria-pressed="${LTH_RANGE==='30d'}" onclick="setLTHRange('30d')">近30天</button></span></div>`;
   if(!r){el.innerHTML='<div class="box empty">'+(LTH_ERR||'資料載入中…')+'</div>';return;}
   const all=orderedPoints((r.history||[]).map(x=>({t:Date.parse(x.date)/1000,v:x.btc})),'v');
   const bars=[];
-  for(let i=1;i<all.length;i++)if(all[i].t>all.at(-1).t-30*86400&&all[i].t-all[i-1].t===86400)bars.push({t:all[i].t,v:all[i].v-all[i-1].v});
-  el.innerHTML=`<div class="box"><p><b>${supplyBehavior(r,'LTH 供給')}</b></p>
+  for(let i=1;i<all.length;i++)if(all[i].t>all.at(-1).t-days*86400&&all[i].t-all[i-1].t===86400)bars.push({t:all[i].t,v:all[i].v-all[i-1].v});
+  el.innerHTML=`<div class="box">${toggle}<p><b>${supplyBehavior(r,'LTH 供給')}</b></p>
     <p>目前 ${signedBTC(r.balance_btc).replace(/^\+/,'')}｜近 1 天 ${signedBTC(r.changes_btc?.['1'])}｜近 7 天 ${signedBTC(r.changes_btc?.['7'])}｜近 30 天 ${signedBTC(r.changes_btc?.['30'])}</p>
     <p class="meta">截至 ${r.as_of}。${LTH_ERR||((r.meta?.stale||Date.now()-Date.parse(r.as_of)>3*86400000)?'資料延遲，保留上次資料。':'')} ${r.note}</p>
-    <p class="meta">近 30 天每日供給差額；缺日不畫成單日變化。下降只能說明 LTH 分類供給減少，要判斷賣出仍需舊幣支出與流向證據。</p>
+    <p class="meta">近 ${days} 天每日供給差額；缺日不畫成單日變化。下降只能說明 LTH 分類供給減少，要判斷賣出仍需舊幣支出與流向證據。</p>
     ${barChart(bars,{tip:p=>'供給差額 '+signedBTC(p.v)})}<p class="meta">來源：<a href="https://bitcoin-data.com/v1/long-term-hodler-supply-btc" target="_blank" rel="noopener">bitcoin-data LTH 日供給</a></p></div>`;
-  setSum('sum-lth','近7天 '+signedBTC(r.changes_btc?.['7']));
+  setSum('sum-lth','近'+days+'天 '+signedBTC(r.changes_btc?.[String(days)]));
 }
 // 🪙 鏈上巨鯨 BTC 現貨持倉量：每日買/賣量柱狀（綠囤幣/紅出貨）＋近30天/近7天切換
 let OC_ALL=[], OC_RANGE='30d', OC_BANDS='大型持有者', OC_ERR=null, OC_INFO=null;

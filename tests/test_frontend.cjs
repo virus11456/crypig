@@ -277,3 +277,14 @@ test('unchanged account polling preserves opened details',async()=>{
  h.elements.get('account-activity').innerHTML='open account detail';await h.run('loadAccountActivity()');
  assert.equal(h.elements.get('account-activity').innerHTML,'open account detail');
 });
+
+test('LTH 7/30 day controls change bars and summary, preserve selection and skip gaps',()=>{
+ const h=setup(()=>{throw Error('range change must not fetch')});
+ h.run(`LTH_INFO={as_of:'2026-09-11',balance_btc:1000,changes_btc:{7:7,30:30},note:'',history:Array.from({length:31},(_,i)=>({date:new Date(Date.UTC(2026,7,12+i)).toISOString().slice(0,10),btc:100+i}))};
+ barChart=(bars)=>'bar-count:'+bars.length;renderLTH()`);
+ assert.match(h.elements.get('lth').innerHTML,/bar-count:30/);assert.match(h.elements.get('sum-lth').innerHTML,/近30天/);
+ h.run("setLTHRange('7d')");assert.match(h.elements.get('lth').innerHTML,/bar-count:7/);assert.match(h.elements.get('lth').innerHTML,/近 7 天每日供給差額/);assert.match(h.elements.get('sum-lth').innerHTML,/近7天/);
+ h.run('renderLTH()');assert.equal(h.run('LTH_RANGE'),'7d');
+ h.run('LTH_INFO.history.splice(28,1);renderLTH()');assert.match(h.elements.get('lth').innerHTML,/bar-count:5/);
+ h.run("setLTHRange('30d')");assert.match(h.elements.get('lth').innerHTML,/bar-count:28/);
+});
