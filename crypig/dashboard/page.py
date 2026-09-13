@@ -238,13 +238,14 @@ INDEX_HTML = r"""<!doctype html>
     details.ccard .box{padding:12px 14px 14px}
     .opps{grid-template-columns:1fr 1fr;gap:8px}
   }
+.behavior-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.behavior-card{padding:16px;background:#101820;border:1px solid #303943;border-radius:10px;line-height:1.8}.behavior-card strong{font-size:23px}.activity-controls{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.activity-controls select{background:#161f28;color:#e6edf3;border:1px solid #465363;padding:8px;border-radius:6px}.activity-table{overflow:auto}.activity-table table{width:100%;white-space:nowrap}.activity-table button{color:#79b8ff;background:none;border:0;cursor:pointer}.activity-kpis{display:flex;gap:24px;flex-wrap:wrap;margin:16px 0}.activity-kpis strong{font-size:22px;display:block}@media(max-width:800px){.behavior-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <header>
-  <h1>🐷 Crypig 中台</h1>
+  <h1>🐷 大戶行為觀察台</h1>
   <span class="nav">
-    <button id="nav-market" class="on" onclick="showPage('market')">📊 市場看板</button>
+    <button id="nav-market" class="on" onclick="showPage('market')">📊 行為觀察</button>
     <button id="nav-strategy" onclick="showPage('strategy')">🧠 策略 / Obsidian</button>
   </span>
   <span style="flex:1"></span>
@@ -254,27 +255,11 @@ INDEX_HTML = r"""<!doctype html>
 <div id="page-strategy" style="display:none"></div>
 <div id="page-market"><div class="wrap">
   <div id="bigmoney"></div>
+  <section id="account-activity" class="box"><h2>同帳號 BTC 合約異動</h2><p class="meta">載入中…</p></section>
   <details class="ccard" open>
     <summary><span class="ctitle">⏳ 長期持有者 BTC 供給變化</span><span class="csum" id="sum-lth">載入中…</span><span class="chev">▾</span></summary>
     <div id="lth"><div class="box empty">長期持有者日資料載入中…</div></div>
   </details>
-  <section id="opp" class="hero"><h2>🎯 情緒與合約部位分歧</h2><div class="meta">載入中…</div></section>
-
-  <details class="ccard" open>
-    <summary><span class="ctitle">🎯 分歧雷達</span><span class="csum" id="sum-radar">載入中…</span><span class="chev">▾</span></summary>
-    <div id="radar"><div class="box empty">分歧雷達載入中…</div></div>
-  </details>
-
-  <details class="ccard">
-    <summary><span class="ctitle">🧭 合約帳號部位比較</span><span class="csum" id="sum-pos">載入中…</span><span class="chev">▾</span></summary>
-    <div id="pos"><div class="box empty">大玩家決心載入中…</div></div>
-  </details>
-
-  <details class="ccard" open>
-    <summary><span class="ctitle">📋 幣別總表</span><span class="csum" id="sum-table">載入中…</span><span class="chev">▾</span></summary>
-    <div id="table"><div class="box empty">幣別總表載入中…</div></div>
-  </details>
-
   <details class="ccard" open>
     <summary><span class="ctitle">🧠 聰明錢 BTC 淨持倉變化 <small style="opacity:.7">合約</small></span><span class="csum" id="sum-smartbtc">載入中…</span><span class="chev">▾</span></summary>
     <div id="smartbtc"><div class="box empty">聰明錢 BTC 合約分析載入中…</div></div>
@@ -304,11 +289,28 @@ INDEX_HTML = r"""<!doctype html>
     <summary><span class="ctitle">💵 穩定幣總供應</span><span class="csum" id="sum-stable">載入中…</span><span class="chev">▾</span></summary>
     <div id="stablecoins"><div class="box empty">穩定幣總供應載入中…</div></div>
   </details>
+  <section id="opp" class="hero"><h2>🎯 情緒與合約部位分歧</h2><div class="meta">載入中…</div></section>
+
+  <details class="ccard">
+    <summary><span class="ctitle">🎯 分歧雷達</span><span class="csum" id="sum-radar">載入中…</span><span class="chev">▾</span></summary>
+    <div id="radar"><div class="box empty">分歧雷達載入中…</div></div>
+  </details>
+
+  <details class="ccard">
+    <summary><span class="ctitle">🧭 合約帳號部位比較</span><span class="csum" id="sum-pos">載入中…</span><span class="chev">▾</span></summary>
+    <div id="pos"><div class="box empty">大玩家決心載入中…</div></div>
+  </details>
+
+  <details class="ccard">
+    <summary><span class="ctitle">📋 幣別總表</span><span class="csum" id="sum-table">載入中…</span><span class="chev">▾</span></summary>
+    <div id="table"><div class="box empty">幣別總表載入中…</div></div>
+  </details>
+
 </div></div>
 <script>
 
 const API_INFLIGHT = new Map(), API_CACHE = new Map();
-const API_TTLS = {'/stablecoins':300000, '/onchain_whale':300000, '/lth_history':300000,
+const API_TTLS = {'/account_activity':60000,'/stablecoins':300000, '/onchain_whale':300000, '/lth_history':300000,
   '/defi':300000, '/macro':60000, '/radar_history':60000,
   '/whale_history?symbol=BTC&cohort=smart&limit=2500':1200000,
   '/whale_history?symbol=BTC&cohort=whale&limit=2500':1200000};
@@ -846,11 +848,52 @@ function renderBigMoney(){
   const freshness=r=>r?.as_of?'截至 '+r.as_of+((r.meta?.stale||Date.now()-Date.parse(r.as_of)>3*86400000)?'｜資料延遲':''):'';
   const whale=OC_INFO?supplyBehavior(OC_INFO,'大額地址合計餘額'):'資料載入中…';
   const bands=(OC_INFO?.cohorts||[]).map(c=>supplyBehavior(c,c.label)).join(' ');
-  el.innerHTML=`<section class="box"><h2>三類行為分別分析</h2>
-    <p><b>⏳ 長期持有者</b>｜${LTH_INFO?supplyBehavior(LTH_INFO,'LTH 供給'):(LTH_ERR||'資料載入中…')}<br><span class="meta">${freshness(LTH_INFO)}${LTH_ERR?'｜'+LTH_ERR:''}｜觀察舊幣供給變化；增加不等於新買入。</span></p>
-    <p><b>🐋 現貨巨鯨</b>｜${whale}<br>${bands}<br><span class="meta">${freshness(OC_INFO)}${OC_ERR?'｜'+OC_ERR:''}｜地址分組可能含交易所與託管；不能由餘額確認抄底或拋售。</span></p>
-    <p><b>🧠 聰明錢</b>｜${smartBehavior()}<br><span class="meta">${SB_ALL.length?'截至 '+new Date(SB_ALL.at(-1).t*1000).toISOString():''}｜Hyperliquid 合約追蹤樣本；名單可能包含僅依歷史獲利補入的帳號。名目差額包含價格與樣本更換，不等於成交或 BTC 現貨買賣。</span></p>
-    </section>`;
+  el.innerHTML=`<section class="box"><h2>三類行為分別分析</h2><p class="meta">先看持有與部位，再看變化。鏈上日資料與合約快照更新頻率不同，各自顯示時間。</p><div class="behavior-grid">
+    <p class="behavior-card"><b>⏳ 長期持有者</b><br><strong>${LTH_INFO?htmlText(signedBTC(LTH_INFO.balance_btc)):"—"}</strong><br>｜${LTH_INFO?supplyBehavior(LTH_INFO,'LTH 供給'):(LTH_ERR||'資料載入中…')}<br><span class="meta">${freshness(LTH_INFO)}${LTH_ERR?'｜'+LTH_ERR:''}｜觀察舊幣供給變化；增加不等於新買入。</span></p>
+    <p class="behavior-card"><b>🐋 現貨巨鯨地址</b><br><strong>${OC_INFO?htmlText(signedBTC((OC_INFO.cohorts||[]).reduce((n,c)=>n+c.balance_btc,0))):"—"}</strong><br>｜${whale}<br>${bands}<br><span class="meta">${freshness(OC_INFO)}${OC_ERR?'｜'+OC_ERR:''}｜地址分組可能含交易所與託管；不能由餘額確認抄底或拋售。</span></p>
+    <p class="behavior-card"><b>🧠 聰明錢合約</b><br>｜${smartBehavior()}<br><span class="meta">${SB_ALL.length?'截至 '+new Date(SB_ALL.at(-1).t*1000).toISOString():''}｜Hyperliquid 合約追蹤樣本；名單可能包含僅依歷史獲利補入的帳號。名目差額包含價格與樣本更換，不等於成交或 BTC 現貨買賣。</span></p>
+    </div></section>`;
+}
+let ACCOUNT_DATA=null, ACCOUNT_GROUP='smart_verified', ACCOUNT_WINDOW='previous', ACCOUNT_ROWS=[], ACCOUNT_HISTORY_TOKEN=0;
+const ACTION_NAMES={unchanged:'持平',open_long:'新開多倉',open_short:'新開空倉',close_long:'多倉歸零',close_short:'空倉歸零',flip_long:'空轉多',flip_short:'多轉空',add_long:'增加多倉',add_short:'增加空倉',reduce_long:'減少多倉',reduce_short:'減少空倉'};
+function btcQuantity(v){return Number.isFinite(v)?v.toLocaleString(undefined,{maximumFractionDigits:5}):'—';}
+async function loadAccountActivity(){
+  try{ACCOUNT_DATA=await apiJSON('/account_activity');renderAccountActivity();}
+  catch(e){document.getElementById('account-activity').innerHTML='<h2>同帳號 BTC 合約異動</h2><p>暫時無法取得，請稍後重新整理。</p>';}
+}
+function renderAccountActivity(){
+  const r=ACCOUNT_DATA?.groups?.[ACCOUNT_GROUP]?.[ACCOUNT_WINDOW];
+  ACCOUNT_HISTORY_TOKEN++;
+  const changedRows=r?.rows||[], currentRows=r?.current_rows||[];
+  ACCOUNT_ROWS=[...changedRows,...currentRows];
+  const groups={smart_verified:'聰明錢：已驗證組',smart_pnl_only:'歷史獲利補入組',whale:'合約大額帳號'};
+  const windows={previous:'上一筆快照', '24h':'約 24 小時','7d':'約 7 天'};
+  const controls=`<div class="activity-controls"><label>觀察群體 <select aria-label="觀察群體" onchange="ACCOUNT_GROUP=this.value;renderAccountActivity()">${Object.entries(groups).map(([k,v])=>`<option value="${k}" ${k===ACCOUNT_GROUP?'selected':''}>${v}</option>`).join('')}</select></label><label>比較期間 <select aria-label="比較期間" onchange="ACCOUNT_WINDOW=this.value;renderAccountActivity()">${Object.entries(windows).map(([k,v])=>`<option value="${k}" ${k===ACCOUNT_WINDOW?'selected':''}>${v}</option>`).join('')}</select></label></div>`;
+  const time=t=>t?new Date(t*1000).toLocaleString():'—';
+  const meta=r?`<p class="meta">資料截至 ${time(r.as_of)}${Date.now()/1000-r.as_of>3600?'｜資料延遲':''}；本次取得 ${r.received}/${r.selected} 個帳號，${r.failed} 個未取得。<br>目前取得樣本：多倉 ${btcQuantity(r.current_long_btc)} BTC／空倉 ${btcQuantity(r.current_short_btc)} BTC。</p>`:'';
+  let body='<p>開始累積逐帳號持倉。此期間尚無可比較快照；舊群體合計不能回推個別帳號動作。</p>';
+  if(ACCOUNT_DATA?.persist_failed)body='<p>本輪逐帳號資料保存失敗，暫不提供異動排行。</p>';
+  else if(r?.baseline_at && !r.matched)body='<p>兩個時間點沒有同組且成功取得的共同帳號，無法判定持倉變化。</p>';
+  else if(r?.baseline_at){
+    const counts=r.counts||{};
+    body=`<p class="meta">對照 ${time(r.baseline_at)} → ${time(r.as_of)}（實際相隔 ${((r.as_of-r.baseline_at)/3600).toFixed(2)} 小時）。<br>同組且兩次成功取得 ${r.matched} 個；新納入 ${r.entered} 個、移出分類 ${r.exited} 個、任一端未取得 ${r.unobserved} 個。移出不代表平倉；不同期間的可比帳號集合可能不同。</p>
+      <div class="activity-kpis"><div><strong>${btcQuantity(r.long_change_btc)} BTC</strong>可比帳號多倉變化</div><div><strong>${btcQuantity(r.short_change_btc)} BTC</strong>可比帳號空倉變化</div><div><strong>${r.changed}／${r.matched}</strong>持倉數量改變的帳號</div></div>
+      <p class="meta">${Object.entries(counts).filter(([k,v])=>v).map(([k,v])=>ACTION_NAMES[k]+' '+v+' 人').join(' · ')||'無共同可比帳號'}</p>
+      <div class="activity-table"><table><thead><tr><th>帳號（展開紀錄）</th><th>動作</th><th>原部位 BTC</th><th>目前 BTC</th><th>淨部位差 BTC</th></tr></thead><tbody>${changedRows.map((x,i)=>`<tr><td><button onclick="showAccountHistory(${i})">${htmlText(x.address.slice(0,8)+'…'+x.address.slice(-6))}</button></td><td>${ACTION_NAMES[x.action]||'未知'}</td><td>${btcQuantity(x.before_btc)}</td><td>${btcQuantity(x.after_btc)}</td><td>${btcQuantity(x.delta_btc)}</td></tr>`).join('')}</tbody></table></div>
+      ${!changedRows.length?'<p>目前沒有可列出的持倉異動。</p>':''}`;
+  }
+  const current=`<details><summary>目前 BTC 持倉排行（最多 20 個）</summary><div class="activity-table"><table><thead><tr><th>帳號</th><th>BTC 部位</th><th>取得時間</th></tr></thead><tbody>${currentRows.map((x,i)=>`<tr><td><button onclick="showAccountHistory(${changedRows.length+i})">${htmlText(x.address.slice(0,8)+'…'+x.address.slice(-6))}</button></td><td>${btcQuantity(x.after_btc)}</td><td>${time(x.observed_at)}</td></tr>`).join('')}</tbody></table></div>${!currentRows.length?'<p>目前取得的帳號沒有可列出的 BTC 部位。</p>':''}</details>`;
+  document.getElementById('account-activity').innerHTML=`<h2>同帳號 BTC 合約異動</h2>${controls}${meta}${body}${current}<p class="meta">按 BTC 數量差的絕對值排序，最多 20 筆；正部位為多倉、負部位為空倉。比較兩端快照，無法還原期間每筆交易，也不代表存提款或現貨金流。群體可能重疊，不能直接加總。</p><div id="account-detail"></div>`;
+}
+async function showAccountHistory(index){
+  const row=ACCOUNT_ROWS[index], group=ACCOUNT_GROUP;if(!row)return;
+  const token=++ACCOUNT_HISTORY_TOKEN;
+  const el=document.getElementById('account-detail');el.textContent='帳號紀錄載入中…';
+  try{
+    const r=await apiJSON('/account_history?address='+encodeURIComponent(row.address)+'&cohort='+group);
+    if(token!==ACCOUNT_HISTORY_TOKEN||group!==ACCOUNT_GROUP||document.getElementById('account-detail')!==el)return;
+    el.innerHTML=`<h3>${htmlText(row.address)}</h3><p class="meta">最近最多 120 次採集；未納入名單或取得失敗保留缺值。正值為多倉，負值為空倉。</p><div class="activity-table"><table><thead><tr><th>採集時間</th><th>BTC 部位</th><th>狀態</th></tr></thead><tbody>${(r.history||[]).slice().reverse().map(x=>`<tr><td>${new Date(x.ts*1000).toLocaleString()}</td><td>${btcQuantity(x.btc)}</td><td>${x.status==='observed'?'已取得':x.status==='failed'?'取得失敗':'當時未納入此組'}</td></tr>`).join('')}</tbody></table></div>`;
+  }catch(e){el.textContent='帳號紀錄暫時無法取得。';}
 }
 async function loadLTH(){
   try{LTH_INFO=await apiJSON('/lth_history');LTH_ERR=null;renderLTH();}
@@ -1082,7 +1125,7 @@ function refresh(){
       renderMarketState();
     });
     await Promise.allSettled([...market,loadRadar(),loadDefi(),loadPositioning(),
-      loadSmartBTC(),loadWhaleChart(),loadOnchainWhale(),loadLTH(),loadStablecoins(),loadMacro()]);
+      loadAccountActivity(),loadSmartBTC(),loadWhaleChart(),loadOnchainWhale(),loadLTH(),loadStablecoins(),loadMacro()]);
   })().finally(()=>{REFRESH_TASK=null;});
   return REFRESH_TASK;
 }

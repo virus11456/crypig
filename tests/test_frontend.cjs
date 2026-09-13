@@ -260,3 +260,14 @@ test('news and reddit freshness and symbols cannot inject markup',async()=>{
  await h.run('loadNews()');await h.run('loadReddit()');
  for(const id of ['news','reddit']){assert.doesNotMatch(h.elements.get(id).innerHTML,/<svg/);assert.match(h.elements.get(id).innerHTML,/&lt;svg/);}
 });
+test('account activity clearly waits for real quantity history',async()=>{
+ const h=setup(async()=>response({groups:{smart_verified:{previous:{status:'waiting',as_of:Date.now()/1000,selected:30,received:29,failed:1,current_long_btc:2,current_short_btc:3}}}}));
+ await h.run('loadAccountActivity()');const html=h.elements.get('account-activity').innerHTML;
+ assert.match(html,/尚無可比較快照/);assert.match(html,/29\/30/);assert.doesNotMatch(html,/同組且兩次成功取得/);
+});
+test('activity separates matched sample changes from roster churn and failures',async()=>{
+ const data={groups:{smart_verified:{previous:{as_of:2000,baseline_at:1000,selected:4,received:3,failed:1,matched:2,entered:1,exited:1,unobserved:1,changed:1,long_change_btc:1,short_change_btc:0,counts:{add_long:1,unchanged:1},rows:[{address:'0x'+'a'.repeat(40),action:'add_long',before_btc:1,after_btc:2,delta_btc:1}]}}}};
+ const h=setup(async()=>response(data));await h.run('loadAccountActivity()');const html=h.elements.get('account-activity').innerHTML;
+ assert.match(html,/移出不代表平倉/);assert.match(html,/增加多倉/);assert.match(html,/任一端未取得 1/);assert.match(html,/showAccountHistory\(0\)/);
+ h.run("ACCOUNT_WINDOW='24h';renderAccountActivity()");assert.match(h.elements.get('account-activity').innerHTML,/尚無可比較快照/);
+});

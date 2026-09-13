@@ -175,6 +175,7 @@ class HyperliquidClient:
             raise ValueError("Negative gross position value")
         net = 0.0
         pos: list[tuple] = []
+        sizes = {}
         for ap in state["assetPositions"]:
             if not isinstance(ap, dict) or not isinstance(ap.get("position"), dict):
                 raise ValueError("Invalid position")
@@ -182,7 +183,9 @@ class HyperliquidClient:
             coin = p.get("coin")
             if not isinstance(coin, str) or not coin.strip():
                 raise ValueError("Missing position coin")
+            if coin in sizes: raise ValueError("Duplicate position coin")
             szi = number(p["szi"])
+            sizes[coin] = szi
             nv = abs(number(p["positionValue"]))
             if (szi == 0) != (nv == 0):
                 raise ValueError("Inconsistent position size and value")
@@ -192,7 +195,7 @@ class HyperliquidClient:
                 pos.append((coin, side, nv))
         if not math.isfinite(net):
             raise ValueError("Invalid net position")
-        return {"av": av, "lev": ntl / av if av > 0 else 0.0, "net": net, "pos": pos}
+        return {"av": av, "lev": ntl / av if av > 0 else 0.0, "net": net, "pos": pos, "sizes": sizes, "observed_at": time.time()}
 
     def slim_accounts_bulk(self, addresses: list[str], workers: int = 6) -> dict[str, dict]:
         """並發取精簡帳號（不保留原始 state；同時最多 workers 份原始 JSON 在記憶體）。"""

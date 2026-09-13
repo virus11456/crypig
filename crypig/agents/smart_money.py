@@ -289,6 +289,24 @@ class SmartMoneyAgent(Agent):
             "positions_received":len(smart_accounts),
             "positions_qualified":sum(a.get("win_rate") is not None for a in smart_accounts),
             "positions_pnl_only":sum(a.get("win_rate") is None for a in smart_accounts)}
+        # Reuse already fetched states: no extra upstream requests for account tracking.
+        try:
+            from pathlib import Path
+            from ..storage.account_positions import AccountPositions
+            def point(addr):
+                a = slim.get(addr)
+                if a is None or "sizes" not in a or "observed_at" not in a: return None
+                return {"btc":a["sizes"].get("BTC",0.0), "observed_at":a["observed_at"]}
+            selected_whales = whale_addrs_mkt or [a["addr"] for a in whale_accounts]
+            groups = {
+                "smart_verified":{a:point(a) for a in smart_addrs if (wr_map.get(a) or {}).get("win_rate") is not None},
+                "smart_pnl_only":{a:point(a) for a in smart_addrs if (wr_map.get(a) or {}).get("win_rate") is None},
+                "whale":{a:point(a) for a in selected_whales}}
+            store = AccountPositions(Path(self.config.posseries_db).parent / "account_positions.db")
+            self._trader_summary["account_activity"] = {"persist_failed":False, "groups":store.record(time.time(),groups)}
+        except Exception:
+            logger.exception("Account quantity history failed")
+            self._trader_summary["account_activity"] = {"persist_failed":True, "groups":{}}
         self._trader_summary["overlap"] = len(set(smart_addrs) & whale_set)  # 兩群重疊人數
         self._agg = agg
         self._agg_ts = time.time()
