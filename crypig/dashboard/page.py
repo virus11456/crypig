@@ -1193,7 +1193,7 @@ function loadStrategy(){
     <div id="news"><div class="box empty">新聞分析載入中…</div></div>
   </details>
   <details class="ccard">
-    <summary><span class="ctitle">👽 Reddit 散戶情緒</span><span class="csum">各幣討論熱度＋情緒（公開 RSS·不限流）</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle">👽 Reddit 散戶情緒</span><span class="csum">各幣討論熱度＋詞庫情緒（各版輪流更新）</span><span class="chev">▾</span></summary>
     <div id="reddit"><div class="box empty">Reddit 討論熱度載入中…</div></div>
   </details>
   <details class="ccard">
@@ -1407,6 +1407,18 @@ async function loadNews(){
     </div>`;
   }catch(e){document.getElementById('news').innerHTML='<div class="box empty">新聞載入失敗：'+e+'</div>';}
 }
+function redditFreshness(r){
+  const f=r.freshness;
+  if(!f) return '各版取得時間未知；舊快照尚未記錄來源狀態';
+  if(f.restored_aggregate) return '本次更新未取得可用貼文，顯示上次彙總；各版取得時間未能核對，不代表目前熱度。';
+  const now=Date.now()/1000, limit=f.max_age_seconds||10800;
+  const rows=Object.entries(f.sources||{}).map(([name,v])=>{
+    const old=v.fetched_at && now-v.fetched_at>limit;
+    const state=v.status==='stale'?'過舊，未納入':old?'已過舊，等待下一輪排除':v.status==='not_collected'?'尚無可用資料':v.status==='failed_retained'?'更新失敗，沿用舊資料':'已有資料';
+    return `${name}：${state}${v.fetched_at?'（取得 '+ago(v.fetched_at)+'）':''}`;
+  });
+  return `每輪更新一版；本輪 ${f.attempted_sub||'—'} ${f.refresh_failed?'未取得可用貼文':'已取得'}｜本次彙總 ${f.included_subs}/${f.configured_subs} 版。超過 3 小時的版快照於彙總時排除。${rows.join('；')}。未取得可能是連線失敗、限流、格式不符或空 RSS。`;
+}
 async function loadReddit(){
   try{
     const r=await apiJSON('/reddit');
@@ -1414,7 +1426,7 @@ async function loadReddit(){
     if(!Object.keys(coins).length){
       document.getElementById('reddit').innerHTML=`<div class="box">
         <h2>👽 Reddit 散戶討論熱度</h2>
-        <div class="meta">暫無資料（Reddit RSS 抓取中或暫時被擋，下一輪自動重試）。</div></div>`;
+        <div class="meta">${redditFreshness(r)}</div><div class="meta">目前沒有可用的幣種提及統計。</div></div>`;
       return;
     }
     const maxM=Math.max(...Object.values(coins).map(v=>v.mentions||0),1);
@@ -1425,15 +1437,16 @@ async function loadReddit(){
           <span class="meta">提及 <b>${v.mentions}</b> ｜ 情緒 <b style="color:${col}">${sen==null?'—':sen+'%'}</b></span></div>
           <div class="bar"><i style="width:${w}%;background:#5a3"></i></div></div>`;}).join('');
     const hot=Object.entries(coins).sort((a,b)=>b[1].mentions-a[1].mentions)[0];
-    const rc=hot?{t:`散戶討論最熱：<b>${hot[0]}</b>（${hot[1].mentions} 提及${hot[1].sentiment!=null?'，情緒 '+hot[1].sentiment+'%':''}）→ 散戶熱炒常是局部頂部，<b>去幣別總表/雷達看 ${hot[0]} 的聰明錢方向：若聰明錢在做空＝反指標 alpha</b>`,c:'#d29922'}:null;
+    const rc=hot?{t:`本次樣本提及最多：<b>${hot[0]}</b>（${hot[1].mentions} 次提及）。這是熱門貼文樣本，不能據此確認討論暴增、價格頂底或現貨買賣。`,c:'#d29922'}:null;
     const aMin=r.newest_ts?Math.max(0,Math.round((Date.now()/1000-r.newest_ts)/60)):null;
     const aTxt=aMin==null?'':(aMin<60?aMin+' 分前':Math.floor(aMin/60)+' 小時前');
     const rangeTxt=r.span_hours!=null?`📅 資料範圍：近 <b>${r.span_hours} 小時</b>的熱門貼文${aTxt?`（最新 ${aTxt}）`:''}——抓的是 Reddit「目前熱門(hot)」，非固定一週`:'';
     document.getElementById('reddit').innerHTML=`<div class="box">
-      <h2>👽 Reddit 散戶討論熱度 <small>RSS 公開源·免憑證·不限流｜${r.subs||1}/${r.subs_total||6} 版輪轉·熱門 ${r.total_posts} 篇｜散戶熱炒=反指標線索</small></h2>
+      <h2>👽 Reddit 散戶討論熱度 <small>RSS 公開來源｜${r.subs||1}/${r.subs_total||6} 版輪轉·熱門 ${r.total_posts} 篇</small></h2>
+      <div class="meta">${redditFreshness(r)}</div>
       ${rangeTxt?`<div class="meta" style="margin:-2px 0 8px">${rangeTxt}</div>`:''}
       ${rc?`<div class="vline" style="border-left-color:${rc.c}">📍 現在：${rc.t}</div>`:''}
-      <div class="meta" style="margin-bottom:8px">提及數＝討論熱度；情緒＝標題利多比例。用法：某幣 Reddit 討論暴增＋聰明錢在做空 → 散戶 FOMO 反指標 alpha</div>
+      <div class="meta" style="margin-bottom:8px">提及數＝樣本標題提及次數；情緒＝利多詞命中數佔利多與利空詞總命中數的比例，不是看多用戶比例；沒有情緒詞時保留未知。跨版同標題去重，並非全部 Reddit 討論。</div>
       ${rows}</div>`;
   }catch(e){document.getElementById('reddit').innerHTML='<div class="box empty">Reddit 載入失敗：'+e+'</div>';}
 }

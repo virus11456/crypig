@@ -668,3 +668,26 @@ def test_radar_describes_observations_and_relabels_restored_snapshot():
     assert '資料不足' in describe_radar({})['market']['verdict']
     assert convergence_note([{'gap': 1}, {'gap': 1}, {'gap': None}, {'gap': .1}, {'gap': .1}]) is None
     assert '縮小' in convergence_note([{'gap': v} for v in [1,1,.1,.1]])
+
+
+def test_reddit_rotation_failure_keeps_original_time_and_expires_old_boards(monkeypatch):
+    from crypig.clients.reddit import RedditClient, _SUBS
+    now=[100000.]
+    monkeypatch.setattr('crypig.clients.reddit.time.time',lambda:now[0])
+    c=RedditClient()
+    try:
+        monkeypatch.setattr(c,'_fetch_sub',lambda s:[('bitcoin surge',99990.)])
+        first=c.crypto_buzz();stamp=first['freshness']['sources'][_SUBS[0]]['fetched_at']
+        monkeypatch.setattr(c,'_fetch_sub',lambda s:[])
+        now[0]+=400;c._idx=0
+        failed=c.crypto_buzz()
+        assert failed['total_posts']==1
+        assert failed['freshness']['sources'][_SUBS[0]]['status']=='failed_retained'
+        assert failed['freshness']['sources'][_SUBS[0]]['fetched_at']==stamp
+        assert c.crypto_buzz() is failed
+        now[0]+=10801
+        expired=c.crypto_buzz()
+        assert expired['total_posts']==0 and expired['coins']=={}
+        assert expired['freshness']['included_subs']==0
+        assert expired['freshness']['sources'][_SUBS[0]]['status']=='stale'
+    finally:c.close()

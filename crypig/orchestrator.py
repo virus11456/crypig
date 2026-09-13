@@ -421,7 +421,11 @@ class Orchestrator:
                 self._rd = RedditClient()
             buzz = self._timed("reddit", self._rd.crypto_buzz)
             if buzz:
-                self.reddit = buzz
+                meta = buzz.get("freshness", {})
+                if meta.get("refresh_failed") and not meta.get("has_collected") and self.reddit:
+                    self.reddit = {**self.reddit, "freshness": {**meta, "restored_aggregate": True}}
+                else:
+                    self.reddit = buzz
         except Exception:
             logger.warning("Reddit 討論熱度抓取失敗")
         # 加密新聞分析（免費 RSS，利多/利空＋影響幣）

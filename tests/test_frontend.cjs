@@ -228,3 +228,9 @@ test('news freshness distinguishes failed, partial, and legacy snapshots',()=>{
  h.ctx.f={partial:true,received_sources:5,configured_sources:6,sources:{}};
  assert.match(h.run('newsFreshness({freshness:f})'),/部分來源/);
 });
+test('reddit discloses legacy, restored and per-board failure states',()=>{
+ const h=setup();assert.match(h.run('redditFreshness({})'),/時間未知/);
+ assert.match(h.run('redditFreshness({freshness:{restored_aggregate:true}})'),/不代表目前熱度/);
+ h.ctx.f={attempted_sub:'Bitcoin',refresh_failed:true,included_subs:1,configured_subs:6,sources:{Bitcoin:{status:'failed_retained',fetched_at:Date.now()/1000},CryptoMarkets:{status:'stale',fetched_at:1}}};
+ const t=h.run('redditFreshness({freshness:f})');assert.match(t,/沿用舊資料/);assert.match(t,/過舊，未納入/);
+});

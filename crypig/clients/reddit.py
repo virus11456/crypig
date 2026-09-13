@@ -64,6 +64,7 @@ class RedditClient:
         self._cache_ts = 0.0
         self._idx = 0                              # 輪轉指標：每輪抓 _SUBS[_idx]
         self._sub_titles: dict[str, list[str]] = {}  # 每版最近一次快照(標題清單)
+        self._sub_attempts: dict[str, dict] = {}
         self._sub_ts: dict[str, float] = {}        # 每版最近一次抓取時間
 
     @property
@@ -124,11 +125,29 @@ class RedditClient:
             self._sub_titles[sub] = fresh
             self._sub_ts[sub] = now
 
+        self._sub_attempts[sub] = {"attempted_at": now, "refresh_failed": not bool(fresh)}
+        # A six-board rotation takes about two hours; allow one extra hour for delays.
+        max_age = 3 * 3600
+        active = {name: rows for name, rows in self._sub_titles.items()
+                  if 0 <= now - self._sub_ts.get(name, 0) <= max_age}
+        sources = {name: {**self._sub_attempts.get(name, {}),
+                          "fetched_at": self._sub_ts.get(name),
+                          "included": name in active,
+                          "status": "not_collected" if name not in self._sub_ts else
+                                    "stale" if name not in active else
+                                    "failed_retained" if self._sub_attempts.get(name, {}).get("refresh_failed") else "available"}
+                   for name in _SUBS}
+        freshness = {"attempted_sub": sub, "attempted_at": now,
+                     "refresh_failed": not bool(fresh), "sources": sources,
+                     "max_age_seconds": max_age, "has_collected": bool(self._sub_ts),
+                     "included_subs": len(active), "configured_subs": len(_SUBS),
+                     "oldest_fetched_at": min((self._sub_ts[n] for n in active), default=None)}
+
         # 用所有版的最近快照彙整(跨版去重，避免轉貼重複計數)；同時記下貼文時間範圍
         titles: list[str] = []
         seen: set[str] = set()
         post_ts: list[float] = []
-        for lst in self._sub_titles.values():
+        for lst in active.values():
             for item in lst:
                 title, pts = item if isinstance(item, tuple) else (item, None)
                 k = title.strip().lower()
@@ -137,8 +156,6 @@ class RedditClient:
                     titles.append(title)
                     if pts:
                         post_ts.append(pts)
-        if not titles:
-            return self._cache or {}
 
         coins: dict[str, dict] = {}
         for title in titles:
@@ -157,9 +174,10 @@ class RedditClient:
             # 情緒%＝標題偏多比例(0~100)；標題無情緒詞時為 None（顯示「—」）
             b["sentiment"] = round(b["bull"] / tot * 100, 1) if tot else None
         out = {
+            "freshness": freshness,
             "coins": coins,
             "total_posts": len(titles),
-            "subs": len(self._sub_titles),   # 已收集到資料的版數(輪轉中會慢慢長到 subs_total)
+            "subs": len(active),   # 已收集到資料的版數(輪轉中會慢慢長到 subs_total)
             "subs_total": len(_SUBS),
             "source": "reddit_rss",
             # 貼文時間範圍（hot 熱帖，非固定窗）：最新貼文、最舊貼文、跨度小時
