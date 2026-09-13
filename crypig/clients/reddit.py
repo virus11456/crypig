@@ -85,23 +85,34 @@ class RedditClient:
         """回某子版熱門貼文 (標題, 發布epoch) 清單。429 時退避重試一次。"""
         url = f"https://www.reddit.com/r/{sub}/hot/.rss?limit=50"
         content = None
+        self._fetch_outcome = {"reason": "request_failed", "attempts": 0}
         for attempt in range(2):
+            self._fetch_outcome["attempts"] = attempt + 1
             try:
                 r = self._client.get(url)
+                self._fetch_outcome["http_status"] = r.status_code
                 if r.status_code == 200:
                     content = r.content
                     break
                 if r.status_code == 429 and attempt == 0:
                     time.sleep(5.0)   # Reddit 限流，退避後再試一次
                     continue
+                self._fetch_outcome["reason"] = "rate_limited" if r.status_code == 429 else "access_denied" if r.status_code in (401, 403) else "http_error"
+                return []
+            except httpx.TimeoutException:
+                self._fetch_outcome["reason"] = "timeout"
                 return []
             except Exception:
+                self._fetch_outcome["reason"] = "request_failed"
                 return []
         if content is None:
             return []
         try:
             root = ET.fromstring(content)
+            if _local(root.tag) != "feed":
+                raise ValueError("Expected Atom feed")
         except Exception:
+            self._fetch_outcome["reason"] = "invalid_data"
             return []
         out: list[tuple[str, float | None]] = []
         for e in root.iter():
@@ -116,6 +127,7 @@ class RedditClient:
                     ts = _parse_iso(ch.text)
             if title:
                 out.append((title, ts))
+        self._fetch_outcome["reason"] = "ok" if out else "empty_feed"
         return out
 
     def crypto_buzz(self, ttl: float = 300.0) -> dict:
@@ -130,12 +142,15 @@ class RedditClient:
         # 本輪只抓一個版
         sub = _SUBS[self._idx % len(_SUBS)]
         self._idx += 1
+        self._fetch_outcome = {}
         fresh = self._fetch_sub(sub)
         if fresh:
             self._sub_titles[sub] = fresh
             self._sub_ts[sub] = now
 
-        self._sub_attempts[sub] = {"attempted_at": now, "refresh_failed": not bool(fresh)}
+        self._sub_attempts[sub] = {"attempted_at": now, "refresh_failed": not bool(fresh),
+                                   "reason": "ok" if fresh else self._fetch_outcome.get("reason", "unavailable"),
+                                   **{k: v for k, v in self._fetch_outcome.items() if k in ("attempts", "http_status")}}
         if self._cache_path:
             from ..storage.reddit_cache import save
             try:

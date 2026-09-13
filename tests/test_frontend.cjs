@@ -234,3 +234,7 @@ test('reddit discloses legacy, restored and per-board failure states',()=>{
  h.ctx.f={attempted_sub:'Bitcoin',refresh_failed:true,included_subs:1,configured_subs:6,sources:{Bitcoin:{status:'failed_retained',fetched_at:Date.now()/1000},CryptoMarkets:{status:'stale',fetched_at:1}}};
  const t=h.run('redditFreshness({freshness:f})');assert.match(t,/沿用舊資料/);assert.match(t,/過舊，未納入/);
 });
+test('reddit displays recorded cause without inventing a cause for legacy data',()=>{
+ const h=setup();h.ctx.f={sources:{Bitcoin:{status:'failed_retained',reason:'rate_limited'},altcoin:{status:'not_collected'}}};
+ const html=h.run('redditFreshness({freshness:f})');assert.match(html,/Bitcoin：更新失敗，沿用舊資料／來源限流/);assert.match(html,/altcoin：尚無可用資料/);assert.doesNotMatch(html,/altcoin：尚無可用資料／來源限流/);
+});

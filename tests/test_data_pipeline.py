@@ -716,3 +716,27 @@ def test_reddit_restart_restores_boards_times_and_rotation(tmp_path, monkeypatch
     finally:b.close()
     path.write_text('{broken')
     assert load(path,_SUBS,now[0]) is None
+
+
+def test_reddit_diagnoses_failures_and_retry_recovery(monkeypatch):
+    import httpx
+    from crypig.clients.reddit import RedditClient
+    c=RedditClient();monkeypatch.setattr('crypig.clients.reddit.time.sleep',lambda n:None)
+    try:
+        for status,body,reason in [(403,'','access_denied'),(503,'','http_error'),(200,'bad','invalid_data'),(200,'<html/>','invalid_data'),(200,'<feed/>','empty_feed'),(429,'','rate_limited')]:
+            monkeypatch.setattr(c._client,'get',lambda *a, status=status,body=body:httpx.Response(status,text=body))
+            result=c.crypto_buzz(ttl=0)
+            detail=result['freshness']['sources'][result['freshness']['attempted_sub']]
+            assert detail['reason']==reason
+            assert detail['http_status']==status
+            assert detail['attempts']==(2 if status==429 else 1)
+        for exc,reason in [(httpx.ReadTimeout('timeout'),'timeout'),(httpx.ConnectError('failed'),'request_failed')]:
+            def fail(*a):raise exc
+            monkeypatch.setattr(c._client,'get',fail)
+            result=c.crypto_buzz(ttl=0);detail=result['freshness']['sources'][result['freshness']['attempted_sub']]
+            assert detail['reason']==reason and 'http_status' not in detail
+        responses=iter([httpx.Response(429),httpx.Response(200,text='<feed><entry><title>bitcoin surge</title></entry></feed>')])
+        monkeypatch.setattr(c._client,'get',lambda *a:next(responses))
+        result=c.crypto_buzz(ttl=0);detail=result['freshness']['sources'][result['freshness']['attempted_sub']]
+        assert detail['reason']=='ok' and detail['attempts']==2 and not detail['refresh_failed']
+    finally:c.close()

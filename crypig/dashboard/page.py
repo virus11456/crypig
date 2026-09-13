@@ -1412,12 +1412,13 @@ function redditFreshness(r){
   if(!f) return '各版取得時間未知；舊快照尚未記錄來源狀態';
   if(f.restored_aggregate) return '本次更新未取得可用貼文，顯示上次彙總；各版取得時間未能核對，不代表目前熱度。';
   const now=Date.now()/1000, limit=f.max_age_seconds||10800;
+  const reasons={rate_limited:'來源限流',access_denied:'來源拒絕存取',http_error:'來源回應錯誤',timeout:'連線逾時',request_failed:'連線失敗',invalid_data:'回應格式不符',empty_feed:'回應無可用標題',unavailable:'未取得，原因未記錄'};
   const rows=Object.entries(f.sources||{}).map(([name,v])=>{
     const old=v.fetched_at && now-v.fetched_at>limit;
     const state=v.status==='stale'?'過舊，未納入':old?'已過舊，等待下一輪排除':v.status==='not_collected'?'尚無可用資料':v.status==='failed_retained'?'更新失敗，沿用舊資料':'已有資料';
-    return `${name}：${state}${v.fetched_at?'（取得 '+ago(v.fetched_at)+'）':''}`;
+    return `${name}：${state}${reasons[v.reason]?'／'+reasons[v.reason]:''}${v.fetched_at?'（取得 '+ago(v.fetched_at)+'）':''}`;
   });
-  return `${f.persist_failed?'本次快照保存失敗，重啟可能無法恢復；':''}每輪更新一版；本輪 ${f.attempted_sub||'—'} ${f.refresh_failed?'未取得可用貼文':'已取得'}｜本次彙總 ${f.included_subs}/${f.configured_subs} 版。超過 3 小時的版快照於彙總時排除。${rows.join('；')}。未取得可能是連線失敗、限流、格式不符或空 RSS。`;
+  return `${f.persist_failed?'本次快照保存失敗，重啟可能無法恢復；':''}每輪更新一版；本輪 ${f.attempted_sub||'—'} ${f.refresh_failed?'未取得可用貼文':'已取得'}｜本次彙總 ${f.included_subs}/${f.configured_subs} 版。超過 3 小時的版快照於彙總時排除。${rows.join('；')}。空回應不代表該版完全沒有討論；舊快照未記錄原因時保留未知。`;
 }
 async function loadReddit(){
   try{

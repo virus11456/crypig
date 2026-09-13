@@ -33,6 +33,14 @@ def load(path, subs, now):
                         or (row[1] is not None and not timestamp(row[1]))):
                     return None
         for item in attempts.values():
+            if not isinstance(item, dict):
+                return None
+            if 'reason' in item and item['reason'] not in {'ok','unavailable','rate_limited','access_denied','http_error','timeout','request_failed','invalid_data','empty_feed'}:
+                return None
+            if 'http_status' in item and (type(item['http_status']) is not int or not 100 <= item['http_status'] <= 599):
+                return None
+            if 'attempts' in item and (type(item['attempts']) is not int or not 0 <= item['attempts'] <= 2):
+                return None
             if not timestamp(item['attempted_at']) or type(item['refresh_failed']) is not bool:
                 return None
         return {**data, 'titles': {k: [tuple(row) for row in rows] for k, rows in titles.items()}}
