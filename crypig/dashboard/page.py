@@ -46,6 +46,9 @@ INDEX_HTML = r"""<!doctype html>
   .gauge .mid{position:absolute;left:50%;top:-2px;width:1px;height:12px;background:var(--line)}
   .gauge .fill{position:absolute;top:0;height:8px;border-radius:999px}
   .meta{color:var(--mut);font-size:13px;margin:2px 0}
+  .meta a,.meta a:visited{color:#8cc8ff;text-decoration:underline;text-decoration-color:#52789a;text-underline-offset:3px;text-decoration-thickness:1px}
+  .meta a:hover,.meta a:active{color:#c3e3ff;text-decoration-color:currentColor}
+  .meta a:focus-visible{outline:2px solid #8cc8ff;outline-offset:3px;border-radius:2px}
   .action{margin:8px 0;font-weight:600}
   .reason{color:var(--mut);font-size:13px;margin-bottom:10px}
   .sig{margin:8px 0;padding:10px 12px;background:#0d1117;
