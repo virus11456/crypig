@@ -1355,6 +1355,17 @@ async function loadValidate(){
     </div>`;
   }catch(e){document.getElementById('validate').innerHTML='<div class="box empty">訊號驗證載入失敗：'+e+'</div>';}
 }
+function htmlText(value){
+  return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function newsLink(value){
+  try{
+    if(typeof value!=='string'||!/^https?:\/\//i.test(value)) return null;
+    const u=new URL(value);
+    if(!['http:','https:'].includes(u.protocol)||!u.hostname||u.username||u.password) return null;
+    return htmlText(u.href);
+  }catch(e){return null;}
+}
 function ago(ts){ if(!ts) return ''; const m=Math.floor((Date.now()/1000-ts)/60);
   return m<60?m+'分前':m<1440?Math.floor(m/60)+'時前':Math.floor(m/1440)+'天前'; }
 function newsFreshness(r){
@@ -1372,7 +1383,7 @@ async function loadNews(){
       apiJSON('/news'),
       apiJSON('/scores').then(x=>x.scores||{}).catch(()=>({}))]);
     const s=r.summary||{}, items=r.items||[];
-    if(!items.length){document.getElementById('news').innerHTML='<div class="box empty">新聞暫無</div><div class="meta">'+newsFreshness(r)+'</div>';return;}
+    if(!items.length){document.getElementById('news').innerHTML='<div class="box empty">新聞暫無</div><div class="meta">'+htmlText(newsFreshness(r))+'</div>';return;}
     const biasCol=s.net>2?'#3fb950':s.net<-2?'#f85149':'#8b949e';
     // 最受關注幣：新聞淨情緒 vs 聰明錢淨多空（分歧＝潛在反指標）
     const chips=(s.top_coins||[]).map(c=>{
@@ -1382,31 +1393,33 @@ async function loadNews(){
       if(smn!=null){ const newsBull=c.net>0, smBull=smn>0.1, smBear=smn<-0.1;
         if(newsBull&&smBear) div=' <span style="color:#d29922">⚠新聞多·聰明錢空</span>';
         else if(!newsBull&&c.net<0&&smBull) div=' <span style="color:#d29922">⚠新聞空·聰明錢多</span>'; }
-      return `<span class="newschip"><b>${c.symbol}</b> <span style="color:${nb}">${c.net>0?'利多':c.net<0?'利空':'中性'} ${c.bull}/${c.bear}</span><span class="meta"> ·${c.mentions}則</span>${div}</span>`;
+      return `<span class="newschip"><b>${htmlText(c.symbol)}</b> <span style="color:${nb}">${c.net>0?'利多':c.net<0?'利空':'中性'} ${htmlText(c.bull)}/${htmlText(c.bear)}</span><span class="meta"> ·${htmlText(c.mentions)}則</span>${div}</span>`;
     }).join('');
     const rows=items.slice(0,24).map(i=>{
       const b=i.sentiment, bc=b==='bull'?'#3fb950':b==='bear'?'#f85149':'#6e7681',
             bl=b==='bull'?'利多':b==='bear'?'利空':'中性';
-      const coins=(i.coins||[]).map(s=>`<span class="newscoin">${s}</span>`).join('');
+      const coins=(i.coins||[]).map(s=>`<span class="newscoin">${htmlText(s)}</span>`).join('');
+      const link=newsLink(i.link), title=htmlText(i.title);
+      const headline=link?`<a href="${link}" target="_blank" rel="noopener noreferrer">${title}</a>`:`<span>${title}</span>`;
       return `<div class="newsrow">
         <span class="newsbadge" style="background:${bc}22;color:${bc};border-color:${bc}55">${bl}</span>
-        <a href="${i.link}" target="_blank" rel="noopener">${i.title}</a>
-        <div class="meta">${coins} <span style="opacity:.7">${i.source} · ${ago(i.ts)}</span></div></div>`;
+        ${headline}
+        <div class="meta">${coins} <span style="opacity:.7">${htmlText(i.source)} · ${ago(i.ts)}</span></div></div>`;
     }).join('');
     document.getElementById('news').innerHTML=`<div class="box">
-      <div class="meta">${newsFreshness(r)}</div>
-      <h2>📰 新聞分析 <small>${s.sources||''} 家媒體 · ${r.total} 則 · 關鍵字利多/利空＋影響幣（詞庫分類，非事件查證）</small></h2>
+      <div class="meta">${htmlText(newsFreshness(r))}</div>
+      <h2>📰 新聞分析 <small>${htmlText(s.sources||'')} 家媒體 · ${htmlText(r.total)} 則 · 關鍵字利多/利空＋影響幣（詞庫分類，非事件查證）</small></h2>
       <div class="kpis">
-        <div class="kpi"><div class="v" style="color:${biasCol};font-size:30px">${s.bias||'—'}</div><div class="k">整體新聞情緒</div></div>
-        <div class="kpi"><div class="v" style="color:#3fb950">${s.bull||0}</div><div class="k">利多則數</div></div>
-        <div class="kpi"><div class="v" style="color:#f85149">${s.bear||0}</div><div class="k">利空則數</div></div>
-        <div class="kpi"><div class="v" style="color:#8b949e">${s.neutral||0}</div><div class="k">中性</div></div>
+        <div class="kpi"><div class="v" style="color:${biasCol};font-size:30px">${htmlText(s.bias||'—')}</div><div class="k">整體新聞情緒</div></div>
+        <div class="kpi"><div class="v" style="color:#3fb950">${htmlText(s.bull||0)}</div><div class="k">利多則數</div></div>
+        <div class="kpi"><div class="v" style="color:#f85149">${htmlText(s.bear||0)}</div><div class="k">利空則數</div></div>
+        <div class="kpi"><div class="v" style="color:#8b949e">${htmlText(s.neutral||0)}</div><div class="k">中性</div></div>
       </div>
       <div class="meta" style="margin:6px 0 4px">最受關注幣（新聞淨情緒，⚠＝與合約樣本方向不同，不代表頂底）：</div>
       <div class="newschips">${chips||'<span class="meta">本輪新聞未明確點名單一幣</span>'}</div>
       <div class="newslist">${rows}</div>
     </div>`;
-  }catch(e){document.getElementById('news').innerHTML='<div class="box empty">新聞載入失敗：'+e+'</div>';}
+  }catch(e){document.getElementById('news').innerHTML='<div class="box empty">新聞載入失敗：'+htmlText(e)+'</div>';}
 }
 function redditFreshness(r){
   const f=r.freshness;
@@ -1428,29 +1441,29 @@ async function loadReddit(){
     if(!Object.keys(coins).length){
       document.getElementById('reddit').innerHTML=`<div class="box">
         <h2>👽 Reddit 散戶討論熱度</h2>
-        <div class="meta">${redditFreshness(r)}</div><div class="meta">目前沒有可用的幣種提及統計。</div></div>`;
+        <div class="meta">${htmlText(redditFreshness(r))}</div><div class="meta">目前沒有可用的幣種提及統計。</div></div>`;
       return;
     }
     const maxM=Math.max(...Object.values(coins).map(v=>v.mentions||0),1);
     const rows=Object.entries(coins).sort((a,b)=>b[1].mentions-a[1].mentions).slice(0,10)
       .map(([s,v])=>{const sen=v.sentiment,col=sen==null?'#8b949e':sen>=60?'#3fb950':sen>=40?'#d29922':'#f85149';
         const w=Math.round((v.mentions/maxM)*100);
-        return `<div class="sig"><div class="sigtitle"><span>${s}</span>
-          <span class="meta">提及 <b>${v.mentions}</b> ｜ 情緒 <b style="color:${col}">${sen==null?'—':sen+'%'}</b></span></div>
+        return `<div class="sig"><div class="sigtitle"><span>${htmlText(s)}</span>
+          <span class="meta">提及 <b>${htmlText(v.mentions)}</b> ｜ 情緒 <b style="color:${col}">${htmlText(sen==null?'—':sen+'%')}</b></span></div>
           <div class="bar"><i style="width:${w}%;background:#5a3"></i></div></div>`;}).join('');
     const hot=Object.entries(coins).sort((a,b)=>b[1].mentions-a[1].mentions)[0];
-    const rc=hot?{t:`本次樣本提及最多：<b>${hot[0]}</b>（${hot[1].mentions} 次提及）。這是熱門貼文樣本，不能據此確認討論暴增、價格頂底或現貨買賣。`,c:'#d29922'}:null;
+    const rc=hot?{t:`本次樣本提及最多：<b>${htmlText(hot[0])}</b>（${htmlText(hot[1].mentions)} 次提及）。這是熱門貼文樣本，不能據此確認討論暴增、價格頂底或現貨買賣。`,c:'#d29922'}:null;
     const aMin=r.newest_ts?Math.max(0,Math.round((Date.now()/1000-r.newest_ts)/60)):null;
     const aTxt=aMin==null?'':(aMin<60?aMin+' 分前':Math.floor(aMin/60)+' 小時前');
-    const rangeTxt=r.span_hours!=null?`📅 資料範圍：近 <b>${r.span_hours} 小時</b>的熱門貼文${aTxt?`（最新 ${aTxt}）`:''}——抓的是 Reddit「目前熱門(hot)」，非固定一週`:'';
+    const rangeTxt=r.span_hours!=null?`📅 資料範圍：近 <b>${htmlText(r.span_hours)} 小時</b>的熱門貼文${aTxt?`（最新 ${aTxt}）`:''}——抓的是 Reddit「目前熱門(hot)」，非固定一週`:'';
     document.getElementById('reddit').innerHTML=`<div class="box">
-      <h2>👽 Reddit 散戶討論熱度 <small>RSS 公開來源｜${r.subs||1}/${r.subs_total||6} 版輪轉·熱門 ${r.total_posts} 篇</small></h2>
-      <div class="meta">${redditFreshness(r)}</div>
+      <h2>👽 Reddit 散戶討論熱度 <small>RSS 公開來源｜${htmlText(r.subs||1)}/${htmlText(r.subs_total||6)} 版輪轉·熱門 ${htmlText(r.total_posts)} 篇</small></h2>
+      <div class="meta">${htmlText(redditFreshness(r))}</div>
       ${rangeTxt?`<div class="meta" style="margin:-2px 0 8px">${rangeTxt}</div>`:''}
       ${rc?`<div class="vline" style="border-left-color:${rc.c}">📍 現在：${rc.t}</div>`:''}
       <div class="meta" style="margin-bottom:8px">提及數＝樣本標題提及次數；情緒＝利多詞命中數佔利多與利空詞總命中數的比例，不是看多用戶比例；沒有情緒詞時保留未知。跨版同標題去重，並非全部 Reddit 討論。</div>
       ${rows}</div>`;
-  }catch(e){document.getElementById('reddit').innerHTML='<div class="box empty">Reddit 載入失敗：'+e+'</div>';}
+  }catch(e){document.getElementById('reddit').innerHTML='<div class="box empty">Reddit 載入失敗：'+htmlText(e)+'</div>';}
 }
 refresh(); setInterval(()=>{if(!document.hidden) refresh();},30000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden) refresh();});

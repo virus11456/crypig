@@ -15,7 +15,7 @@ function setup(fetch){
   if(!elements.has(id)) elements.set(id,{innerHTML:'',textContent:'',style:{}});
   return elements.get(id);
  }};
- const ctx=vm.createContext({fetch,document,console,AbortController,setTimeout,clearTimeout,window:{},navigator:{}});
+ const ctx=vm.createContext({fetch,document,console,URL,AbortController,setTimeout,clearTimeout,window:{},navigator:{}});
  vm.runInContext(noBoot,ctx);
  return {ctx,elements,run:s=>vm.runInContext(s,ctx)};
 }
@@ -241,4 +241,22 @@ test('reddit displays recorded cause without inventing a cause for legacy data',
 test('news shows individual publisher failure reasons and legacy unknowns',()=>{
  const h=setup();h.ctx.f={partial:true,sources:{Decrypt:{status:'unavailable',reason:'rate_limited'},NewsBTC:{status:'unavailable'}}};
  const text=h.run('newsFreshness({freshness:f})');assert.match(text,/Decrypt（來源限流）/);assert.match(text,/NewsBTC（原因未記錄）/);
+});
+
+test('news renders external headlines as text and only permits ordinary web links',async()=>{
+ const payload='<img src=x onerror="alert(1)">';
+ const links=['javascript:alert(1)','data:text/html,boom','//evil.test','https://u:p@example.com','https://example.com/article?q=a&b="x"'];
+ const data={items:links.map(link=>({link,title:payload,source:payload,coins:[payload],sentiment:'bull'})),summary:{top_coins:[{symbol:payload,net:1,bull:1,bear:0,mentions:1}]},total:5};
+ const h=setup(async url=>response(url==='/news'?data:{scores:{}}));
+ await h.run('loadNews()');const html=h.elements.get('news').innerHTML;
+ assert.doesNotMatch(html,/<img|href="javascript:|href="data:|href="\/\//);
+ assert.equal((html.match(/<a /g)||[]).length,1);
+ assert.match(html,/&lt;img/);assert.match(html,/noopener noreferrer/);assert.match(html,/&amp;b=/);
+});
+test('news and reddit freshness and symbols cannot inject markup',async()=>{
+ const payload='<svg onload=alert(1)>';
+ const freshness={sources:{[payload]:{status:'unavailable'}},attempted_sub:payload,received_sources:0,configured_sources:1};
+ const h=setup(async url=>response(url==='/news'?{items:[],freshness}:{coins:{[payload]:{mentions:2,sentiment:50}},freshness}));
+ await h.run('loadNews()');await h.run('loadReddit()');
+ for(const id of ['news','reddit']){assert.doesNotMatch(h.elements.get(id).innerHTML,/<svg/);assert.match(h.elements.get(id).innerHTML,/&lt;svg/);}
 });
