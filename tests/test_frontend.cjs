@@ -271,3 +271,9 @@ test('activity separates matched sample changes from roster churn and failures',
  assert.match(html,/移出不代表平倉/);assert.match(html,/增加多倉/);assert.match(html,/任一端未取得 1/);assert.match(html,/showAccountHistory\(0\)/);
  h.run("ACCOUNT_WINDOW='24h';renderAccountActivity()");assert.match(h.elements.get('account-activity').innerHTML,/尚無可比較快照/);
 });
+
+test('unchanged account polling preserves opened details',async()=>{
+ const h=setup(async()=>response({groups:{}}));await h.run('loadAccountActivity()');
+ h.elements.get('account-activity').innerHTML='open account detail';await h.run('loadAccountActivity()');
+ assert.equal(h.elements.get('account-activity').innerHTML,'open account detail');
+});

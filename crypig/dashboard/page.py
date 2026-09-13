@@ -849,8 +849,8 @@ function renderBigMoney(){
   const whale=OC_INFO?supplyBehavior(OC_INFO,'大額地址合計餘額'):'資料載入中…';
   const bands=(OC_INFO?.cohorts||[]).map(c=>supplyBehavior(c,c.label)).join(' ');
   el.innerHTML=`<section class="box"><h2>三類行為分別分析</h2><p class="meta">先看持有與部位，再看變化。鏈上日資料與合約快照更新頻率不同，各自顯示時間。</p><div class="behavior-grid">
-    <p class="behavior-card"><b>⏳ 長期持有者</b><br><strong>${LTH_INFO?htmlText(signedBTC(LTH_INFO.balance_btc)):"—"}</strong><br>｜${LTH_INFO?supplyBehavior(LTH_INFO,'LTH 供給'):(LTH_ERR||'資料載入中…')}<br><span class="meta">${freshness(LTH_INFO)}${LTH_ERR?'｜'+LTH_ERR:''}｜觀察舊幣供給變化；增加不等於新買入。</span></p>
-    <p class="behavior-card"><b>🐋 現貨巨鯨地址</b><br><strong>${OC_INFO?htmlText(signedBTC((OC_INFO.cohorts||[]).reduce((n,c)=>n+c.balance_btc,0))):"—"}</strong><br>｜${whale}<br>${bands}<br><span class="meta">${freshness(OC_INFO)}${OC_ERR?'｜'+OC_ERR:''}｜地址分組可能含交易所與託管；不能由餘額確認抄底或拋售。</span></p>
+    <p class="behavior-card"><b>⏳ 長期持有者</b><br><strong>${LTH_INFO?htmlText(btcQuantity(LTH_INFO.balance_btc)+' BTC'):"—"}</strong><br>｜${LTH_INFO?supplyBehavior(LTH_INFO,'LTH 供給'):(LTH_ERR||'資料載入中…')}<br><span class="meta">${freshness(LTH_INFO)}${LTH_ERR?'｜'+LTH_ERR:''}｜觀察舊幣供給變化；增加不等於新買入。</span></p>
+    <p class="behavior-card"><b>🐋 現貨巨鯨地址</b><br><strong>${OC_INFO?htmlText(btcQuantity((OC_INFO.cohorts||[]).reduce((n,c)=>n+c.balance_btc,0))+' BTC'):"—"}</strong><br>｜${whale}<br>${bands}<br><span class="meta">${freshness(OC_INFO)}${OC_ERR?'｜'+OC_ERR:''}｜地址分組可能含交易所與託管；不能由餘額確認抄底或拋售。</span></p>
     <p class="behavior-card"><b>🧠 聰明錢合約</b><br>｜${smartBehavior()}<br><span class="meta">${SB_ALL.length?'截至 '+new Date(SB_ALL.at(-1).t*1000).toISOString():''}｜Hyperliquid 合約追蹤樣本；名單可能包含僅依歷史獲利補入的帳號。名目差額包含價格與樣本更換，不等於成交或 BTC 現貨買賣。</span></p>
     </div></section>`;
 }
@@ -858,7 +858,7 @@ let ACCOUNT_DATA=null, ACCOUNT_GROUP='smart_verified', ACCOUNT_WINDOW='previous'
 const ACTION_NAMES={unchanged:'持平',open_long:'新開多倉',open_short:'新開空倉',close_long:'多倉歸零',close_short:'空倉歸零',flip_long:'空轉多',flip_short:'多轉空',add_long:'增加多倉',add_short:'增加空倉',reduce_long:'減少多倉',reduce_short:'減少空倉'};
 function btcQuantity(v){return Number.isFinite(v)?v.toLocaleString(undefined,{maximumFractionDigits:5}):'—';}
 async function loadAccountActivity(){
-  try{ACCOUNT_DATA=await apiJSON('/account_activity');renderAccountActivity();}
+  try{const next=await apiJSON('/account_activity');if(JSON.stringify(next)!==JSON.stringify(ACCOUNT_DATA)){ACCOUNT_DATA=next;renderAccountActivity();}}
   catch(e){document.getElementById('account-activity').innerHTML='<h2>同帳號 BTC 合約異動</h2><p>暫時無法取得，請稍後重新整理。</p>';}
 }
 function renderAccountActivity(){
