@@ -62,4 +62,4 @@ Vercel 建置使用 `node scripts/build-vercel.cjs`，從 Python 的 INDEX_HTML 
 
 此配置依賴 hypeboss.cc 仍指向現有後端，不能直接把其 DNS 改到 Vercel，否則可能形成回送循環。若日後要遷移主網域，必須先建立獨立後端網域並修改轉送來源。GitHub 合併與 Vercel 最終驗證狀態見後續紀錄。
 
-Vercel 既有專案 hypeboss 已改連 virus11456/crypig，根目錄為程式庫根目錄，框架為 Other，正式分支追蹤 claude/brave-ptolemy-nn1nd8。此紀錄提交時首次新版部署尚待驗證；不可把設定完成當成部署成功。
+Vercel 既有專案 hypeboss 已改連 virus11456/crypig，根目錄為程式庫根目錄，框架為 Other，正式分支追蹤 claude/brave-ptolemy-nn1nd8。新版已部署並通過正式畫面與來源數值比對；詳見 [合併與 Vercel 上線紀錄](releases/2026-09-14-vercel.md)。
