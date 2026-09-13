@@ -238,3 +238,7 @@ test('reddit displays recorded cause without inventing a cause for legacy data',
  const h=setup();h.ctx.f={sources:{Bitcoin:{status:'failed_retained',reason:'rate_limited'},altcoin:{status:'not_collected'}}};
  const html=h.run('redditFreshness({freshness:f})');assert.match(html,/Bitcoin：更新失敗，沿用舊資料／來源限流/);assert.match(html,/altcoin：尚無可用資料/);assert.doesNotMatch(html,/altcoin：尚無可用資料／來源限流/);
 });
+test('news shows individual publisher failure reasons and legacy unknowns',()=>{
+ const h=setup();h.ctx.f={partial:true,sources:{Decrypt:{status:'unavailable',reason:'rate_limited'},NewsBTC:{status:'unavailable'}}};
+ const text=h.run('newsFreshness({freshness:f})');assert.match(text,/Decrypt（來源限流）/);assert.match(text,/NewsBTC（原因未記錄）/);
+});

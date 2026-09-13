@@ -740,3 +740,23 @@ def test_reddit_diagnoses_failures_and_retry_recovery(monkeypatch):
         result=c.crypto_buzz(ttl=0);detail=result['freshness']['sources'][result['freshness']['attempted_sub']]
         assert detail['reason']=='ok' and detail['attempts']==2 and not detail['refresh_failed']
     finally:c.close()
+
+
+def test_news_parallel_diagnostics_are_attached_to_correct_publisher(monkeypatch):
+    import httpx
+    from crypig.clients.news import NewsClient, _FEEDS
+    c=NewsClient()
+    outcomes={url: pair for url,pair in zip(_FEEDS.values(),[(429,''),(403,''),(503,''),(200,'<html/>'),(200,'<rss><channel/></rss>'),(200,'<rss><channel><item><title>bitcoin surge</title></item></channel></rss>')])}
+    monkeypatch.setattr(c._client,'get',lambda url:httpx.Response(outcomes[url][0],text=outcomes[url][1]))
+    try:
+        out=c.analyze()
+        assert [v['reason'] for v in out['freshness']['sources'].values()]==['rate_limited','access_denied','http_error','invalid_data','empty_feed','ok']
+        assert out['total']==1 and out['freshness']['received_sources']==1
+        for exc,reason in [(httpx.ReadTimeout('failed'),'timeout'),(httpx.ConnectError('failed'),'request_failed')]:
+            def fail(url):raise exc
+            monkeypatch.setattr(c._client,'get',fail)
+            failed=c.analyze(ttl=0)
+            assert failed['items']==out['items']
+            assert failed['freshness']['fetched_at']==out['freshness']['fetched_at']
+            assert all(v['reason']==reason and 'http_status' not in v for v in failed['freshness']['sources'].values())
+    finally:c.close()

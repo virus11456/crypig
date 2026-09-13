@@ -91,6 +91,15 @@ def _parse_ts(s: str | None) -> int | None:
         return None
 
 
+class FeedItems(list):
+    """Keep each concurrent publisher's diagnostic attached to its own batch."""
+    def __init__(self, items=(), *, reason, http_status=None):
+        super().__init__(items)
+        self.diagnostic = {"reason": reason, "attempted_at": time.time()}
+        if http_status is not None:
+            self.diagnostic["http_status"] = http_status
+
+
 class NewsClient:
     def __init__(self, timeout: float = 15.0):
         self._client = httpx.Client(
@@ -101,11 +110,19 @@ class NewsClient:
     def _fetch_feed(self, source: str, url: str) -> list[dict]:
         try:
             r = self._client.get(url)
-            if r.status_code != 200:
-                return []
-            root = ET.fromstring(r.content)
+        except httpx.TimeoutException:
+            return FeedItems(reason="timeout")
         except Exception:
-            return []
+            return FeedItems(reason="request_failed")
+        if r.status_code != 200:
+            reason = "rate_limited" if r.status_code == 429 else "access_denied" if r.status_code in (401, 403) else "http_error"
+            return FeedItems(reason=reason, http_status=r.status_code)
+        try:
+            root = ET.fromstring(r.content)
+            if root.tag != "rss" or root.find("channel") is None:
+                raise ValueError("Expected RSS channel")
+        except Exception:
+            return FeedItems(reason="invalid_data", http_status=r.status_code)
         items = []
         for it in root.iter("item"):
             title = (it.findtext("title") or "").strip()
@@ -118,7 +135,7 @@ class NewsClient:
             coins = _tag_coins(title + " " + desc)
             items.append({"title": title, "link": link, "source": source, "ts": ts,
                           "sentiment": sentiment, "net": net, "coins": coins})
-        return items
+        return FeedItems(items, reason="ok" if items else "empty_feed", http_status=r.status_code)
 
     def analyze(self, ttl: float = 600.0, limit: int = 60) -> dict:
         """彙整新聞：整體偏多/偏空、各幣新聞淨情緒、標題清單（含利多/利空＋影響幣）。"""
@@ -132,7 +149,8 @@ class NewsClient:
             items.extend(batch)
         attempted_at = time.time()
         source_status = {name: {"status": "received" if batch else "unavailable",
-                                "items": len(batch), "attempted_at": attempted_at}
+                                "items": len(batch), "attempted_at": attempted_at,
+                                **getattr(batch, "diagnostic", {"reason": "ok" if batch else "unavailable"})}
                          for name, batch in zip(_FEEDS, batches)}
         received = sum(bool(batch) for batch in batches)
         metadata = {"attempted_at": attempted_at, "sources": source_status,

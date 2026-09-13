@@ -1362,8 +1362,9 @@ function newsFreshness(r){
   if(!f) return '新聞取得時間未知；舊快照尚未記錄来源狀態';
   const age=f.fetched_at?Date.now()/1000-f.fetched_at:null;
   const state=f.refresh_failed?'更新失敗，保留上次可用新聞':f.partial?'部分來源未取得可用新聞':'本次來源取得齊全';
-  const missing=Object.entries(f.sources||{}).filter(([k,v])=>v.status!=='received').map(([k])=>k);
-  return `${state}｜本次 ${f.received_sources}/${f.configured_sources} 家來源有資料｜取得 ${f.fetched_at?ago(f.fetched_at):'時間未知'}${age!=null&&age>3600?'（已超過 1 小時）':''}｜最新文章 ${f.newest_published_at?ago(f.newest_published_at):'發布時間未知'}${missing.length?'｜未取得：'+missing.join('、'):''}。未取得可能是連線失敗、格式不符或空 RSS；取得時間不等於文章發布時間。`;
+  const reasons={rate_limited:'來源限流',access_denied:'來源拒絕存取',http_error:'來源回應錯誤',timeout:'連線逾時',request_failed:'連線失敗',invalid_data:'回應格式不符',empty_feed:'回應無可用標題'};
+  const missing=Object.entries(f.sources||{}).filter(([k,v])=>v.status!=='received').map(([k,v])=>k+'（'+(reasons[v.reason]||'原因未記錄')+'）');
+  return `${state}｜本次 ${f.received_sources}/${f.configured_sources} 家來源有資料｜取得 ${f.fetched_at?ago(f.fetched_at):'時間未知'}${age!=null&&age>3600?'（已超過 1 小時）':''}｜最新文章 ${f.newest_published_at?ago(f.newest_published_at):'發布時間未知'}${missing.length?'｜未取得：'+missing.join('、'):''}。空回應不代表該媒體沒有發文；取得時間不等於文章發布時間。`;
 }
 async function loadNews(){
   try{
