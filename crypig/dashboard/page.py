@@ -1357,13 +1357,21 @@ async function loadValidate(){
 }
 function ago(ts){ if(!ts) return ''; const m=Math.floor((Date.now()/1000-ts)/60);
   return m<60?m+'分前':m<1440?Math.floor(m/60)+'時前':Math.floor(m/1440)+'天前'; }
+function newsFreshness(r){
+  const f=r.freshness;
+  if(!f) return '新聞取得時間未知；舊快照尚未記錄来源狀態';
+  const age=f.fetched_at?Date.now()/1000-f.fetched_at:null;
+  const state=f.refresh_failed?'更新失敗，保留上次可用新聞':f.partial?'部分來源未取得可用新聞':'本次來源取得齊全';
+  const missing=Object.entries(f.sources||{}).filter(([k,v])=>v.status!=='received').map(([k])=>k);
+  return `${state}｜本次 ${f.received_sources}/${f.configured_sources} 家來源有資料｜取得 ${f.fetched_at?ago(f.fetched_at):'時間未知'}${age!=null&&age>3600?'（已超過 1 小時）':''}｜最新文章 ${f.newest_published_at?ago(f.newest_published_at):'發布時間未知'}${missing.length?'｜未取得：'+missing.join('、'):''}。未取得可能是連線失敗、格式不符或空 RSS；取得時間不等於文章發布時間。`;
+}
 async function loadNews(){
   try{
     const [r,sc]=await Promise.all([
       apiJSON('/news'),
       apiJSON('/scores').then(x=>x.scores||{}).catch(()=>({}))]);
     const s=r.summary||{}, items=r.items||[];
-    if(!items.length){document.getElementById('news').innerHTML='<div class="box empty">新聞暫無</div>';return;}
+    if(!items.length){document.getElementById('news').innerHTML='<div class="box empty">新聞暫無</div><div class="meta">'+newsFreshness(r)+'</div>';return;}
     const biasCol=s.net>2?'#3fb950':s.net<-2?'#f85149':'#8b949e';
     // 最受關注幣：新聞淨情緒 vs 聰明錢淨多空（分歧＝潛在反指標）
     const chips=(s.top_coins||[]).map(c=>{
@@ -1385,14 +1393,15 @@ async function loadNews(){
         <div class="meta">${coins} <span style="opacity:.7">${i.source} · ${ago(i.ts)}</span></div></div>`;
     }).join('');
     document.getElementById('news').innerHTML=`<div class="box">
-      <h2>📰 新聞分析 <small>${s.sources||''} 家媒體 · ${r.total} 則 · 關鍵字利多/利空＋影響幣（呈現結論非生標題）</small></h2>
+      <div class="meta">${newsFreshness(r)}</div>
+      <h2>📰 新聞分析 <small>${s.sources||''} 家媒體 · ${r.total} 則 · 關鍵字利多/利空＋影響幣（詞庫分類，非事件查證）</small></h2>
       <div class="kpis">
         <div class="kpi"><div class="v" style="color:${biasCol};font-size:30px">${s.bias||'—'}</div><div class="k">整體新聞情緒</div></div>
         <div class="kpi"><div class="v" style="color:#3fb950">${s.bull||0}</div><div class="k">利多則數</div></div>
         <div class="kpi"><div class="v" style="color:#f85149">${s.bear||0}</div><div class="k">利空則數</div></div>
         <div class="kpi"><div class="v" style="color:#8b949e">${s.neutral||0}</div><div class="k">中性</div></div>
       </div>
-      <div class="meta" style="margin:6px 0 4px">最受關注幣（新聞淨情緒，⚠＝與聰明錢分歧＝潛在反指標）：</div>
+      <div class="meta" style="margin:6px 0 4px">最受關注幣（新聞淨情緒，⚠＝與合約樣本方向不同，不代表頂底）：</div>
       <div class="newschips">${chips||'<span class="meta">本輪新聞未明確點名單一幣</span>'}</div>
       <div class="newslist">${rows}</div>
     </div>`;

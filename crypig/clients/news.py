@@ -130,8 +130,19 @@ class NewsClient:
             batches = list(pool.map(lambda feed: self._fetch_feed(*feed), _FEEDS.items()))
         for batch in batches:
             items.extend(batch)
+        attempted_at = time.time()
+        source_status = {name: {"status": "received" if batch else "unavailable",
+                                "items": len(batch), "attempted_at": attempted_at}
+                         for name, batch in zip(_FEEDS, batches)}
+        received = sum(bool(batch) for batch in batches)
+        metadata = {"attempted_at": attempted_at, "sources": source_status,
+                    "received_sources": received, "configured_sources": len(_FEEDS),
+                    "refresh_failed": not received, "partial": received < len(_FEEDS)}
         if not items:
-            return self._cache or {"items": [], "summary": {}, "total": 0}
+            previous = self._cache or {"items": [], "summary": {}, "total": 0}
+            out = {**previous, "freshness": {**previous.get("freshness", {}), **metadata}}
+            self._cache, self._ts = out, attempted_at
+            return out
         # 依時間新到舊（無時間者排後）
         items.sort(key=lambda x: x["ts"] or 0, reverse=True)
 
@@ -151,6 +162,8 @@ class NewsClient:
                     b["bear"] += 1
         top_coins = sorted(coin_stats.items(), key=lambda kv: kv[1]["mentions"], reverse=True)[:12]
         out = {
+            "freshness": {**metadata, "fetched_at": attempted_at,
+                          "newest_published_at": max((i["ts"] for i in items if i["ts"]), default=None)},
             "items": items[:limit],
             "summary": {
                 "bull": bull, "bear": bear, "neutral": neutral,

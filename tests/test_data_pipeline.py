@@ -588,7 +588,14 @@ def test_news_fetch_is_bounded_parallel_and_preserves_order_and_fallback(monkeyp
         assert good['summary']['sources']==5 and good['summary']['configured_sources']==6
         assert c.analyze()==good and counts['calls']==6
         monkeypatch.setattr(c,'_fetch_feed',lambda *args: [])
-        assert c.analyze(ttl=0)==good
+        failed=c.analyze(ttl=0)
+        assert failed['items']==good['items']
+        assert failed['freshness']['refresh_failed']
+        assert failed['freshness']['fetched_at']==good['freshness']['fetched_at']
+        assert failed['freshness']['received_sources']==0
+        assert good['freshness']['received_sources']==5
+        assert good['freshness']['partial']
+        assert c.analyze()==failed
     finally: c.close()
 
 

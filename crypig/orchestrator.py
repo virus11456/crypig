@@ -430,8 +430,13 @@ class Orchestrator:
                 from .clients.news import NewsClient
                 self._nc = NewsClient()
             nz = self._timed("news", self._nc.analyze)
-            if nz and nz.get("total"):
-                self.news = nz
+            if nz:
+                if nz.get("freshness", {}).get("refresh_failed") and self.news:
+                    # Preserve restored articles and their original acquisition time.
+                    meta = {**self.news.get("freshness", {}), **nz.get("freshness", {})}
+                    self.news = {**self.news, "freshness": meta}
+                else:
+                    self.news = nz
         except Exception:
             logger.warning("新聞分析抓取失敗")
         # LunarCrush 社群情緒（需付費金鑰；有才抓）

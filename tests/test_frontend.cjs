@@ -218,3 +218,13 @@ test('radar presents observed disagreement without promising tops or bottoms',as
  assert.doesNotMatch(html,/反向＝alpha|現在有沒有進場機會|alpha 候選/);
  assert.match(html,/正費率／樣本空/);
 });
+
+test('news freshness distinguishes failed, partial, and legacy snapshots',()=>{
+ const h=setup();
+ assert.match(h.run('newsFreshness({})'),/時間未知/);
+ h.ctx.f={refresh_failed:true,received_sources:0,configured_sources:6,fetched_at:1,sources:{Decrypt:{status:'unavailable'}}};
+ const text=h.run('newsFreshness({freshness:f})');
+ assert.match(text,/更新失敗/);assert.match(text,/超過 1 小時/);assert.match(text,/Decrypt/);
+ h.ctx.f={partial:true,received_sources:5,configured_sources:6,sources:{}};
+ assert.match(h.run('newsFreshness({freshness:f})'),/部分來源/);
+});
