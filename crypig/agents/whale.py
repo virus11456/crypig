@@ -36,14 +36,19 @@ class WhaleAgent(Agent):
         self._btc: BitcoinDataClient | None = None
         self._hl = None
         self._cycle_derivatives = None
+        self._cycle_quotes = None
         self._store = SnapshotStore(config.snapshot_db)
 
     def begin_cycle(self, derivatives):
         # Immutable normalized data only; the orchestrator owns the HTTP client.
         self._cycle_derivatives = derivatives
 
+    def set_cycle_quotes(self, quotes):
+        self._cycle_quotes = quotes
+
     def end_cycle(self):
         self._cycle_derivatives = None
+        self._cycle_quotes = None
 
     # ---------- fetch ----------
     def fetch(self, symbol: str) -> dict:
@@ -85,9 +90,13 @@ class WhaleAgent(Agent):
         funding_ann = None
         if valid_number(oi) and oi >= 0:
             try:
-                if self._hl is None:
-                    self._hl = HyperliquidClient()
-                quote = next((r for r in self._hl.funding_scan() if r["symbol"] == symbol), {})
+                shared = getattr(self, "_cycle_quotes", None)
+                if shared is not None:
+                    quote = shared.get(symbol, {})
+                else:  # Standalone agents retain their original client.
+                    if self._hl is None:
+                        self._hl = HyperliquidClient()
+                    quote = next((r for r in self._hl.funding_scan() if r["symbol"] == symbol), {})
                 value = quote.get("funding_ann")
                 funding_ann = value if valid_number(value) else None
             except Exception:

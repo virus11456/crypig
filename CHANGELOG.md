@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### 2026-09-14（第二十八批：Hyperliquid 行情共用）
+
+- 全市場評分與WhaleAgent改讀QuoteStore同輪不可變快照，分析不再另抓metaAndAssetCtxs。首頁既有60秒排程維持；獨立使用WhaleAgent仍保留原介面。
+- 每輪在取得衍生品資料後固定行情，途中刷新不改變本輪費率。過期超過180秒或冷啟動不加入費率訊號，不重用上一輪hl_scan。尚新鮮但刷新失敗時保留原值與取得時間，失敗仍由QuoteStore呈現。
+- 取得時間保存在valuation_times.hyperliquid_funding；缺值為null。mock不讀真實行情，既有持倉聯集與歷史重用不變。
+- 92項Python測試通過；HTTP模擬驗證一份行情供多消費者、輪中刷新、不可變副本、零費率、429/500、恢復、過期與mock隔離。尚未量測正式請求節省比例。此提交尚未部署。
+
+
 ### 2026-09-14（第二十七批：Obsidian 匯出去重與來源）
 
 - 匯出重用QuoteStore快照，不另抓Hyperliquid行情；過期費率保持缺值，mock不接觸真實行情。

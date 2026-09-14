@@ -51,6 +51,7 @@ class Orchestrator:
         self.reddit: dict = {}                  # Reddit 散戶討論熱度/情緒(公開 RSS，免憑證)
         self.hl_scan: list = []                 # HL 全市場資金費率掃描(背景每輪快取，扛瞬斷)
         self.news: dict = {}                    # 加密新聞分析(利多/利空＋影響幣，免費 RSS)
+        self._cycle_quotes = None
         self._cycle_derivatives = None
         self._md: MarketDataClient | None = None
         self._lc = None
@@ -129,6 +130,7 @@ class Orchestrator:
                 if isinstance(agent, (SmartMoneyAgent, WhaleAgent)):
                     agent.end_cycle()
             self._cycle_derivatives = None
+            self._cycle_quotes = None
             self._cycle_duration = round(time.monotonic() - started, 3)
             self._cycle_lock.release()
 
@@ -177,6 +179,7 @@ class Orchestrator:
 
     def _run_cycle_locked(self) -> dict:
         self._prepare_cycle_derivatives()
+        self._prepare_cycle_quotes()
         observations: list[Observation] = []
         for agent in self.agents:
             obs = self._timed("agent." + agent.name, agent.run)
@@ -219,14 +222,10 @@ class Orchestrator:
         cfg = self.config.agents.smart_money
         from .clients.hyperliquid import HyperliquidClient
         hlc = sm._client or HyperliquidClient()
-        funding: dict[str, float] = {}
-        try:
-            scan = hlc.funding_scan()
-            if scan:
-                self.hl_scan = scan                    # 快取整份掃描，請求端 /hl_market 讀它(扛 HL 瞬斷)
-            funding = {r["symbol"]: r["funding_ann"] for r in scan}
-        except Exception:
-            funding = {}
+        scan = list((self._cycle_quotes or {}).values())
+        # Missing/expired quotes never inherit a previous cycle's funding votes.
+        self.hl_scan = [dict(row) for row in scan]
+        funding = {r["symbol"]: r["funding_ann"] for r in scan}
 
         coins = set(aggs) | set(funding)
         div = self._divergence_scan(hlc, sorted(coins))   # {coin: (direction,mag,note)}
@@ -388,6 +387,18 @@ class Orchestrator:
             market["diverging"] = False
         from .radar_presentation import describe_radar
         return describe_radar({"market": market, "coins": coins[:20]})
+
+    def _prepare_cycle_quotes(self):
+        """Pin the scheduler-owned quote snapshot; analysis never requests another copy."""
+        rows, meta = ([], {}) if self.config.use_mock else self.quotes.read()
+        usable = bool(rows) and not meta.get("stale", True)
+        self._cycle_quotes = MappingProxyType({
+            row["symbol"]: MappingProxyType(dict(row)) for row in rows
+        } if usable else {})
+        self.valuation_times["hyperliquid_funding"] = meta.get("fetched_at") if usable else None
+        for agent in self.agents:
+            if isinstance(agent, WhaleAgent):
+                agent.set_cycle_quotes(self._cycle_quotes)
 
     def _prepare_cycle_derivatives(self):
         """One attempt per analysis cycle, including failures; never relabel old OI."""
