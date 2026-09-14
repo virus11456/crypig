@@ -10,7 +10,7 @@
 - 重用既有持久化歷史快取，來源日期倒退、衝突與不一致快取不取代有效資料。保留缺日、有效零與原始取得時間，冷啟動回503/等待背景資料，不捏造歷史。
 - 畫面分開顯示來源日期距UTC今天幾天、取得時間、背景更新／失敗／保存失敗；分析仍為資訊性描述、不增加方向分數。
 - 驗證：84項Python、39項前端測試通過；Vercel靜態建置成功。HTTP測試覆蓋並發去重、TTL、UTC跨日、429退避、重啟還原、來源倒退、缺日及mock隔離。尚未量測正式請求節省比例。
-- Vercel已同步6ecbac9並驗證相容；VPS主控台等待登入，後端尚未部署，共用抓取尚未在正式後端生效。詳見 [第二十六批紀錄](docs/releases/2026-09-14-lth-shared.md)。
+- VPS已建置並部署cae2800（功能6ecbac9），容器healthy；44個Python檔案簽章與本機一致。Vercel首頁一致，35個讀取檢查回200，LTH新metadata與7／30天切換已實測；重啟後新分析完成。詳見 [第二十六批紀錄](docs/releases/2026-09-14-lth-shared.md)。
 
 ### 2026-09-14（同輪 CoinGecko 衍生品共用）
 
@@ -139,45 +139,80 @@
 - **CI/CD 自動部署**：service 連結 GitHub repo，push 到部署分支即自動重部署。
 - **背景排程**：看板 app 加 FastAPI lifespan，部署後每 `CRYPIG_INTERVAL_MIN`
   分鐘自動跑一輪累積決策（`CRYPIG_SCHEDULER=0` 可關），單輪失敗不拖垮排程。
-- **環境變數覆寫**：`USE_MOCK`（切真實源）、`CRYPIG_DATA_DIR`（sqlite/知識圖譜
-  落到掛載 volume 以跨部署持久化）、`CRYPIG_SCHEDULER`、`CRYPIG_INTERVAL_MIN`。
-- **回測引擎**（`crypig/backtest.py`）：對每筆非中性決策跟隨訊號方向進出，輸出
-  方向命中率、平均/累積損益、損益曲線、信心度分層表現；尚未到期計為 pending。
-- **真實價歷史回測**：`OHLCVPriceHistory` 從 OKX 拉 K 線、依決策時間對齊進/出
-  場價，免等系統跑滿即可回測既有決策（`price_source=ohlcv`）。
-- **決策持久化**（`crypig/storage/decisions.py`）：每輪決策（含當下價）落地
-  sqlite，供看板與回測；含舊表 `price` 欄遷移。
-- **視覺化看板**：`GET /` 自帶 HTML 看板（零前端建置）——方向標籤、分數量表、
-  信心度、操作建議、理由、各訊號貢獻明細、分數 sparkline；頂部回測面板。
-- 看板/API 端點：`/decisions`、`/decisions/history`、`/backtest`。
+- **環境變數覆寫**：`USE_MOCK`（切真實源）、`CRYPIG_DATA_DIR`…1354 tokens truncated…f09；VPS建置提交為 `cae2800352c6bc3bda5387ad5af0dc3ae6e37688`。VPS及Vercel均已驗證，詳見 [第二十六批紀錄](releases/2026-09-14-lth-shared.md)。本文件後續提交不代表重新建置VPS映像。後續實作請同步維護 CHANGELOG.md 與本文件。
 
-#### 變更
-- **綜合決策層**（`aggregate.py`）：從單純加權分數升級為完整決策——加入信心度
-  （覆蓋率 × 方向一致度 × 表態力度）、多空共識佔比、衝突偵測（訊號分歧）、
-  主導訊號理由、操作建議。
-- **鯨魚 Agent**：由「全市場衍生品 OI」改為**真正的鯨魚錢包持倉**——用
-  bitcoin-data `wallet-bands` 追蹤 ≥100 BTC 大戶鏈上總持倉的跨輪變化（增=累積
-  偏多、減=分配偏空）；非 BTC 退回 OI+資金費率以保留多資產覆蓋。
-- **長期持有者（LTH）Agent**：改用真正的 `long-term-hodler-supply-btc`（≥155天）
-  取代 illiquid-supply 代理，更貼近「超過 151 天即長期」。
-- **requirements**：移除未用的 `ccxt`（改 httpx 直打 OKX）加快部署；`anthropic`
-  標註僅 `provider=claude` 時需要。
+## 產品目的
 
-#### 修正
-- sqlite 跨執行緒：`SnapshotStore` / `DecisionStore` 連線加 `check_same_thread=False`
-  （FastAPI 端點在 worker thread 執行）。
-- `divergence` 觀察補帶 `price`，mock 種子加時間桶讓價格隨輪次漂移（否則回測
-  報酬恆為 0）。
-- 回測 `horizon_hours=0` 被當 falsy 忽略的問題。
+分別觀察長期持有者、巨鯨與聰明錢的持有、部位與變化。三者可能重疊，但分類依據不同，不能合併成同一群人或同一方向。
 
-### 2026-06-23
+- LTH 是按幣齡分類的供給；減少不直接證明成交賣出。
+- BTC 大額地址是餘額分組，未完成實體合併及交易所、託管排除；跨組移動不是成交。
+- Hyperliquid 帳號是合約樣本；合約部位不等於 BTC 現貨持有。
+- 分開顯示數量與名目金額。金額變化可能受價格及樣本改變影響。
+- 同帳號比較只納入兩端同組且成功取得的帳號。缺資料不當零或平倉；歷史不足顯示等待累積。
+- 信心分數不是勝率，背離不確認頂底、進場時機或策略獲利。
 
-#### 新增
-- **專案骨架**：多 agent 量化分析中台 + 自我學習 RAG 知識圖譜。
-- **聰明錢 Agent**：接 Hyperliquid 真實多空持倉。
-- **量價背離 Agent**：接 OKX 真實 OHLCV，RSI 背離 + 量能輔助。
-- **長期持有者（LTH）Agent**：接 bitcoin-data.com 真實鏈上資料（免費源）。
+## 最新功能
 
-#### 變更
-- 全市場持倉改用 CoinGecko 跨所聚合 OI（真正的「整個市場」）。
-- LTH client 增強健壯性（`/last` 404 退回 base、時序陣列取末筆、`value_key`）。
+### 同帳號 BTC 合約行為
+
+`crypig/storage/account_positions.py` 保存帳號 BTC 數量、取得時間、批次分類及失敗狀態，保留約 90 天。重用既有持倉回應，不另抓一次帳號持倉。
+
+分組為已驗證聰明錢、歷史獲利補入、合約大額帳號；支援上一筆、約24小時、約7天比較。提供異動與目前部位排行、單帳號最近採集紀錄。接口為 `/account_activity` 與 `/account_history`。舊的群體合計不能回推成帳號歷史。
+
+### LTH 期間切換
+
+`crypig/dashboard/page.py` 的 `setLTHRange`、`renderLTH` 支援近7天／近30天，預設30天。切換同步更新柱狀圖、期間說明與標題摘要；自動刷新保留選擇，切換不重新抓資料，缺日不繪成單日差額。
+
+## AI 與策略狀態
+
+既有查核發現 `kg/llm.py` 使用 mock provider，真實抽取與回答方法尚未實作。設定中的模型名稱不代表已呼叫模型。分析主要依規則與權重，新聞／社群情緒為詞庫分類；策略頁、圖譜查詢與 Obsidian 匯出不可宣稱已接通真實 LLM 推理。
+
+市場資料 mock 設定與 LLM mock 是不同事項。真實模型串接尚未完成；實作前先確認供應商、費用及憑證設定。
+
+## 待處理
+
+1. 繼續檢查 Hyperliquid 市場資料與資格榜單的跨 client 重複請求。CoinGecko derivatives 已實作同輪快照；第二十六批已實作預設LTH分析與圖表共用持久化日資料。測試與部署狀態見 CHANGELOG 及批次紀錄；尚未量測正式站節省比例。
+2. 保留既有地址聯集去重、固定同輪分析快照，以及帳號歷史重用回應的行為。
+3. 繼續核對資產身分、來源時間、失敗保留與歷史缺口。來源取得時間不能代替來源資料日期。
+4. 評估可區分實體與交易所託管的現貨資料，補足金流及成交證據；目前不宣稱已完整掌握現貨買賣。
+5. 真實 AI 串接與 Telegram 通知整合尚未完成。本階段不再整合另一個專案，不能把其他私有專案程式碼複製進本庫。
+
+## 驗證與交付
+
+第二十三批：72 項 Python、37 項前端測試通過。第二十四批：38 項前端測試通過；未重跑整套 Python 測試。當次正式站17個主要接口回傳200，Chrome確認LTH兩個期間切換正常。這些是當次結果，不能視為永久健康保證。
+
+修改前確認差異，執行相關測試；部署前備份程式與資料，預檢後只更新本專案服務。部署後檢查版本、接口、資料新鮮度與實際UI，記錄結果與回復方法。網站目前為 FastAPI 提供前端與 API，並由反向代理轉送；不要假設仍由早期的 Vercel 設定提供前端。
+
+若以標準輸入傳送部署腳本，臨時容器命令應隔離標準輸入（例如 `</dev/null`），避免消耗後續部署指令。
+
+每批更新必須提交程式、相關測試及開發紀錄至 GitHub。公開紀錄不要包含憑證、私鑰、環境秘密、資料庫備份或私人管理資訊。GitHub提交與正式部署分開記錄，不能只做本機修改就宣稱已上傳。
+
+
+## Vercel 同步配置（2026-09-14）
+
+Vercel 建置使用 `node scripts/build-vercel.cjs`，從 Python 的 INDEX_HTML 匯出同一份靜態首頁與圖示，使用 Build Output API。舊的預設 mock serverless 入口已移除，不在 Vercel 啟動採集或建立另一套 SQLite。資料與匯出接口轉送到既有 `https://hypeboss.cc` 正式後端。
+
+此配置依賴 hypeboss.cc 仍指向現有後端，不能直接把其 DNS 改到 Vercel，否則可能形成回送循環。若日後要遷移主網域，必須先建立獨立後端網域並修改轉送來源。GitHub 合併與 Vercel 最終驗證狀態見後續紀錄。
+
+Vercel 既有專案 hypeboss 已改連 virus11456/crypig，根目錄為程式庫根目錄，框架為 Other，正式分支追蹤 claude/brave-ptolemy-nn1nd8。新版已部署並通過正式畫面與來源數值比對；詳見 [合併與 Vercel 上線紀錄](releases/2026-09-14-vercel.md)。
+
+## 2026-09-14 路徑與合併重新查核
+
+PR #2 已合併。查核當下正式分支為 `224e0a61ce5605817102097b11adc5785fbd566d`，遠端另有 `main` 與 `fix/data-loading-and-provenance`，兩者所有提交均包含在正式分支；沒有待合併的遠端分支。
+
+Vercel Production Ready 版本為 `224e0a6`，Git 來源為 virus11456/crypig，正式分支為 claude/brave-ptolemy-nn1nd8。兩站首頁逐字符合該版本 INDEX_HTML。兩站各17個主要讀取路徑及 www 首頁均回傳200；穩定資料內容一致，行情回應差異僅為讀取時間造成的 age_seconds。
+
+VPS 工作目錄當下也為 `224e0a6` 且乾淨；四個關鍵執行檔（orchestrator、whale、market_data、page）容器雜湊與該提交一致，容器 healthy。VPS 當下仍使用舊修正分支名稱；內容已合併，後續部署應統一追蹤正式分支。Vercel 的資料路徑仍轉送 hypeboss.cc，不能改其 DNS 形成回送。
+
+目前工作環境沒有舊日期的本機目錄及其四份 outputs 原始紀錄；本次依遠端庫內 HANDOFF、CHANGELOG、OPTIMIZATION、Vercel 部署紀錄與實際服務重新核對，不能宣稱已復原或合併遺失的本機紀錄。舊版部署說明與 CHANGELOG 歷史段落是當時狀態，本節查核優先。
+
+上述路徑初查後，第二十五批已將VPS切換至正式分支並部署 `09af862`；容器healthy，全部43個Python檔案與提交一致。兩站主要接口與實際UI通過驗證，詳見第二十五批紀錄。
+
+## 第二十六批 LTH 資料流程
+
+預設指標使用 Orchestrator.lth_supply，與 /lth_history 共用一份背景快照，沿用原 lth_daily_supply_v1 快取檔案。TTL為6小時或UTC換日（先到者），失敗退避1小時。每個進程一個背景載入；仍不可任意增加API workers。來源日期與取得時間分開，不將來源日期倒退或快取衝突當成新資料。冷啟動分析先記no_data、接口503，下一次讀取或分析使用實際取得值。自訂LTH指標與獨立建立agent保留原行為；本批不宣稱涵蓋自訂來源去重。實作與上線狀態見 CHANGELOG。
+
+## 發布節奏（使用者 2026-09-14 指示）
+
+由維護者自行決定批次發布時機。一項可驗證的修正完成且相關測試通過，就安排部署與正式驗證，不等待使用者催促，也不把可發布修改累積整天。登入、權限或實際風險造成阻礙時立即說明；提交、前端發布及後端部署分開記錄。
