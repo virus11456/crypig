@@ -321,3 +321,14 @@ test('population links select the requested cohort without another fetch',()=>{
  h.run("document.getElementById('account-inspector').scrollIntoView=()=>{};openAccountGroup('whale')");
  assert.equal(h.run('ACCOUNT_GROUP'),'whale');assert.equal(h.elements.get('account-inspector').open,true);
 });
+
+test('chart tooltip stays inside narrow viewports and charts support pointer taps',()=>{
+ const h=setup(async()=>response({}));
+ h.run("window.innerWidth=320;window.innerHeight=640");
+ const tip=h.run("document.getElementById('ctip')");tip.offsetWidth=300;tip.offsetHeight=90;
+ h.run("ctip({clientX:315,clientY:635},'日期與數值')");
+ assert.equal(tip.style.left,'10px');assert.equal(tip.style.top,'533px');
+ h.run("ctip({clientX:0,clientY:0},'日期與數值')");assert.equal(tip.style.top,'8px');
+ assert.match(h.run("lineChart([{t:1,v:1},{t:2,v:2}],{})"),/onpointerdown="lineTip/);
+ assert.match(h.run("barChart([{t:1,v:1},{t:2,v:2}],{})"),/onpointerdown="ctip/);
+});

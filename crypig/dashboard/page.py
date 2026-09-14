@@ -244,6 +244,47 @@ INDEX_HTML = r"""<!doctype html>
 .behavior-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.behavior-card{padding:16px;background:#101820;border:1px solid #303943;border-radius:10px;line-height:1.8}.behavior-card strong{font-size:23px}.activity-controls{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.activity-controls select{background:#161f28;color:#e6edf3;border:1px solid #465363;padding:8px;border-radius:6px}.activity-table{overflow:auto}.activity-table table{width:100%;white-space:nowrap}.activity-table button{color:#79b8ff;background:none;border:0;cursor:pointer}.activity-kpis{display:flex;gap:24px;flex-wrap:wrap;margin:16px 0}.activity-kpis strong{font-size:22px;display:block}@media(max-width:800px){.behavior-grid{grid-template-columns:1fr}}
 
 .reading-guide{padding:24px 0 30px}.reading-guide h2{font-size:clamp(23px,3vw,32px);margin:8px 0 14px;line-height:1.5}.reading-guide p{max-width:780px;color:#aab8c6;line-height:1.8}.eyebrow{font-size:12px;letter-spacing:.14em}.reading-guide nav{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}.reading-guide a,.detail-link{display:inline-block;color:#a7d5ff;background:#182430;border:1px solid #35475a;border-radius:8px;padding:10px 14px;text-decoration:none;font-size:14px;cursor:pointer}.population{padding:24px;margin-bottom:24px;border:1px solid #344453;border-radius:16px;background:#101820;scroll-margin-top:90px}.population-heading{display:flex;gap:16px;align-items:flex-start;margin-bottom:20px}.population-number{font-size:14px;color:#91b5d2;padding:8px;border:1px solid #35475a;border-radius:8px}.population h2{font-size:26px;margin:0 0 8px}.population-heading p{margin:0;color:#aab8c6;line-height:1.6}.population h3{font-size:14px;color:#aab8c6;margin:0 0 12px}.brief-main{font-size:19px;line-height:1.8;margin:0 0 12px;color:#edf5fc}.brief-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}.reading-hint{border-top:1px solid #2b3b49;padding-top:16px;margin:18px 0;color:#b2c3d1;line-height:1.8;font-size:14px}.population .ccard{margin:12px 0;background:#0d141c}.population .detail-link{margin:8px 8px 0 0}.market-support{padding-top:20px;scroll-margin-top:90px}.market-support>h2{font-size:23px}.market-support>.meta{margin-bottom:24px}#account-inspector{scroll-margin-top:90px}a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid #9ad5ff;outline-offset:4px}@media(max-width:700px){.population{padding:18px 14px}.brief-grid{grid-template-columns:1fr;gap:20px}.brief-grid>div+div{border-top:1px solid #2b3b49;padding-top:20px}.population .csum{display:none}.brief-main{font-size:17px}.reading-guide h2{font-size:24px}}
+
+/* Responsive layout: preserve content, contain wide tables, wrap card controls. */
+html{-webkit-text-size-adjust:100%;scroll-padding-top:100px}
+.wrap>* ,.population-heading>div,.brief-grid>div,.box,.row>*{min-width:0}
+.brief-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.row{flex-wrap:wrap;gap:8px}
+.ctitle{white-space:normal;overflow-wrap:anywhere;min-width:0}
+.chev{flex:none;margin-left:auto}
+.meta,.reason,.step,.reading-hint,.brief-main{overflow-wrap:anywhere}
+.pchip,.htag{white-space:normal;overflow-wrap:anywhere;max-width:100%}
+.scroll,.activity-table{max-width:100%;overscroll-behavior-x:contain}
+.activity-controls select,.filt{max-width:100%;min-width:0}
+.kpis>*{min-width:0;max-width:100%}
+.kpis .chart-kpi{flex:1 1 260px;min-width:0;max-width:100%}
+.ctip{max-width:calc(100vw - 20px);white-space:normal;overflow-wrap:anywhere}
+@media(max-width:1024px){
+ header{position:relative;padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));padding-top:max(12px,env(safe-area-inset-top))}
+ .wrap{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));padding-bottom:max(18px,env(safe-area-inset-bottom))}
+ .ctitle{flex:1}.csum{flex-basis:100%;order:3;white-space:normal}
+ details.ccard>summary{flex-wrap:wrap;gap:8px;align-items:flex-start}
+ .population .csum{display:none}
+ button,.rtoggle button,.activity-controls select,.filt,.dl,.detail-link,.reading-guide a{min-height:44px}
+ input,select{font-size:16px!important}
+ .reading-guide{padding:12px 0 18px}
+ .population{padding:20px;margin-bottom:10px}
+ .brief-grid{grid-template-columns:1fr}
+ .brief-grid>div+div{border-top:1px solid #2b3b49;padding-top:20px}
+ .population,#account-inspector,.market-support{scroll-margin-top:16px}
+ html{scroll-padding-top:0}
+}
+@media(max-width:560px){
+ .population{padding:16px 12px}.population-heading{gap:10px}.population h2{font-size:23px}
+ .nav{flex-wrap:wrap;margin-left:0;max-width:100%}.nav button{padding:8px 10px}
+ .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpis .chart-kpi{grid-column:1/-1}
+ .activity-controls label{display:flex;flex-wrap:wrap;gap:6px;align-items:center;max-width:100%}
+ .activity-controls select{width:100%}
+ .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .opps{grid-template-columns:minmax(0,1fr)}
+ .ask input{flex-basis:100%}.conf{flex-wrap:wrap;gap:8px}
+ .reading-guide nav{gap:8px}.reading-guide a{flex:1 1 calc(50% - 8px);text-align:center}
+}
 </style>
 </head>
 <body>
@@ -823,7 +864,7 @@ function lineChart(pts, opts){
     <circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="3.5" fill="${col}"/>
     <circle id="lm-${gid}" r="4" fill="${col}" stroke="#0d1117" stroke-width="1.5" style="display:none" pointer-events="none"/>
     ${ticks}${yl}
-    <rect x="${L}" y="${T}" width="${(W-L-R).toFixed(1)}" height="${(H-T-Bm).toFixed(1)}" fill="transparent" onmousemove="lineTip(event,'${gid}')" onmouseout="lineOut('${gid}')"/></svg>`;
+    <rect x="${L}" y="${T}" width="${(W-L-R).toFixed(1)}" height="${(H-T-Bm).toFixed(1)}" fill="transparent" onpointerdown="lineTip(event,'${gid}')" onmousemove="lineTip(event,'${gid}')" onmouseout="lineOut('${gid}')"/></svg>`;
 }
 // 線圖滑過：依滑鼠 x 找最近資料點，顯示日期＋數值並標出該點
 function dateLab(t,spanD){ if(t==null) return ''; const d=new Date(Number(t)*1000), p2=x=>('0'+x).slice(-2);
@@ -1015,7 +1056,7 @@ function barChart(pts, opts){
   const bars=pts.map((p,i)=>{ const y=ys(p.v), x=xs(i)-bw/2, top=Math.min(y,z), hh=Math.max(0.6,Math.abs(y-z));
     const lab=dlab(p.t)+'　'+(opts.tip?opts.tip(p):(p.v>=0?'+':'')+fa(p.v));
     const bar=`<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" rx="1" fill="${p.v>=0?(opts.up||'#3fb950'):(opts.down||'#f85149')}" pointer-events="none"/>`;
-    const hit=`<rect x="${(xs(i)-colW/2).toFixed(1)}" y="${T}" width="${colW.toFixed(1)}" height="${(H-T-Bm).toFixed(1)}" fill="transparent" onmousemove="ctip(event,'${lab}')" onmouseout="ctipHide()"/>`;
+    const hit=`<rect x="${(xs(i)-colW/2).toFixed(1)}" y="${T}" width="${colW.toFixed(1)}" height="${(H-T-Bm).toFixed(1)}" fill="transparent" onpointerdown="ctip(event,'${lab}')" onmousemove="ctip(event,'${lab}')" onmouseout="ctipHide()"/>`;
     return bar+hit; }).join('');
   let ticks;
   if(n<=10){   // 柱不多→每根標日期
@@ -1030,8 +1071,9 @@ function barChart(pts, opts){
 // 圖表浮動提示（滑過柱顯示日期＋數值）
 function ctip(e,txt){ const t=document.getElementById('ctip'); if(!t)return;
   t.textContent=txt; t.style.display='block';
-  t.style.left=Math.min(window.innerWidth-t.offsetWidth-10, e.clientX+12)+'px';
-  t.style.top=Math.max(8, e.clientY-34)+'px'; }
+  t.style.left=Math.max(10,Math.min(window.innerWidth-t.offsetWidth-10, e.clientX+12))+'px';
+  t.style.top=Math.max(8,Math.min(window.innerHeight-t.offsetHeight-8,e.clientY-t.offsetHeight-12))+'px'; }
+document.addEventListener('scroll',()=>ctipHide(),true);
 function ctipHide(){ const t=document.getElementById('ctip'); if(t)t.style.display='none'; }
 // 依區間分桶：24h→每小時一柱、30天→每天一柱（取桶內最後一筆淨持倉）
 function bucketNet(all, rangeKey){
@@ -1247,7 +1289,7 @@ async function loadSocial(){
         <div class="kpis"><div class="kpi"><div class="v" style="color:${col};font-size:34px">${fg.value}</div>
           <div class="k">${String(fg.label||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</div></div>
           <div class="kpi"><div class="v" style="color:${col}">${fg.percentile??'—'}%</div><div class="k">歷史百分位</div></div>
-          <div style="flex:1;min-width:260px">${spark}</div></div>
+          <div class="chart-kpi">${spark}</div></div>
         <div class="meta">${pctNote}｜區間 ${fg.hist_min}–${fg.hist_max}。百分位只表示情緒在歷史資料中的位置，不是反轉機率。</div>
       </div>`;
     }
