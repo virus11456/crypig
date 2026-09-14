@@ -28,6 +28,8 @@ def _fm(d: dict) -> str:
     for k, v in d.items():
         if isinstance(v, list):
             lines.append(f"{k}: [{', '.join(map(str, v))}]")
+        elif v is None:
+            lines.append(f"{k}: null")
         else:
             lines.append(f"{k}: {v}")
     lines.append("---")
@@ -36,6 +38,22 @@ def _fm(d: dict) -> str:
 
 def _dir_label(label: str) -> str:
     return label or "—"
+
+
+def _source_note(data: dict) -> str:
+    from datetime import datetime, timezone
+    def stamp(value):
+        return datetime.fromtimestamp(value, timezone.utc).isoformat() if value is not None else "無資料"
+    meta = data.get("quote_meta") or {}
+    times = data.get("valuation_times") or {}
+    status = "過期或尚無資料，費率不輸出" if meta.get("stale", True) else "未過期"
+    if meta.get("refresh_failed"):
+        status += "；最近刷新失敗，保留原取得時間"
+    return (f"來源：{meta.get('source', '未提供')}；行情取得（UTC）：{stamp(meta.get('fetched_at'))}（{status}）。\n"
+            f"跨交易所 OI 取得（UTC）：{stamp(times.get('aggregate_oi'))}；"
+            f"市值取得（UTC）：{stamp(times.get('market_caps'))}。\n"
+            f"分析完成：{data.get('analysis_completed_at') or '無資料'}；匯出時間：{data['ts']}。\n"
+            "合約部位不代表 BTC 現貨；不同樣本與分類可重疊。跨交易所 OI 缺值不以單一交易所補入。")
 
 
 def export_vault(data: dict, vault_dir: str) -> dict:
@@ -70,7 +88,9 @@ def _write_coins(root: Path, data: dict) -> int:
 - 🐋 巨鯨淨多空：{pct(c.get('whale_net'))}
 - 📉 日線背離：{div}
 - 資金費率(年化)：{pct(c.get('funding_ann'))}
-- OI/Cap：{('%.2f%%' % (c['oi_cap']*100)) if c.get('oi_cap') else '—'}
+- 跨交易所合約 OI/市值：{('%.2f%%' % (c['oi_cap']*100)) if c.get('oi_cap') is not None else '—'}
+
+{_source_note(data)}
 
 ## 對照（找 alpha 的線索）
 - KOL 看法：{' '.join(f'[[KOL/{k[0]}]]' for k in _KOL)}
@@ -98,6 +118,7 @@ def _write_journal(root: Path, data: dict) -> None:
                 f"，槓桿中位 {g.get('lev_median')}x")
 
     lines = [fm, "", f"# {data['date']} 市場快照", "",
+             _source_note(data), "",
              "## 🧭 大玩家決心",
              f"- 🧠 聰明錢：{conv(sm)}",
              f"- 🐋 巨鯨：{conv(wh)}", ""]

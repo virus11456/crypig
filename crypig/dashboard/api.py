@@ -308,7 +308,6 @@ def validate_signals() -> dict:
 
 
 _market: MarketDataClient | None = None
-_hl = None
 
 
 def market() -> MarketDataClient:
@@ -316,14 +315,6 @@ def market() -> MarketDataClient:
     if _market is None:
         _market = MarketDataClient()
     return _market
-
-
-def hl():
-    global _hl
-    if _hl is None:
-        from ..clients.hyperliquid import HyperliquidClient
-        _hl = HyperliquidClient()
-    return _hl
 
 
 def _mock_hl_scan() -> list[dict]:
@@ -525,19 +516,23 @@ def _build_vault_data(orc) -> dict:
     """彙整匯出 Obsidian 所需資料：重點幣、大玩家決心、鯨魚鏈上變化。"""
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
-    try:
-        hlmap = {r["symbol"]: r for r in hl().funding_scan()}
-    except Exception:
-        hlmap = {}
+    if orc.config.use_mock:
+        scan, quote_meta = _mock_hl_scan(), {"source": "mock", "fetched_at": None,
+                                           "stale": False, "refresh_failed": False}
+    else:
+        scan, quote_meta = orc.quotes.read()
+    # Export reads a detached snapshot; never refresh an upstream on download.
+    hlmap = {r["symbol"]: r for r in scan} if not quote_meta.get("stale", True) else {}
     caps, deriv = orc.market_caps, orc.deriv_agg
     coins = []
     for sym, sc in (orc.all_scores or {}).items():
         h = hlmap.get(sym, {})
         cap = (caps.get(sym) or {}).get("market_cap")
-        oi = (deriv.get(sym) or {}).get("open_interest_usd") or h.get("open_interest_usd")
+        oi = (deriv.get(sym) or {}).get("open_interest_usd")
         coins.append({"symbol": sym, **sc, "funding_ann": h.get("funding_ann"),
-                      "oi_cap": (oi / cap) if (oi and cap) else None, "_oi": oi or 0})
-    coins.sort(key=lambda c: c["_oi"], reverse=True)
+                      "oi_cap": (oi / cap) if oi is not None and cap is not None and cap > 0 else None,
+                      "_oi": oi})
+    coins.sort(key=lambda c: (c["_oi"] is not None, c["_oi"] if c["_oi"] is not None else 0), reverse=True)
     coins = coins[:40]
 
     overall = {}
@@ -569,7 +564,9 @@ def _build_vault_data(orc) -> dict:
     summ = orc.trader_summary or {}
     return {"coins": coins, "ts": ts, "date": now.strftime("%Y-%m-%d"),
             "smart_summary": summ.get("smart"), "whale_summary": summ.get("whale"),
-            "overall": overall, "radar": radar, "radar_conv": radar_conv}
+            "overall": overall, "radar": radar, "radar_conv": radar_conv,
+            "quote_meta": quote_meta, "valuation_times": dict(orc.valuation_times),
+            "analysis_completed_at": orc.cycle_status()["analysis"]["completed_at"]}
 
 
 @app.get("/vault.zip")

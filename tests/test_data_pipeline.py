@@ -63,7 +63,7 @@ def client(monkeypatch):
 
 def test_cold_dashboard_reads_never_run_cycle_or_write_history(client, monkeypatch):
     c, fake = client
-    monkeypatch.setattr(api, 'hl', Mock(side_effect=AssertionError('Direct upstream call')))
+    monkeypatch.setattr(HyperliquidClient, 'funding_scan', Mock(side_effect=AssertionError('Direct upstream call')))
     for route in ['/signal','/decisions','/macro','/positioning','/scores','/hl_market',
                   '/radar','/social','/reddit','/news','/defi']:
         r = c.get(route)
