@@ -242,6 +242,8 @@ INDEX_HTML = r"""<!doctype html>
     .opps{grid-template-columns:1fr 1fr;gap:8px}
   }
 .behavior-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.behavior-card{padding:16px;background:#101820;border:1px solid #303943;border-radius:10px;line-height:1.8}.behavior-card strong{font-size:23px}.activity-controls{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.activity-controls select{background:#161f28;color:#e6edf3;border:1px solid #465363;padding:8px;border-radius:6px}.activity-table{overflow:auto}.activity-table table{width:100%;white-space:nowrap}.activity-table button{color:#79b8ff;background:none;border:0;cursor:pointer}.activity-kpis{display:flex;gap:24px;flex-wrap:wrap;margin:16px 0}.activity-kpis strong{font-size:22px;display:block}@media(max-width:800px){.behavior-grid{grid-template-columns:1fr}}
+
+.reading-guide{padding:24px 0 30px}.reading-guide h2{font-size:clamp(23px,3vw,32px);margin:8px 0 14px;line-height:1.5}.reading-guide p{max-width:780px;color:#aab8c6;line-height:1.8}.eyebrow{font-size:12px;letter-spacing:.14em}.reading-guide nav{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}.reading-guide a,.detail-link{display:inline-block;color:#a7d5ff;background:#182430;border:1px solid #35475a;border-radius:8px;padding:10px 14px;text-decoration:none;font-size:14px;cursor:pointer}.population{padding:24px;margin-bottom:24px;border:1px solid #344453;border-radius:16px;background:#101820;scroll-margin-top:90px}.population-heading{display:flex;gap:16px;align-items:flex-start;margin-bottom:20px}.population-number{font-size:14px;color:#91b5d2;padding:8px;border:1px solid #35475a;border-radius:8px}.population h2{font-size:26px;margin:0 0 8px}.population-heading p{margin:0;color:#aab8c6;line-height:1.6}.population h3{font-size:14px;color:#aab8c6;margin:0 0 12px}.brief-main{font-size:19px;line-height:1.8;margin:0 0 12px;color:#edf5fc}.brief-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}.reading-hint{border-top:1px solid #2b3b49;padding-top:16px;margin:18px 0;color:#b2c3d1;line-height:1.8;font-size:14px}.population .ccard{margin:12px 0;background:#0d141c}.population .detail-link{margin:8px 8px 0 0}.market-support{padding-top:20px;scroll-margin-top:90px}.market-support>h2{font-size:23px}.market-support>.meta{margin-bottom:24px}#account-inspector{scroll-margin-top:90px}a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid #9ad5ff;outline-offset:4px}@media(max-width:700px){.population{padding:18px 14px}.brief-grid{grid-template-columns:1fr;gap:20px}.brief-grid>div+div{border-top:1px solid #2b3b49;padding-top:20px}.population .csum{display:none}.brief-main{font-size:17px}.reading-guide h2{font-size:24px}}
 </style>
 </head>
 <body>
@@ -258,57 +260,69 @@ INDEX_HTML = r"""<!doctype html>
 <div id="page-strategy" style="display:none"></div>
 <div id="page-market"><div class="wrap">
   <div id="bigmoney"></div>
-  <section id="account-activity" class="box"><h2>同帳號 BTC 合約異動</h2><p class="meta">載入中…</p></section>
-  <details class="ccard" open>
-    <summary><span class="ctitle">⏳ 長期持有者 BTC 供給變化</span><span class="csum" id="sum-lth">載入中…</span><span class="chev">▾</span></summary>
-    <div id="lth"><div class="box empty">長期持有者日資料載入中…</div></div>
-  </details>
-  <details class="ccard" open>
-    <summary><span class="ctitle">🧠 聰明錢 BTC 淨持倉變化 <small style="opacity:.7">合約</small></span><span class="csum" id="sum-smartbtc">載入中…</span><span class="chev">▾</span></summary>
-    <div id="smartbtc"><div class="box empty">聰明錢 BTC 合約分析載入中…</div></div>
-  </details>
-
+  <section class="population" id="group-whales" aria-labelledby="heading-whales">
+    <div class="population-heading"><span class="population-number">01</span><div><h2 id="heading-whales">巨鯨</h2><p>先分清現貨地址，再看合約大額帳號。</p></div></div>
+    <div id="brief-whales" class="population-brief">資料載入中…</div>
   <details class="ccard">
-    <summary><span class="ctitle">🐋 合約大額帳號 BTC 淨持倉變化 <small style="opacity:.7">合約</small></span><span class="csum" id="sum-whale">載入中…</span><span class="chev">▾</span></summary>
-    <div id="whalechart"><div class="box empty">巨鯨 BTC 買賣偵測載入中…</div></div>
-  </details>
-
-  <details class="ccard" open>
     <summary><span class="ctitle">🪙 BTC 現貨地址餘額分組 <small style="opacity:.7">鏈上現貨</small></span><span class="csum" id="sum-onchain">載入中…</span><span class="chev">▾</span></summary>
     <div id="onchainwhale"><div class="box empty">鏈上巨鯨持幣量載入中…</div></div>
   </details>
-
+  <details class="ccard">
+    <summary><span class="ctitle">🐋 合約大額帳號 BTC 淨持倉變化 <small style="opacity:.7">合約</small></span><span class="csum" id="sum-whale">載入中…</span><span class="chev">▾</span></summary>
+    <div id="whalechart"><div class="box empty">大額帳號 BTC 合約部位載入中…</div></div>
+  </details>
+    <button class="detail-link" onclick="openAccountGroup('whale')">查閱大額帳號異動 →</button>
+  </section>
+  <section class="population" id="group-smart" aria-labelledby="heading-smart">
+    <div class="population-heading"><span class="population-number">02</span><div><h2 id="heading-smart">聰明錢</h2><p>先看同一批帳號的 BTC 合約數量，再看群體趨勢。</p></div></div>
+    <div id="brief-smart" class="population-brief">資料載入中…</div>
+  <details class="ccard">
+    <summary><span class="ctitle">🧠 聰明錢 BTC 淨持倉變化 <small style="opacity:.7">合約</small></span><span class="csum" id="sum-smartbtc">載入中…</span><span class="chev">▾</span></summary>
+    <div id="smartbtc"><div class="box empty">聰明錢 BTC 合約分析載入中…</div></div>
+  </details>
+    <button class="detail-link" onclick="openAccountGroup('smart_verified')">查閱已驗證帳號異動 →</button>
+    <button class="detail-link" onclick="openAccountGroup('smart_pnl_only')">查看歷史獲利補入組 →</button>
+  </section>
+  <section class="population" id="group-lth" aria-labelledby="heading-lth">
+    <div class="population-heading"><span class="population-number">03</span><div><h2 id="heading-lth">長期持有者</h2><p>看舊幣供給如何變化，先比較近 7 天與近 30 天。</p></div></div>
+    <div id="brief-lth" class="population-brief">資料載入中…</div>
+  <details class="ccard">
+    <summary><span class="ctitle">⏳ 長期持有者 BTC 供給變化</span><span class="csum" id="sum-lth">載入中…</span><span class="chev">▾</span></summary>
+    <div id="lth"><div class="box empty">長期持有者日資料載入中…</div></div>
+  </details>
+  </section>
+  <details class="ccard" id="account-inspector"><summary><span class="ctitle">同帳號異動明細</span><span class="chev">▾</span></summary>
+    <section id="account-activity" class="box"><h2>同帳號 BTC 合約異動</h2><p class="meta">載入中…</p></section>
+  </details>
+  <section id="market-support" class="market-support" aria-labelledby="heading-support">
+    <h2 id="heading-support">市場背景與其他資料</h2>
+    <p class="meta">看完三類群體，再用行情、資金與情緒補充背景；這些指標不能代替群體的實際動作。</p>
   <details class="ccard">
     <summary><span class="ctitle">🌐 全市場宏觀</span><span class="csum" id="sum-macro">載入中…</span><span class="chev">▾</span></summary>
     <div id="macro"><div class="box empty">宏觀載入中…</div></div>
   </details>
-
   <details class="ccard">
     <summary><span class="ctitle">💰 資金動向</span><span class="csum" id="sum-defi">載入中…</span><span class="chev">▾</span></summary>
     <div id="defi"><div class="box empty">資金動向載入中…</div></div>
   </details>
-
-  <details class="ccard" open>
+  <details class="ccard">
     <summary><span class="ctitle">💵 穩定幣總供應</span><span class="csum" id="sum-stable">載入中…</span><span class="chev">▾</span></summary>
     <div id="stablecoins"><div class="box empty">穩定幣總供應載入中…</div></div>
   </details>
-  <section id="opp" class="hero"><h2>🎯 情緒與合約部位分歧</h2><div class="meta">載入中…</div></section>
-
+<details class="ccard"><summary><span class="ctitle">情緒與合約部位分歧</span><span class="chev">▾</span></summary>  <section id="opp" class="hero"><h2>🎯 情緒與合約部位分歧</h2><div class="meta">載入中…</div></section></details>
   <details class="ccard">
     <summary><span class="ctitle">🎯 分歧雷達</span><span class="csum" id="sum-radar">載入中…</span><span class="chev">▾</span></summary>
     <div id="radar"><div class="box empty">分歧雷達載入中…</div></div>
   </details>
-
   <details class="ccard">
     <summary><span class="ctitle">🧭 合約帳號部位比較</span><span class="csum" id="sum-pos">載入中…</span><span class="chev">▾</span></summary>
     <div id="pos"><div class="box empty">大玩家決心載入中…</div></div>
   </details>
-
   <details class="ccard">
     <summary><span class="ctitle">📋 幣別總表</span><span class="csum" id="sum-table">載入中…</span><span class="chev">▾</span></summary>
     <div id="table"><div class="box empty">幣別總表載入中…</div></div>
   </details>
-
+  </section>
 </div></div>
 <script>
 
@@ -850,19 +864,33 @@ function renderBigMoney(){
   const el=document.getElementById('bigmoney'); if(!el) return;
   const freshness=r=>r?.as_of?'截至 '+r.as_of+((r.meta?.stale||Date.now()-Date.parse(r.as_of)>3*86400000)?'｜資料延遲':''):'';
   const whale=OC_INFO?supplyBehavior(OC_INFO,'大額地址合計餘額'):'資料載入中…';
-  const bands=(OC_INFO?.cohorts||[]).map(c=>supplyBehavior(c,c.label)).join(' ');
-  el.innerHTML=`<section class="box"><h2>三類行為分別分析</h2><p class="meta">先看持有與部位，再看變化。鏈上日資料與合約快照更新頻率不同，各自顯示時間。</p><div class="behavior-grid">
-    <p class="behavior-card"><b>⏳ 長期持有者</b><br><strong>${LTH_INFO?htmlText(btcQuantity(LTH_INFO.balance_btc)+' BTC'):"—"}</strong><br>｜${LTH_INFO?supplyBehavior(LTH_INFO,'LTH 供給'):(LTH_ERR||'資料載入中…')}<br><span class="meta">${freshness(LTH_INFO)}${LTH_ERR?'｜'+LTH_ERR:''}｜觀察舊幣供給變化；增加不等於新買入。</span></p>
-    <p class="behavior-card"><b>🐋 現貨巨鯨地址</b><br><strong>${OC_INFO?htmlText(btcQuantity((OC_INFO.cohorts||[]).reduce((n,c)=>n+c.balance_btc,0))+' BTC'):"—"}</strong><br>｜${whale}<br>${bands}<br><span class="meta">${freshness(OC_INFO)}${OC_ERR?'｜'+OC_ERR:''}｜地址分組可能含交易所與託管；不能由餘額確認抄底或拋售。</span></p>
-    <p class="behavior-card"><b>🧠 聰明錢合約</b><br>｜${smartBehavior()}<br><span class="meta">${SB_ALL.length?'截至 '+new Date(SB_ALL.at(-1).t*1000).toISOString():''}｜Hyperliquid 合約追蹤樣本；名單可能包含僅依歷史獲利補入的帳號。名目差額包含價格與樣本更換，不等於成交或 BTC 現貨買賣。</span></p>
-    </div></section>`;
+  el.innerHTML=`<section class="reading-guide"><p class="eyebrow">BTC 群體行為</p><h2>三類群體，各自看動作。</h2><p>先讀摘要，再展開圖表。三類可能重疊，不能加總成買賣結論。</p><nav aria-label="首頁分析區塊"><a href="#group-whales">巨鯨</a><a href="#group-smart">聰明錢</a><a href="#group-lth">長期持有者</a><a href="#market-support">市場背景 ↓</a></nav></section>`;
+  document.getElementById('brief-whales').innerHTML=`<div class="brief-grid"><div><h3>現貨地址</h3><p class="brief-main">${htmlText(OC_ERR||whale)}</p><p class="meta">${htmlText(freshness(OC_INFO))}｜餘額分組可能含交易所與託管，減少不等於賣出。</p></div><div><h3>合約大額帳號</h3>${accountBrief('whale')}<p class="meta">合約方向與現貨地址分開看，不代表同一批持有人。</p></div></div><p class="reading-hint">怎麼搭配看：先確認變的是地址餘額還是合約部位；兩邊方向不同時，保留差異，不推測原因。</p>`;
+  document.getElementById('brief-smart').innerHTML=`<h3>已驗證組 · BTC 合約</h3>${accountBrief('smart_verified')}<p class="meta">Hyperliquid 合約追蹤樣本；歷史獲利補入組另外列示，不能當成已驗證組。</p><p class="reading-hint">怎麼搭配看：先看同帳號多倉與空倉的數量變化，再展開下方群體趨勢。群體名目金額也會受價格與追蹤名單影響。</p>`;
+  document.getElementById('brief-lth').innerHTML=`<p class="brief-main">${htmlText(LTH_ERR||(LTH_INFO?supplyBehavior(LTH_INFO,'LTH 供給'):'資料載入中…'))}</p><p class="meta">${htmlText(freshness(LTH_INFO))}｜按幣齡分類，供給減少不直接代表賣出。</p><p class="reading-hint">怎麼搭配看：近 7 天看近期變化，近 30 天看較長期間。增加可能是幣齡成熟，減少可能是舊幣移動；請分別查看巨鯨與聰明錢。</p>`;
+
+}
+function accountBrief(group){
+  if(ACCOUNT_DATA?.persist_failed)return '<p class="brief-main">本輪保存失敗，暫不提供異動摘要。</p>';
+  const r=ACCOUNT_DATA?.groups?.[group]?.previous;
+  if(!r)return '<p class="brief-main">同帳號資料尚待累積或取得。</p>';
+  const stamp=r.as_of?new Date(r.as_of*1000).toLocaleString():'—';
+  const age=r.as_of&&Date.now()/1000-r.as_of>3600?'｜資料延遲':'';
+  if(!r.baseline_at||!r.matched)return `<p class="brief-main">歷史不足或沒有共同可比帳號，暫不判斷增減。</p><p class="meta">截至 ${htmlText(stamp)}${age}</p>`;
+  const change=(label,n)=>label+(Number.isFinite(n)?(n>0?'增加 ':n<0?'減少 ':'持平 ')+btcQuantity(Math.abs(n))+' BTC':'資料不足');
+  return `<p class="brief-main">${change('多倉',r.long_change_btc)}；${change('空倉',r.short_change_btc)}。</p><p class="meta">相較上一筆（${htmlText(new Date(r.baseline_at*1000).toLocaleString())}），同組可比 ${r.matched} 個帳號。<br>截至 ${htmlText(stamp)}${age}；未取得 ${r.failed??'—'} 個帳號。新納入與移出不計為加減倉。</p>`;
+}
+function openAccountGroup(group){
+  ACCOUNT_GROUP=group;renderAccountActivity();
+  const panel=document.getElementById('account-inspector');panel.open=true;
+  panel.scrollIntoView({behavior:'smooth',block:'start'});
 }
 let ACCOUNT_DATA=null, ACCOUNT_GROUP='smart_verified', ACCOUNT_WINDOW='previous', ACCOUNT_ROWS=[], ACCOUNT_HISTORY_TOKEN=0;
 const ACTION_NAMES={unchanged:'持平',open_long:'新開多倉',open_short:'新開空倉',close_long:'多倉歸零',close_short:'空倉歸零',flip_long:'空轉多',flip_short:'多轉空',add_long:'增加多倉',add_short:'增加空倉',reduce_long:'減少多倉',reduce_short:'減少空倉'};
 function btcQuantity(v){return Number.isFinite(v)?v.toLocaleString(undefined,{maximumFractionDigits:5}):'—';}
 async function loadAccountActivity(){
-  try{const next=await apiJSON('/account_activity');if(JSON.stringify(next)!==JSON.stringify(ACCOUNT_DATA)){ACCOUNT_DATA=next;renderAccountActivity();}}
-  catch(e){document.getElementById('account-activity').innerHTML='<h2>同帳號 BTC 合約異動</h2><p>暫時無法取得，請稍後重新整理。</p>';}
+  try{const next=await apiJSON('/account_activity');if(JSON.stringify(next)!==JSON.stringify(ACCOUNT_DATA)){ACCOUNT_DATA=next;renderAccountActivity();renderBigMoney();}}
+  catch(e){ACCOUNT_DATA=null;renderBigMoney();document.getElementById('account-activity').innerHTML='<h2>同帳號 BTC 合約異動</h2><p>暫時無法取得，請稍後重新整理。</p>';}
 }
 function renderAccountActivity(){
   const r=ACCOUNT_DATA?.groups?.[ACCOUNT_GROUP]?.[ACCOUNT_WINDOW];

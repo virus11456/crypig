@@ -162,7 +162,7 @@ test('three cohorts describe independent trends, not a consensus trade',async()=
  const h=setup(async url=>response(fixture(url)));await h.run('refresh()');
  h.run(`LTH_INFO={as_of:'2026-09-11',changes_btc:{7:-10,30:-20}};
  OC_INFO={as_of:'2026-09-11',changes_btc:{7:10,30:-30},cohorts:[]};renderBigMoney()`);
- const text=h.elements.get('bigmoney').innerHTML;
+ const text=['brief-whales','brief-smart','brief-lth'].map(id=>h.elements.get(id).innerHTML).join('');
  assert.match(text,/LTH 供給：近 7 天減少，近 30 天減少/);
  assert.match(text,/大額地址合計餘額：近 30 天減少，但近 7 天轉為增加/);
  assert.match(text,/Hyperliquid 合約/);
@@ -298,4 +298,26 @@ test('LTH exposes acquisition time separately from source age and refresh failur
  h.run('LTH_INFO.meta={};renderLTH()');
  assert.match(h.elements.get('lth').innerHTML,/取得時間：未提供/);
  assert.doesNotMatch(h.elements.get('lth').innerHTML,/UTC 今天 0 天/);
+});
+
+test('home preserves all panels under three populations and market context',()=>{
+ const html=page.split('<script>')[0];
+ for(const id of ['bigmoney','account-activity','lth','smartbtc','whalechart','onchainwhale','macro','defi','stablecoins','opp','radar','pos','table']) {
+  assert.equal(html.split('id="'+id+'"').length-1,1,id);
+ }
+ assert(html.indexOf('id="group-whales"')<html.indexOf('id="group-smart"'));
+ assert(html.indexOf('id="group-smart"')<html.indexOf('id="group-lth"'));
+ assert(html.indexOf('id="group-lth"')<html.indexOf('id="market-support"'));
+ assert(!/<details class="ccard" open>/.test(html));
+});
+test('population account briefs use same-account BTC changes and keep missing data unknown',()=>{
+ const h=setup();h.run(`ACCOUNT_DATA={groups:{whale:{previous:{as_of:2000,baseline_at:1000,matched:3,long_change_btc:0,short_change_btc:-2,failed:1}}}}`);
+ assert.match(h.run("accountBrief('whale')"),/多倉持平 0 BTC；空倉減少 2 BTC/);
+ assert.match(h.run("accountBrief('smart_verified')"),/尚待累積/);
+ h.run('ACCOUNT_DATA.persist_failed=true');assert.match(h.run("accountBrief('whale')"),/保存失敗/);
+});
+test('population links select the requested cohort without another fetch',()=>{
+ const h=setup(()=>{throw Error('unexpected request')});
+ h.run("document.getElementById('account-inspector').scrollIntoView=()=>{};openAccountGroup('whale')");
+ assert.equal(h.run('ACCOUNT_GROUP'),'whale');assert.equal(h.elements.get('account-inspector').open,true);
 });
