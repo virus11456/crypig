@@ -320,14 +320,17 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
 @media(max-width:560px){.wrap{gap:16px}details.ccard>summary{padding:16px 14px}details.ccard .box{padding:18px 14px}.ctitle{font-size:14px}.kpis>.kpi{padding:12px}.kpi .v{font-size:21px}.pchip{padding:6px 9px}.activity-kpis>div{flex-basis:100%}.tbl th,.tbl td{padding:12px}.posrow{padding:14px}.activity-table th,.activity-table td{padding:12px 14px}}
 .strategy-table-scroll{overflow-x:auto;margin:16px 0;border:1px solid #263340;border-radius:8px}.strategy-table-scroll table.vt{min-width:580px;table-layout:auto;margin:0}.strategy-table-scroll table.vt td,.strategy-table-scroll table.vt th{white-space:nowrap;padding:14px 18px;overflow-wrap:normal}.strategy-table-scroll table.vt td:not(:first-child){text-align:right}@media(max-width:680px){.strategy-table-scroll:after{content:'左右滑動查看完整欄位';display:block;font-size:12px;color:#9eacba;padding:10px}}
 *{scrollbar-color:#465b6e #111b25;scrollbar-width:thin}
+
+.replay-panel{background:linear-gradient(140deg,#142634,#101923);border:1px solid #385166;border-radius:16px;padding:24px;overflow:hidden}.replay-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.replay-heading h2{margin:8px 0;font-size:24px}.replay-heading .eyebrow{margin:0;color:#a7cadb}.replay-controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:24px 0 16px}.replay-controls label{font-size:13px;color:#aabaca;display:flex;gap:8px;align-items:center}.replay-controls select{min-height:44px;padding:8px;color:#e6edf3;background:#101923;border:1px solid #476174;border-radius:6px;max-width:100%}.replay-controls button,.replay-heading button{min-height:44px}.replay-time{font-variant-numeric:tabular-nums;line-height:1.8;color:#c8dce9;font-size:14px}#replay-slider{width:100%;min-height:44px;accent-color:#67d6e8;cursor:pointer}#replay-chart{max-width:100%;overflow-x:auto}#replay-chart svg{width:100%;min-width:460px;display:block;max-height:330px}.replay-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.replay-details article{padding:16px;background:#101b26;border:1px solid #304454;border-radius:10px;line-height:1.7}.replay-details h3{font-size:14px;margin:0 0 10px;color:#c9e1ed}.replay-details p{margin:8px 0;font-size:14px}@media(max-width:700px){.replay-panel{padding:18px 14px}.replay-heading h2{font-size:21px}.replay-details{grid-template-columns:1fr}.replay-controls label{flex-wrap:wrap}.replay-controls{gap:10px}#replay-chart:after{content:'左右滑動看完整多空長條';font-size:12px;color:#9eacba;display:block;margin:8px 0}}
+.replay-axis,.replay-values{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-variant-numeric:tabular-nums}.replay-axis{font-size:13px;color:#aabaca;margin:20px 0}.replay-track-row{margin:22px 0}.replay-track-row h4{margin:0 0 12px;font-size:15px}.replay-tracks{display:grid;grid-template-columns:1fr 1fr;gap:2px}.replay-tracks>div{height:32px;background:#243644;display:flex;align-items:center;min-width:0}.replay-tracks .replay-short{justify-content:flex-end;border-right:1px solid #c2d7e3}.replay-tracks i{height:24px;display:block;border-radius:3px}.replay-tracks span{font-size:12px;color:#aabaca;padding:4px}.replay-values{font-size:15px;margin-top:10px}.replay-details .meta{font-size:12px}#replay-chart:after{content:none}
 </style>
 </head>
 <body>
 <header>
   <h1>🐷 大戶行為觀察台</h1>
   <span class="nav">
-    <button id="nav-market" class="on" onclick="showPage('market')">📊 行為觀察</button>
-    <button id="nav-strategy" onclick="showPage('strategy')">🧠 策略 / Obsidian</button>
+    <button id="nav-market" class="on" onclick="stopReplay();showPage('market')">📊 行為觀察</button>
+    <button id="nav-strategy" onclick="stopReplay();showPage('strategy')">🧠 策略 / Obsidian</button>
   </span>
   <span style="flex:1"></span>
   <span class="ts" id="ts">載入中…</span>
@@ -336,6 +339,16 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
 <div id="page-strategy" style="display:none"></div>
 <div id="page-market"><div class="wrap">
   <div id="bigmoney"></div>
+  <section class="replay-panel" aria-labelledby="replay-heading">
+    <div class="replay-heading"><div><p class="eyebrow">BTC 合約 · 歷史快照</p><h2 id="replay-heading">巨鯨 × 聰明錢｜持倉回放</h2></div><button id="replay-load" onclick="loadReplay()">開啟回放</button></div>
+    <p class="meta">看多倉與空倉如何隨時間變動。只播放已保存的 BTC 數量；不代表現貨買賣或資金在群體之間流動。群體可能重疊，不加總。</p>
+    <div id="replay-content" hidden>
+      <div class="replay-controls"><button id="replay-play" onclick="toggleReplay()">播放</button><label>期間 <select id="replay-range" onchange="setReplayRange(this.value)"><option value="24h">近24小時</option><option value="7d">近7天</option></select></label><label>聰明錢分組 <select id="replay-group" onchange="setReplayGroup(this.value)"><option value="smart_verified">已驗證組</option><option value="smart_pnl_only">歷史獲利補入組</option></select></label><label>速度 <select id="replay-speed" onchange="REPLAY_SPEED=Number(this.value)"><option value="1000">每秒1筆</option><option value="2000">每2秒1筆</option><option value="500">每秒2筆</option></select></label></div>
+      <p id="replay-time" class="replay-time"></p>
+      <input id="replay-slider" type="range" min="0" max="0" value="0" step="1" aria-label="選擇已保存快照" oninput="seekReplay(this.value)"/>
+      <div id="replay-chart"></div><div id="replay-details" class="replay-details"></div>
+    </div><p id="replay-status" class="meta">按「開啟回放」讀取歷史，不會重新抓取持倉。</p>
+  </section>
   <section class="population" id="group-whales" aria-labelledby="heading-whales">
     <div class="population-heading"><span class="population-number">01</span><div><h2 id="heading-whales">巨鯨</h2><p>先分清現貨地址，再看合約大額帳號。</p></div></div>
     <div id="brief-whales" class="population-brief">資料載入中…</div>
@@ -1139,6 +1152,54 @@ function flowDir(flow){
   return {lastSign, streak, accel};
 }
 // 🧠 聰明錢 BTC 吸籌偵測：連續加碼 + 加碼量遞增 = 加速吸籌（柱狀＋24H/30天可選）
+let REPLAY_DATA=null, REPLAY_FRAMES=[], REPLAY_INDEX=0, REPLAY_RANGE='24h', REPLAY_GROUP='smart_verified', REPLAY_TIMER=null, REPLAY_SPEED=1000;
+function replayFrames(data,range){
+  const cutoff=(data?.as_of||0)-(range==='7d'?7*86400:86400);
+  return (data?.frames||[]).filter(f=>Number.isFinite(f.ts)&&f.ts>=cutoff&&f.ts<=data.as_of).slice().sort((a,b)=>a.ts-b.ts);
+}
+function stopReplay(){if(REPLAY_TIMER!==null)clearTimeout(REPLAY_TIMER);REPLAY_TIMER=null;const b=document.getElementById('replay-play');if(b)b.textContent='播放';}
+async function loadReplay(){
+  stopReplay();const b=document.getElementById('replay-load');b.disabled=true;
+  try{const data=await apiJSON('/account_replay');REPLAY_DATA=data;REPLAY_FRAMES=replayFrames(data,REPLAY_RANGE);REPLAY_INDEX=0;
+    document.getElementById('replay-content').hidden=!REPLAY_FRAMES.length;
+    document.getElementById('replay-status').textContent=data.status==='persist_failed'?'本輪保存失敗，暫不提供回放。':!REPLAY_FRAMES.length?'尚無已完成的持倉快照，等待累積。':'範圍最多近7天、505筆。每一步是一筆實際紀錄，時間間隔不一定相同；不補值、不插入虛構快照。';
+    b.textContent='更新快照';renderReplay();
+  }catch(e){document.getElementById('replay-status').textContent='讀取失敗'+(REPLAY_FRAMES.length?'，保留上次載入的回放；請留意快照日期。':'，請稍後重試。');}
+  finally{b.disabled=false;}
+}
+function setReplayRange(value){stopReplay();REPLAY_RANGE=value==='7d'?'7d':'24h';REPLAY_FRAMES=replayFrames(REPLAY_DATA,REPLAY_RANGE);REPLAY_INDEX=0;renderReplay();}
+function setReplayGroup(value){stopReplay();REPLAY_GROUP=value==='smart_pnl_only'?'smart_pnl_only':'smart_verified';renderReplay();}
+function seekReplay(value){stopReplay();REPLAY_INDEX=Math.max(0,Math.min(REPLAY_FRAMES.length-1,Number(value)||0));renderReplay();}
+function toggleReplay(){
+  if(REPLAY_TIMER!==null){stopReplay();return;}if(REPLAY_FRAMES.length<2)return;
+  if(REPLAY_INDEX>=REPLAY_FRAMES.length-1)REPLAY_INDEX=0;
+  document.getElementById('replay-play').textContent='暫停';renderReplay();
+  const advance=()=>{if(document.hidden){stopReplay();return;}REPLAY_INDEX++;renderReplay();if(REPLAY_INDEX>=REPLAY_FRAMES.length-1){stopReplay();return;}REPLAY_TIMER=setTimeout(advance,REPLAY_SPEED);};
+  REPLAY_TIMER=setTimeout(advance,REPLAY_SPEED);
+}
+function replayGraphic(frames,index,smartGroup){
+  const f=frames[index];if(!f)return '';
+  const scale=Math.max(1,...frames.flatMap(x=>['whale',smartGroup].flatMap(g=>[x.groups?.[g]?.long_btc,x.groups?.[g]?.short_btc].filter(Number.isFinite))));
+  const rows=[['whale','巨鯨 · 合約大額','#67d6e8'],[smartGroup,smartGroup==='smart_verified'?'聰明錢 · 已驗證':'聰明錢 · 獲利補入','#e4bd7b']];
+  return `<div class="replay-axis"><span>← 空倉 BTC</span><span>多倉 BTC →</span></div>${rows.map(([g,label,col])=>{
+    const r=f.groups?.[g]||{};
+    return `<div class="replay-track-row"><h4 style="color:${col}">${label}</h4><div class="replay-tracks" role="img" aria-label="${label}，空倉 ${btcQuantity(r.short_btc)} BTC，多倉 ${btcQuantity(r.long_btc)} BTC"><div class="replay-short">${Number.isFinite(r.short_btc)?`<i style="width:${r.short_btc/scale*100}%;background:${col};opacity:.6"></i>`:'<span>未取得</span>'}</div><div>${Number.isFinite(r.long_btc)?`<i style="width:${r.long_btc/scale*100}%;background:${col}"></i>`:'<span>未取得</span>'}</div></div><div class="replay-values"><span>空 ${btcQuantity(r.short_btc)} BTC</span><span>多 ${btcQuantity(r.long_btc)} BTC</span></div></div>`;
+  }).join('')}<p class="meta">中心為 0 · 兩組共同比例尺，每側上限 ${btcQuantity(scale)} BTC</p>`;
+
+}
+function renderReplay(){
+  const f=REPLAY_FRAMES[REPLAY_INDEX],slider=document.getElementById('replay-slider');
+  slider.max=Math.max(0,REPLAY_FRAMES.length-1);slider.value=REPLAY_INDEX;slider.disabled=REPLAY_FRAMES.length<2;document.getElementById('replay-play').disabled=REPLAY_FRAMES.length<2;
+  if(!f){document.getElementById('replay-chart').innerHTML='';document.getElementById('replay-details').innerHTML='';document.getElementById('replay-time').textContent='這個期間沒有可播放快照。';return;}
+  const gap=f.baseline_at?f.ts-f.baseline_at:null;
+  const stamp=new Date(f.ts*1000).toLocaleString();slider.setAttribute?.('aria-valuetext',stamp);
+  document.getElementById('replay-time').textContent='批次記錄 '+stamp+' · '+(REPLAY_INDEX+1)+' / '+REPLAY_FRAMES.length+' 筆'+(gap?' · 距上一筆 '+Math.round(gap/60)+' 分鐘'+(gap>2400?'（採集間隔較長）':''):' · 無上一筆對照')+(Date.now()/1000-REPLAY_DATA.as_of>3600?' · 最新快照已超過1小時':'');
+  document.getElementById('replay-chart').innerHTML=replayGraphic(REPLAY_FRAMES,REPLAY_INDEX,REPLAY_GROUP);
+  const change=(name,v)=>name+(Number.isFinite(v)?(v>0?'增加 ':v<0?'減少 ':'持平 ')+btcQuantity(Math.abs(v))+' BTC':'無可比資料');
+  document.getElementById('replay-details').innerHTML=[['whale','巨鯨'],[REPLAY_GROUP,REPLAY_GROUP==='smart_verified'?'聰明錢 · 已驗證組':'聰明錢 · 歷史獲利補入組']].map(([g,name])=>{const r=f.groups?.[g]||{};return `<article><h3>${name}</h3><p>同帳號：${change('多倉',r.long_change_btc)}；${change('空倉',r.short_change_btc)}。</p><p class="meta">相較${f.baseline_at?htmlText(new Date(f.baseline_at*1000).toLocaleString()):'無上一筆'}｜共同可比 ${r.matched??0} 個帳號<br>取得 ${r.received??0} / ${r.selected??0}，失敗 ${r.failed??0}；名單新增 ${r.entered??'—'}、移出 ${r.exited??'—'}。${r.failed?'本筆長條僅包含成功取得的帳號。':''}<br>持倉取得：${r.observed_from?htmlText(new Date(r.observed_from*1000).toLocaleString()):'未取得'}${r.observed_to&&r.observed_to!==r.observed_from?' ～ '+htmlText(new Date(r.observed_to*1000).toLocaleString()):''}</p></article>`;}).join('');
+}
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopReplay();});
+
 let SB_ALL=[], SB_RANGE='24h';
 function setSBRange(rg){ SB_RANGE=rg; renderSmartBTC(); }
 async function loadSmartBTC(){

@@ -414,6 +414,29 @@ def account_history(address: str = Query(..., pattern="^0x[0-9a-fA-F]{40}$"),
     return {"history":store.history(address,cohort,as_of), "as_of":as_of}
 
 
+from functools import lru_cache
+
+
+@lru_cache(maxsize=4)
+def _account_replay_snapshot(path: str, as_of: float) -> dict:
+    from ..storage.account_positions import AccountPositions
+    return AccountPositions(path).timeline(as_of)
+
+
+@app.get("/account_replay")
+def account_replay() -> dict:
+    orc = dashboard_state()
+    activity = orc.trader_summary.get("account_activity", {})
+    if activity.get("persist_failed"):
+        return {"frames":[], "status":"persist_failed"}
+    timestamps = [g.get("previous",{}).get("as_of") for g in activity.get("groups",{}).values()]
+    timestamps = [ts for ts in timestamps if ts is not None]
+    if not timestamps:
+        return {"frames":[], "status":"waiting"}
+    path = str(Path(orc.config.posseries_db).parent / "account_positions.db")
+    return _account_replay_snapshot(path, min(timestamps))
+
+
 @app.get("/whale_history")
 def whale_history(symbol: str = "BTC", cohort: str = Query("whale", pattern="^(whale|smart)$"), limit: int = Query(400, ge=1, le=5000)) -> dict:
     """HL 巨鯨(淨值前N)對某幣的合約淨持倉時間序列——逐輪累積，看部位翻轉=進場時機。"""

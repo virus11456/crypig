@@ -86,3 +86,37 @@ class AccountPositions:
             v=members.get(address)
             rows.append({'ts':ts,'btc':v['btc'] if v else None,'status':'observed' if v else 'failed' if address in members else 'not_selected'})
         return rows
+
+    def timeline(self, as_of, days=7):
+        """Saved contract quantities only; no resampling, interpolation or addresses in output."""
+        with self.connect() as c:
+            batches = c.execute(
+                'SELECT ts,payload FROM btc_account_batches WHERE ts<=? AND ts>=? ORDER BY ts DESC LIMIT 505',
+                (as_of, as_of-days*86400)).fetchall()
+        frames=[]
+        previous=None
+        for ts,payload in reversed(batches):
+            groups=json.loads(payload)
+            frame={'ts':ts, 'baseline_at':frames[-1]['ts'] if frames else None, 'groups':{}}
+            for group in GROUPS:
+                now=groups.get(group,{})
+                valid={a:v for a,v in now.items() if v is not None}
+                before=previous.get(group,{}) if previous is not None else {}
+                common=[a for a in valid if before.get(a) is not None]
+                frame['groups'][group]={
+                    'selected':len(now), 'received':len(valid), 'failed':len(now)-len(valid),
+                    'long_btc':sum(max(v['btc'],0) for v in valid.values()) if valid else None,
+                    'short_btc':sum(max(-v['btc'],0) for v in valid.values()) if valid else None,
+                    'observed_from':min((v['observed_at'] for v in valid.values()),default=None),
+                    'observed_to':max((v['observed_at'] for v in valid.values()),default=None),
+                    'matched':len(common),
+                    'long_change_btc':sum(max(valid[a]['btc'],0)-max(before[a]['btc'],0) for a in common) if common else None,
+                    'short_change_btc':sum(max(-valid[a]['btc'],0)-max(-before[a]['btc'],0) for a in common) if common else None,
+                    'entered':len(set(now)-set(before)) if previous is not None else None,
+                    'exited':len(set(before)-set(now)) if previous is not None else None,
+                }
+            frames.append(frame)
+            previous=groups
+        return {'frames':frames,'as_of':as_of,'unit':'BTC','market':'Hyperliquid perpetual',
+                'note':'Recorded quantities. Groups may overlap; totals reflect membership and failed reads. Matched changes exclude roster changes.',
+                'limit':505}

@@ -340,3 +340,21 @@ test('balance comparison keeps missing values and renders readable desktop and m
  assert.match(html,/測試 &lt;地址&gt;/);assert.match(html,/資料不足/);assert.match(html,/缺少對照日/);assert.match(html,/>0 BTC</);assert.match(html,/-2 BTC/);
  assert.match(html,/資料來源與解讀限制/);
 });
+
+test('replay uses recorded timestamps, fixed scale, missing values and independent groups',()=>{
+ const h=setup();h.run(`REPLAY_DATA={as_of:10000,frames:[{ts:1000,groups:{whale:{long_btc:10,short_btc:5},smart_verified:{long_btc:1,short_btc:0}}},{ts:9000,baseline_at:1000,groups:{whale:{long_btc:null,short_btc:null},smart_verified:{long_btc:2,short_btc:0}}}]};REPLAY_FRAMES=replayFrames(REPLAY_DATA,'24h');renderReplay()`);
+ assert.deepEqual(Array.from(h.run('REPLAY_FRAMES.map(f=>f.ts)')),[1000,9000]);
+ assert.match(h.elements.get('replay-chart').innerHTML,/每側上限 10 BTC/);
+ h.run('seekReplay(1)');assert.match(h.elements.get('replay-chart').innerHTML,/未取得/);assert.match(h.elements.get('replay-time').textContent,/採集間隔較長/);
+ assert.match(h.elements.get('replay-chart').innerHTML,/空 0 BTC/);
+ h.run("setReplayGroup('smart_pnl_only')");assert.match(h.elements.get('replay-chart').innerHTML,/獲利補入/);
+ assert.equal(h.run("replayFrames({as_of:90000,frames:[{ts:1},{ts:89999},{ts:90001}]},'24h').length"),1);
+});
+
+test('replay playback advances real snapshots and stops at the end or on seeking',()=>{
+ const h=setup();let callback;let cancelled=0;h.ctx.setTimeout=fn=>{callback=fn;return 42};h.ctx.clearTimeout=()=>cancelled++;
+ h.run('REPLAY_DATA={as_of:2};REPLAY_FRAMES=[{ts:1,groups:{}},{ts:2,groups:{}}];toggleReplay()');
+ assert.equal(h.elements.get('replay-play').textContent,'暫停');callback();
+ assert.equal(h.run('REPLAY_INDEX'),1);assert.equal(h.run('REPLAY_TIMER'),null);
+ h.run('toggleReplay();seekReplay(0)');assert.equal(h.run('REPLAY_TIMER'),null);assert(cancelled>0);
+});

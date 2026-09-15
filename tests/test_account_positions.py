@@ -83,3 +83,42 @@ def test_account_api_pins_completed_sample_and_validates_input(tmp_path, monkeyp
     assert len(result['history'])==1 and result['history'][0]['btc']==2
     assert client.get('/account_history',params={'address':'bad'}).status_code==422
     assert client.get('/account_history',params={'address':address,'cohort':'wrong'}).status_code==422
+
+
+def test_replay_excludes_roster_changes_and_missing_reads(tmp_path):
+    s=AccountPositions(tmp_path/'a.db')
+    s.record(1000,groups({'same':point(2), 'gone':point(50), 'failed':point(-3)}))
+    s.record(2200,groups({'same':point(3), 'new':point(100), 'failed':None}))
+    s.record(9400,groups({'same':None}))
+    result=s.timeline(9400)
+    assert [f['ts'] for f in result['frames']]==[1000,2200,9400]
+    row=result['frames'][1]['groups']['smart_verified']
+    assert row['long_btc']==103 and row['long_change_btc']==1
+    assert row['matched']==1 and row['entered']==1 and row['exited']==1 and row['failed']==1
+    last=result['frames'][-1]['groups']['smart_verified']
+    assert last['long_btc'] is None and last['short_btc'] is None and last['long_change_btc'] is None
+    assert len(s.timeline(2200)['frames'])==2
+    assert 'same' not in str(result)
+
+
+def test_replay_zero_is_observed_and_groups_do_not_merge(tmp_path):
+    s=AccountPositions(tmp_path/'a.db')
+    s.record(1000,{'smart_verified':{'a':point(0)},'whale':{'a':point(-4)},'smart_pnl_only':{}})
+    f=s.timeline(1000)['frames'][0]['groups']
+    assert f['smart_verified']['long_btc']==0 and f['smart_verified']['short_btc']==0
+    assert f['whale']['short_btc']==4 and f['smart_pnl_only']['long_btc'] is None
+
+
+def test_replay_api_pins_completed_batch_and_blocks_failed_save(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    from fastapi.testclient import TestClient
+    from crypig.dashboard import api
+    s=AccountPositions(tmp_path/'account_positions.db')
+    data=s.record(1000,groups({'a':point(2)}));s.record(2200,groups({'a':point(3)}))
+    view=SimpleNamespace(trader_summary={'account_activity':{'groups':data}},config=SimpleNamespace(posseries_db=str(tmp_path/'posseries.db')))
+    monkeypatch.setattr(api,'dashboard_state',lambda:view)
+    client=TestClient(api.app)
+    result=client.get('/account_replay').json()
+    assert len(result['frames'])==1 and result['as_of']==1000
+    view.trader_summary['account_activity']['persist_failed']=True
+    assert client.get('/account_replay').json()=={'frames':[],'status':'persist_failed'}
