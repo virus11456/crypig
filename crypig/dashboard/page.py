@@ -22,7 +22,7 @@ INDEX_HTML = r"""<!doctype html>
 <link rel="apple-touch-icon" href="/static/icon-192.png"/>
 <link rel="icon" type="image/png" href="/static/icon-192.png"/>
 <style>
-  :root{--bg:#0d1117;--card:#161b22;--line:#30363d;--fg:#e6edf3;--mut:#8b949e;
+  :root{color-scheme:dark;--bg:#0d1117;--card:#161b22;--line:#30363d;--fg:#e6edf3;--mut:#8b949e;
         --bull:#3fb950;--bear:#f85149;--neu:#8b949e;--accent:#58a6ff}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--fg);
@@ -285,6 +285,41 @@ html{-webkit-text-size-adjust:100%;scroll-padding-top:100px}
  .ask input{flex-basis:100%}.conf{flex-wrap:wrap;gap:8px}
  .reading-guide nav{gap:8px}.reading-guide a{flex:1 1 calc(50% - 8px);text-align:center}
 }
+
+/* Group balances: distinct overview, comparison, and history. */
+.balance-panel{font-variant-numeric:tabular-nums}
+details.ccard .box.balance-panel{padding:24px}
+.balance-overview{padding:0 0 24px}.balance-kicker{font-size:12px;color:#8ea9bf;letter-spacing:.1em}.balance-overview>p{font-size:21px;line-height:1.6;margin:8px 0}
+.balance-desktop{overflow-x:auto;border:1px solid #2b3947;border-radius:10px}
+.balance-table{width:100%;border-collapse:collapse;font-size:14px;white-space:nowrap}
+.balance-table caption{text-align:left;padding:16px 20px;background:#141f2a;font-weight:600}.balance-table caption span{float:right;color:#93a4b5;font-size:12px;font-weight:400}
+.balance-table th,.balance-table td{padding:18px 20px;text-align:right;border-bottom:1px solid #263340}
+.balance-table thead th{color:#9eafbf;font-size:12px;font-weight:500;background:#111b24}
+.balance-table th:first-child{text-align:left}.balance-table tbody th{font-weight:500}.balance-value{font-weight:650;color:#eef4fa}
+.balance-total{background:#172636}.balance-table .balance-total th,.balance-table .balance-total td{font-weight:650;border-bottom:0}
+.balance-change{white-space:nowrap}.balance-change.increase{color:#79d8ad}.balance-change.decrease{color:#ff9a9a}.balance-change.missing{color:#9eafbf;font-size:12px}
+.balance-mobile{display:none}.balance-trend-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:32px 0 20px}.balance-trend-heading h3{color:#e6edf3;font-size:17px;margin:0 0 6px}
+.balance-chart{padding:20px;margin:16px 0;background:#101923;border:1px solid #263340;border-radius:10px}.balance-chart h4{font-size:14px;margin:0 0 6px}.balance-chart .meta{margin-bottom:18px}
+.balance-chart-scroll{overflow-x:auto}.balance-chart-scroll svg{display:block;min-width:560px}
+.balance-notes{margin-top:24px;border-top:1px solid #2b3947;padding-top:18px;color:#9eafbf;font-size:13px;line-height:1.8}.balance-notes summary{cursor:pointer;color:#a9bdd0}.balance-notes a{color:#91c8f7}
+.activity-table{border:1px solid #2b3947;border-radius:9px;margin:16px 0;font-variant-numeric:tabular-nums}.activity-table table{border-collapse:collapse;font-size:14px}.activity-table th,.activity-table td{padding:14px 18px;text-align:right;border-bottom:1px solid #263340}.activity-table th{background:#15212c;color:#a9bdd0;font-size:12px;font-weight:500}.activity-table th:first-child,.activity-table td:first-child{text-align:left}.activity-table button{padding:6px 0}.activity-table tbody tr:last-child td{border-bottom:0}
+@media(max-width:900px){.balance-desktop{display:none}.balance-mobile{display:grid;gap:12px}.balance-card{padding:20px;border:1px solid #2b3947;border-radius:10px;background:#111c26}.balance-card.balance-total{background:#172636}.balance-card h4{font-size:14px;margin:0 0 18px;color:#c6d6e5}.balance-current{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin:0 0 18px}.balance-current>span{font-size:12px;color:#9eafbf}.balance-current strong{font-size:24px}.balance-current small{font-size:12px;color:#9eafbf;font-weight:400}.balance-card dl{margin:0;border-top:1px solid #2b3947;padding-top:10px}.balance-card dl>div{display:flex;justify-content:space-between;align-items:center;padding:8px 0;gap:16px}.balance-card dt{font-size:13px;color:#9eafbf}.balance-card dd{margin:0;font-size:15px}.balance-chart{padding:16px}.balance-chart-scroll:after{content:'左右滑動圖表查看完整日期';display:block;color:#9eafbf;font-size:11px;margin-top:12px}}
+@media(max-width:560px){details.ccard .box.balance-panel{padding:16px 12px}.balance-overview>p{font-size:18px}.balance-card{padding:16px}.balance-trend-heading{flex-wrap:wrap}.balance-chart{padding:12px}.balance-chart h4{line-height:1.6}}
+
+/* Shared reading rhythm across market and strategy panels. */
+.wrap{max-width:1280px;gap:20px}.box{line-height:1.65}.meta{line-height:1.75;color:#9eacba}.box>.meta{margin:10px 0 16px}
+.market-support>details.ccard{margin:16px 0}.ctitle{font-size:16px;line-height:1.6}.csum{font-size:13px;line-height:1.65}
+details.ccard>summary{padding:18px 22px}details.ccard .box{padding:22px}details.ccard[open]>summary{background:#14202b}
+.kpis{gap:14px;align-items:stretch;margin:18px 0}.kpis>.kpi{flex:1 1 140px;padding:16px;background:#101a24;border:1px solid #263340;border-radius:9px}.kpi .v{font-variant-numeric:tabular-nums;font-size:24px;line-height:1.3}.kpi .k{margin-top:8px;line-height:1.6;font-size:12px}
+.activity-kpis{gap:14px}.activity-kpis>div{padding:16px;background:#111c26;border:1px solid #2b3947;border-radius:9px;flex:1 1 160px}.activity-controls{padding:14px;background:#101a24;border-radius:8px;gap:16px}.activity-controls label{line-height:2}
+.tbl th,.tbl td{padding:13px 16px;font-variant-numeric:tabular-nums}.tbl th{font-size:12px}.scroll{border:1px solid #263340}.tbl tbody tr:nth-child(even){background:#111b25}
+table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.vt td{padding:10px 8px;line-height:1.7;overflow-wrap:anywhere}table.vt tbody tr:nth-child(even){background:#111b25}
+.posrow{padding:18px;margin:16px 0}.posname{margin-bottom:14px}.posstats{gap:10px}.pchip{padding:8px 12px}.newsrow{padding:16px 4px;line-height:1.7}.newsrow a{font-size:15px}.newslist{padding-right:10px}.sig,.nowbox,.vline,.vverdict{padding:14px 16px;line-height:1.8}.vsig{padding-top:24px;margin-top:24px}.vhead{font-size:16px;line-height:1.7}
+.chart-scroll{overflow-x:auto;max-width:100%;margin:18px 0;overscroll-behavior-x:contain}.chart-scroll>svg{display:block;min-width:680px}.chart-scroll:focus-visible{outline:2px solid #91c8f7;outline-offset:3px}
+@media(max-width:900px){.chart-scroll:after{content:'左右滑動查看日期與數值 · 點圖查看明細';display:block;color:#9eacba;font-size:12px;margin-top:10px;line-height:1.6}.balance-chart-scroll:after{content:none}}
+@media(max-width:560px){.wrap{gap:16px}details.ccard>summary{padding:16px 14px}details.ccard .box{padding:18px 14px}.ctitle{font-size:14px}.kpis>.kpi{padding:12px}.kpi .v{font-size:21px}.pchip{padding:6px 9px}.activity-kpis>div{flex-basis:100%}.tbl th,.tbl td{padding:12px}.posrow{padding:14px}.activity-table th,.activity-table td{padding:12px 14px}}
+.strategy-table-scroll{overflow-x:auto;margin:16px 0;border:1px solid #263340;border-radius:8px}.strategy-table-scroll table.vt{min-width:580px;table-layout:auto;margin:0}.strategy-table-scroll table.vt td,.strategy-table-scroll table.vt th{white-space:nowrap;padding:14px 18px;overflow-wrap:normal}.strategy-table-scroll table.vt td:not(:first-child){text-align:right}@media(max-width:680px){.strategy-table-scroll:after{content:'左右滑動查看完整欄位';display:block;font-size:12px;color:#9eacba;padding:10px}}
+*{scrollbar-color:#465b6e #111b25;scrollbar-width:thin}
 </style>
 </head>
 <body>
@@ -854,7 +889,7 @@ function lineChart(pts, opts){
   const yl=opts.ylabel?`<text x="13" y="${T+(H-T-Bm)/2}" fill="#6e7681" font-size="11" transform="rotate(-90 13 ${T+(H-T-Bm)/2})" text-anchor="middle">${opts.ylabel}</text>`:'';
   // 存圖資料供滑過查最近點顯示日期/數值
   LINE_DATA[gid]={L,R,W,n,pts,P,spanD,label:(p)=>(opts.tip?opts.tip(p):fa(p.v))};
-  return `<svg id="lc-${gid}" width="100%" viewBox="0 0 ${W} ${H}">
+  return `<div class="chart-scroll" tabindex="0" aria-label="趨勢圖，可左右捲動"><svg id="lc-${gid}" width="100%" viewBox="0 0 ${W} ${H}">
     <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="${col}" stop-opacity="0.30"/>
       <stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
@@ -864,7 +899,7 @@ function lineChart(pts, opts){
     <circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="3.5" fill="${col}"/>
     <circle id="lm-${gid}" r="4" fill="${col}" stroke="#0d1117" stroke-width="1.5" style="display:none" pointer-events="none"/>
     ${ticks}${yl}
-    <rect x="${L}" y="${T}" width="${(W-L-R).toFixed(1)}" height="${(H-T-Bm).toFixed(1)}" fill="transparent" onpointerdown="lineTip(event,'${gid}')" onmousemove="lineTip(event,'${gid}')" onmouseout="lineOut('${gid}')"/></svg>`;
+    <rect x="${L}" y="${T}" width="${(W-L-R).toFixed(1)}" height="${(H-T-Bm).toFixed(1)}" fill="transparent" onpointerdown="lineTip(event,'${gid}')" onmousemove="lineTip(event,'${gid}')" onmouseout="lineOut('${gid}')"/></svg></div>`;
 }
 // 線圖滑過：依滑鼠 x 找最近資料點，顯示日期＋數值並標出該點
 function dateLab(t,spanD){ if(t==null) return ''; const d=new Date(Number(t)*1000), p2=x=>('0'+x).slice(-2);
@@ -1016,7 +1051,10 @@ function renderOnchain(){
   const days=OC_RANGE==='7d'?7:30;
   const signed=v=>v==null?'缺少對照日':(v>0?'+':'')+Math.round(v).toLocaleString()+' BTC';
   const rows=OC_INFO?.cohorts||[];
-  const table=rows.length?`<table><thead><tr><th>BTC 地址持有量</th><th>目前餘額</th><th>近1天</th><th>近7天</th><th>近30天</th></tr></thead><tbody>${rows.map(c=>`<tr><td>${c.label}</td><td>${Math.round(c.balance_btc).toLocaleString()} BTC</td>${[1,7,30].map(n=>`<td>${signed(c.changes_btc[String(n)])}</td>`).join('')}</tr>`).join('')}<tr><td>兩組合計</td><td>${Math.round(all[all.length-1].btc).toLocaleString()} BTC</td>${[1,7,30].map(n=>`<td>${signed(OC_INFO.changes_btc[String(n)])}</td>`).join('')}</tr></tbody></table>`:'';
+  const displayRows=rows.length?[...rows,{label:'兩組合計',balance_btc:all[all.length-1].btc,changes_btc:OC_INFO.changes_btc,total:true}]:[];
+  const quantity=v=>Number.isFinite(v)?Math.round(v).toLocaleString():'資料不足';
+  const delta=v=>`<span class="balance-change ${Number.isFinite(v)?(v>0?'increase':v<0?'decrease':''):'missing'}">${signed(v)}</span>`;
+  const table=displayRows.length?`<div class="balance-desktop"><table class="balance-table"><caption>地址分組比較 <span>單位：BTC</span></caption><thead><tr><th scope="col">地址分組</th><th scope="col">目前餘額</th><th scope="col">近 1 天變化</th><th scope="col">近 7 天變化</th><th scope="col">近 30 天變化</th></tr></thead><tbody>${displayRows.map(c=>`<tr class="${c.total?'balance-total':''}"><th scope="row">${htmlText(c.label)}</th><td class="balance-value">${quantity(c.balance_btc)}</td>${[1,7,30].map(n=>`<td>${delta(c.changes_btc?.[String(n)])}</td>`).join('')}</tr>`).join('')}</tbody></table></div><div class="balance-mobile">${displayRows.map(c=>`<article class="balance-card ${c.total?'balance-total':''}"><h4>${htmlText(c.label)}</h4><p class="balance-current"><span>目前餘額</span><strong>${quantity(c.balance_btc)} <small>BTC</small></strong></p><dl>${[1,7,30].map(n=>`<div><dt>近 ${n} 天</dt><dd>${delta(c.changes_btc?.[String(n)])}</dd></div>`).join('')}</dl></article>`).join('')}</div>`:'';
   const charts=(rows.length?rows:[{id:'btc',label:OC_BANDS}]).map(c=>{
     const bars=[];let gaps=0;
     for(let i=1;i<all.length;i++){
@@ -1024,14 +1062,14 @@ function renderOnchain(){
       if(all[i].t-all[i-1].t!==86400){gaps++;continue;}
       const v=all[i][c.id]-all[i-1][c.id];if(Number.isFinite(v))bars.push({t:all[i].t,v});
     }
-    return `<div class="meta">${c.label}｜每日餘額差額${gaps?'｜缺日 '+gaps+' 段，不畫成單日變化':''}</div>${barChart(bars,{up:'#3fb950',down:'#f85149',tip:p=>(p.v>=0?'餘額增加 ':'餘額減少 ')+signed(p.v)})}`;
+    return `<section class="balance-chart"><h4>${htmlText(c.label)}</h4><p class="meta">每日餘額變化 · 單位 BTC${gaps?'｜缺日 '+gaps+' 段，不畫成單日變化':''}</p><div>${barChart(bars,{up:'#3fb950',down:'#f85149',tip:p=>(p.v>=0?'餘額增加 ':'餘額減少 ')+signed(p.v)})}</div></section>`;
   }).join('');
-  document.getElementById('onchainwhale').innerHTML=`<div class="box">
-    <div class="row" style="justify-content:space-between"><span>BTC 現貨地址餘額分組</span>${toggle}</div>
-    <p class="meta">${OC_ERR||''} 資料截至 ${new Date(all[all.length-1].t*1000).toISOString().slice(0,10)}。${OC_INFO?.note||'地址餘額變化不等於成交買賣。'}</p>
-    <p><b>${supplyBehavior(OC_INFO,"大額地址合計餘額")}</b></p><p class="meta">巨鯨按地址餘額分類；長期持有者按持有時間分類，請分別查看各自分析。</p>
-    <div style="overflow-x:auto">${table}</div><p class="meta">綠＝餘額增加，紅＝餘額減少。轉帳、交易所託管與跨分組均可能影響數值。</p>${charts}
-    <p class="meta">來源：<a href="https://bitcoin-data.com/v1/coins-addr-10K-1K-BTC" target="_blank" rel="noopener">1,000–10,000 BTC</a> ／ <a href="https://bitcoin-data.com/v1/coins-addr-10K-BTC" target="_blank" rel="noopener">超過10,000 BTC</a>；已替換待核實的 wallet-bands。</p></div>`;
+  document.getElementById('onchainwhale').innerHTML=`<div class="box balance-panel">
+    <div class="balance-overview"><span class="balance-kicker">餘額動向</span><p>${supplyBehavior(OC_INFO,"大額地址合計餘額")}</p><span class="meta">資料截至 ${new Date(all[all.length-1].t*1000).toISOString().slice(0,10)}${OC_ERR?' · '+htmlText(OC_ERR):''}</span></div>
+    ${table}
+    <div class="balance-trend-heading"><div><h3>每日變化</h3><p class="meta">綠＝餘額增加，紅＝餘額減少</p></div>${toggle}</div>
+    ${charts}
+    <details class="balance-notes"><summary>資料來源與解讀限制</summary><p>${htmlText(OC_INFO?.note||'地址餘額變化不等於成交買賣。')} 轉帳、交易所託管與跨分組均可能影響數值。巨鯨按地址餘額分類；長期持有者按持有時間分類，請分別查看各自分析。</p><p>來源：<a href="https://bitcoin-data.com/v1/coins-addr-10K-1K-BTC" target="_blank" rel="noopener">1,000–10,000 BTC 地址</a> ／ <a href="https://bitcoin-data.com/v1/coins-addr-10K-BTC" target="_blank" rel="noopener">超過10,000 BTC 地址</a></p></details></div>`;
   setSum('sum-onchain','BTC 地址分組｜近7天合計 '+signed(OC_INFO?.changes_btc?.['7']));
 
 }
@@ -1065,8 +1103,8 @@ function barChart(pts, opts){
     const nT=Math.min(6,n), idxs=[...new Set(Array.from({length:nT},(_,k)=>Math.round(k*(n-1)/(nT-1))))];
     ticks=idxs.map(i=>{const tx=Math.max(L+8,Math.min(W-R-8,xs(i)));return `<text x="${tx.toFixed(1)}" y="${H-8}" fill="#8b949e" font-size="12" text-anchor="middle">${dlab(pts[i].t)}</text>`;}).join('');
   }
-  return `<svg width="100%" viewBox="0 0 ${W} ${H}">${grid}
-    <line x1="${L}" y1="${z.toFixed(1)}" x2="${W-R}" y2="${z.toFixed(1)}" stroke="#484f58"/>${bars}${ticks}</svg>`;
+  return `<div class="chart-scroll" tabindex="0" aria-label="每日變化圖，可左右捲動"><svg width="100%" viewBox="0 0 ${W} ${H}">${grid}
+    <line x1="${L}" y1="${z.toFixed(1)}" x2="${W-R}" y2="${z.toFixed(1)}" stroke="#484f58"/>${bars}${ticks}</svg></div>`;
 }
 // 圖表浮動提示（滑過柱顯示日期＋數值）
 function ctip(e,txt){ const t=document.getElementById('ctip'); if(!t)return;
@@ -1371,7 +1409,7 @@ async function loadValidate(){
           <td style="text-align:right;color:${col(b.mean)}"><b>${b.mean==null?'—':(b.mean>0?'+':'')+b.mean+'%'}</b></td>
           <td style="text-align:right;color:${col(b.edge_mean)}">${b.edge_mean==null?'—':(b.edge_mean>0?'+':'')+b.edge_mean+'%'}</td></tr>`).join('');
         return `<div style="margin-top:8px"><div class="meta">前瞻 <b>${k}</b>　基準(全樣本) n=${o.n||0}・勝率 ${o.win_rate==null?'—':o.win_rate+'%'}・平均 <span style="color:${col(o.mean)}">${o.mean==null?'—':(o.mean>0?'+':'')+o.mean+'%'}</span></div>
-        <table class="vt"><thead><tr><th>區間</th><th>樣本</th><th>勝率</th><th>平均報酬</th><th>vs基準</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+        <div class="strategy-table-scroll" tabindex="0" aria-label="完整策略數字，可左右捲動"><table class="vt"><thead><tr><th>區間</th><th>樣本</th><th>勝率</th><th>平均報酬</th><th>vs基準</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
       }).join('');
     }
     // 直觀「上漲機率」直條：直條=該情緒下買進後上漲機率；灰線=隨便買的平均勝率(基準)

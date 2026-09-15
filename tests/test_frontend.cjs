@@ -332,3 +332,11 @@ test('chart tooltip stays inside narrow viewports and charts support pointer tap
  assert.match(h.run("lineChart([{t:1,v:1},{t:2,v:2}],{})"),/onpointerdown="lineTip/);
  assert.match(h.run("barChart([{t:1,v:1},{t:2,v:2}],{})"),/onpointerdown="ctip/);
 });
+
+test('balance comparison keeps missing values and renders readable desktop and mobile views',()=>{
+ const h=setup();h.run(`OC_ALL=[{t:86400,btc:10,whale:10},{t:172800,btc:10,whale:10}];OC_INFO={changes_btc:{1:0,7:null,30:-2},cohorts:[{id:'whale',label:'測試 <地址>',balance_btc:null,changes_btc:{1:0,7:null,30:-2}}]};renderOnchain()`);
+ const html=h.elements.get('onchainwhale').innerHTML;
+ assert.match(html,/class="balance-table"/);assert.match(html,/class="balance-mobile"/);
+ assert.match(html,/測試 &lt;地址&gt;/);assert.match(html,/資料不足/);assert.match(html,/缺少對照日/);assert.match(html,/>0 BTC</);assert.match(html,/-2 BTC/);
+ assert.match(html,/資料來源與解讀限制/);
+});
