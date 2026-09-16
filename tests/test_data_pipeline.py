@@ -104,6 +104,16 @@ def test_html_is_compressed(client):
     assert 'apiJSON' in r.text
 
 
+def test_html_exposes_sibling_simples_sites(client):
+    html = client[0].get('/').text
+    assert 'https://warhubs.com/' in html
+    assert 'https://moneytools-eight.vercel.app/tw' in html
+    assert 'https://simples.com.tw/' in html
+    assert html.split('<header>', 1)[1].split('</header>', 1)[0].count('戰情觀測站') == 1
+    assert html.split('<footer>', 1)[1].split('</footer>', 1)[0].count('SIMPLES 工具網') == 1
+    assert 'affiliate' not in html.lower()
+
+
 def test_daily_candles_are_closed_sorted_deduplicated_and_reused(monkeypatch):
     client = HyperliquidClient()
     day_ms = 86400000

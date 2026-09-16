@@ -98,6 +98,18 @@ INDEX_HTML = r"""<!doctype html>
   .nav{display:flex;gap:8px;margin-left:8px}
   .nav button{background:#21262d;color:var(--mut);font-weight:600}
   .nav button.on{background:var(--accent);color:#0d1117}
+  .sites{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px}
+  .sites a{display:inline-flex;align-items:center;color:#9eacba;text-decoration:none;
+           font-size:13px;font-weight:600;padding:6px 2px;border-bottom:1px solid transparent}
+  .sites a:hover,.sites a:active{color:var(--accent);border-bottom-color:var(--accent)}
+  .sites a:focus-visible{outline:2px solid #9ad5ff;outline-offset:3px;border-radius:2px}
+  header .sites{margin-left:4px;padding-left:14px;border-left:1px solid var(--line)}
+  footer{border-top:1px solid var(--line);padding:12px 24px;
+         padding-bottom:max(12px,env(safe-area-inset-bottom));
+         display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;background:var(--bg)}
+  footer .simples{margin-left:auto;color:#6e7681;font-size:12px;text-decoration:none;letter-spacing:.04em}
+  footer .simples:hover,footer .simples:active{color:var(--mut)}
+  footer .simples:focus-visible{outline:2px solid #9ad5ff;outline-offset:3px;border-radius:2px}
   .ask{display:flex;gap:8px;margin:10px 0}
   .ask input{flex:1;background:#0d1117;border:1px solid var(--line);color:var(--fg);
              border-radius:6px;padding:9px 12px;font-size:14px}
@@ -132,7 +144,10 @@ INDEX_HTML = r"""<!doctype html>
     header{padding:12px 14px;gap:8px 10px}
     header h1{font-size:16px;width:100%}
     header .nav{margin-left:0}
+    header .sites{margin-left:0;padding-left:0;border-left:0;width:100%}
     header .ts{font-size:11px;order:3;width:100%}
+    footer{padding:12px 14px}
+    footer .simples{margin-left:0}
     .nav button{padding:7px 10px;font-size:13px}
     main{padding:10px;gap:10px}
     .bt{padding:0 10px;margin-top:10px}
@@ -261,11 +276,12 @@ html{-webkit-text-size-adjust:100%;scroll-padding-top:100px}
 .ctip{max-width:calc(100vw - 20px);white-space:normal;overflow-wrap:anywhere}
 @media(max-width:1024px){
  header{position:relative;padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));padding-top:max(12px,env(safe-area-inset-top))}
+ footer{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));padding-bottom:max(12px,env(safe-area-inset-bottom))}
  .wrap{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));padding-bottom:max(18px,env(safe-area-inset-bottom))}
  .ctitle{flex:1}.csum{flex-basis:100%;order:3;white-space:normal}
  details.ccard>summary{flex-wrap:wrap;gap:8px;align-items:flex-start}
  .population .csum{display:none}
- button,.rtoggle button,.activity-controls select,.filt,.dl,.detail-link,.reading-guide a{min-height:44px}
+ button,.rtoggle button,.activity-controls select,.filt,.dl,.detail-link,.reading-guide a,.sites a{min-height:44px}
  input,select{font-size:16px!important}
  .reading-guide{padding:12px 0 18px}
  .population{padding:20px;margin-bottom:10px}
@@ -332,6 +348,10 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
     <button id="nav-market" class="on" onclick="stopReplay();showPage('market')">📊 行為觀察</button>
     <button id="nav-strategy" onclick="stopReplay();showPage('strategy')">🧠 策略 / Obsidian</button>
   </span>
+  <nav class="sites" aria-label="其他工具">
+    <a href="https://warhubs.com/" title="WARHUBS" rel="noopener noreferrer">戰情觀測站</a>
+    <a href="https://moneytools-eight.vercel.app/tw" title="Moneytools" rel="noopener noreferrer">美股雙重分析</a>
+  </nav>
   <span style="flex:1"></span>
   <span class="ts" id="ts">載入中…</span>
 </header>
@@ -413,6 +433,13 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
   </details>
   </section>
 </div></div>
+<footer>
+  <nav class="sites" aria-label="其他工具">
+    <a href="https://warhubs.com/" title="WARHUBS" rel="noopener noreferrer">戰情觀測站</a>
+    <a href="https://moneytools-eight.vercel.app/tw" title="Moneytools" rel="noopener noreferrer">美股雙重分析</a>
+  </nav>
+  <a class="simples" href="https://simples.com.tw/" rel="noopener noreferrer">SIMPLES 工具網</a>
+</footer>
 <script>
 
 const API_INFLIGHT = new Map(), API_CACHE = new Map();

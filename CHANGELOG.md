@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 2026-09-16（SIMPLES 工具網交叉導覽）
+
+- 頂部導覽與頁尾加入戰情觀測站（WARHUBS）與美股雙重分析（Moneytools）連結；頁尾另有淡色「SIMPLES 工具網」指紋。不更動交易／訊號邏輯。
+
 ### 2026-09-14（第二十八批：Hyperliquid 行情共用）
 
 - 全市場評分與WhaleAgent改讀QuoteStore同輪不可變快照，分析不再另抓metaAndAssetCtxs。首頁既有60秒排程維持；獨立使用WhaleAgent仍保留原介面。

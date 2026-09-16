@@ -351,6 +351,22 @@ test('replay uses recorded timestamps, fixed scale, missing values and independe
  assert.equal(h.run("replayFrames({as_of:90000,frames:[{ts:1},{ts:89999},{ts:90001}]},'24h').length"),1);
 });
 
+test('header and footer expose sibling SIMPLES tool sites',()=>{
+ const html=page.split('<script>')[0];
+ const header=html.split('<header>')[1].split('</header>')[0];
+ const footer=html.split('<footer>')[1].split('</footer>')[0];
+ assert.match(header,/href="https:\/\/warhubs\.com\/"/);
+ assert.match(header,/href="https:\/\/moneytools-eight\.vercel\.app\/tw"/);
+ assert.match(header,/戰情觀測站/);
+ assert.match(header,/美股雙重分析/);
+ assert.match(footer,/href="https:\/\/warhubs\.com\/"/);
+ assert.match(footer,/href="https:\/\/moneytools-eight\.vercel\.app\/tw"/);
+ assert.match(footer,/href="https:\/\/simples\.com\.tw\/"/);
+ assert.match(footer,/SIMPLES 工具網/);
+ assert.doesNotMatch(header,/affiliate|utm_/i);
+ assert.doesNotMatch(footer,/affiliate|utm_/i);
+});
+
 test('replay playback advances real snapshots and stops at the end or on seeking',()=>{
  const h=setup();let callback;let cancelled=0;h.ctx.setTimeout=fn=>{callback=fn;return 42};h.ctx.clearTimeout=()=>cancelled++;
  h.run('REPLAY_DATA={as_of:2};REPLAY_FRAMES=[{ts:1,groups:{}},{ts:2,groups:{}}];toggleReplay()');
