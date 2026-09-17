@@ -357,10 +357,13 @@ test('header and footer expose sibling SIMPLES tool sites',()=>{
  const footer=html.split('<footer>')[1].split('</footer>')[0];
  assert.match(header,/href="https:\/\/warhubs\.com\/"/);
  assert.match(header,/href="https:\/\/moneytools-eight\.vercel\.app\/tw"/);
+ assert.match(header,/href="https:\/\/toolist\.cc\/"/);
  assert.match(header,/戰情觀測站/);
  assert.match(header,/美股雙重分析/);
+ assert.match(header,/分頁工作區/);
  assert.match(footer,/href="https:\/\/warhubs\.com\/"/);
  assert.match(footer,/href="https:\/\/moneytools-eight\.vercel\.app\/tw"/);
+ assert.match(footer,/href="https:\/\/toolist\.cc\/"/);
  assert.match(footer,/href="https:\/\/simples\.com\.tw\/"/);
  assert.match(footer,/SIMPLES 工具網/);
  assert.doesNotMatch(header,/affiliate|utm_/i);

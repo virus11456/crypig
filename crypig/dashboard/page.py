@@ -351,6 +351,7 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
   <nav class="sites" aria-label="其他工具">
     <a href="https://warhubs.com/" title="WARHUBS" rel="noopener noreferrer">戰情觀測站</a>
     <a href="https://moneytools-eight.vercel.app/tw" title="Moneytools" rel="noopener noreferrer">美股雙重分析</a>
+    <a href="https://toolist.cc/" title="Toolist" rel="noopener noreferrer">分頁工作區</a>
   </nav>
   <span style="flex:1"></span>
   <span class="ts" id="ts">載入中…</span>
@@ -437,6 +438,7 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
   <nav class="sites" aria-label="其他工具">
     <a href="https://warhubs.com/" title="WARHUBS" rel="noopener noreferrer">戰情觀測站</a>
     <a href="https://moneytools-eight.vercel.app/tw" title="Moneytools" rel="noopener noreferrer">美股雙重分析</a>
+    <a href="https://toolist.cc/" title="Toolist" rel="noopener noreferrer">分頁工作區</a>
   </nav>
   <a class="simples" href="https://simples.com.tw/" rel="noopener noreferrer">SIMPLES 工具網</a>
 </footer>
