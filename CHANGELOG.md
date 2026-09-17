@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### 2026-09-17（Toolist 交叉導覽與 Stocktools 更名）
+
+- 頂部導覽與頁尾「其他工具」加入分頁工作區（Toolist）連結。
+- 美股雙重分析連結由 Moneytools 改為 Stocktools（https://stocktools.cc/）。不更動交易／訊號邏輯。
+
 ### 2026-09-16（SIMPLES 工具網交叉導覽）
 
 - 頂部導覽與頁尾加入戰情觀測站（WARHUBS）與美股雙重分析（Moneytools）連結；頁尾另有淡色「SIMPLES 工具網」指紋。不更動交易／訊號邏輯。
