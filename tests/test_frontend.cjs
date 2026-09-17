@@ -374,6 +374,24 @@ test('header and footer expose sibling SIMPLES tool sites',()=>{
  assert.doesNotMatch(footer,/affiliate|utm_/i);
 });
 
+test('header exposes one OKX and one Pionex signup link',()=>{
+ const html=page.split('<script>')[0];
+ const header=html.split('<header>')[1].split('</header>')[0];
+ const footer=html.split('<footer>')[1].split('</footer>')[0];
+ const okx='https://okx.com/join/75395880';
+ const pionex='https://www.pionex.com/zh-TW/signUp?r=0rcgGsu5GKg';
+ assert.equal(html.split(okx).length-1,1);
+ assert.equal(html.split(pionex).length-1,1);
+ assert.match(header,new RegExp(`href="${okx.replaceAll('/','\\/')}"[^>]*target="_blank"[^>]*rel="noopener noreferrer"`));
+ assert.match(header,new RegExp(`href="${pionex.replaceAll('/','\\/').replaceAll('?','\\?')}"[^>]*target="_blank"[^>]*rel="noopener noreferrer"`));
+ assert.match(header,/OKX 開戶/);
+ assert.match(header,/派網開戶/);
+ assert.doesNotMatch(footer,/okx\.com\/join/);
+ assert.doesNotMatch(footer,/pionex\.com/);
+ assert.doesNotMatch(header,/affiliate|utm_/i);
+ assert.doesNotMatch(footer,/affiliate|utm_/i);
+});
+
 test('replay playback advances real snapshots and stops at the end or on seeking',()=>{
  const h=setup();let callback;let cancelled=0;h.ctx.setTimeout=fn=>{callback=fn;return 42};h.ctx.clearTimeout=()=>cancelled++;
  h.run('REPLAY_DATA={as_of:2};REPLAY_FRAMES=[{ts:1,groups:{}},{ts:2,groups:{}}];toggleReplay()');

@@ -118,6 +118,28 @@ def test_html_exposes_sibling_simples_sites(client):
     assert 'affiliate' not in html.lower()
 
 
+def test_html_exposes_exchange_signup_links_once_in_header(client):
+    html = client[0].get('/').text
+    header = html.split('<header>', 1)[1].split('</header>', 1)[0]
+    footer = html.split('<footer>', 1)[1].split('</footer>', 1)[0]
+    okx = 'https://okx.com/join/75395880'
+    pionex = 'https://www.pionex.com/zh-TW/signUp?r=0rcgGsu5GKg'
+    assert html.count(okx) == 1
+    assert html.count(pionex) == 1
+    assert okx in header
+    assert pionex in header
+    assert 'OKX 開戶' in header
+    assert '派網開戶' in header
+    assert 'target="_blank"' in header.split(okx, 1)[1].split('>', 1)[0]
+    assert 'rel="noopener noreferrer"' in header.split(okx, 1)[1].split('>', 1)[0]
+    assert 'target="_blank"' in header.split(pionex, 1)[1].split('>', 1)[0]
+    assert 'rel="noopener noreferrer"' in header.split(pionex, 1)[1].split('>', 1)[0]
+    assert okx not in footer
+    assert pionex not in footer
+    assert 'OKX 開戶' not in footer
+    assert '派網開戶' not in footer
+
+
 def test_daily_candles_are_closed_sorted_deduplicated_and_reused(monkeypatch):
     client = HyperliquidClient()
     day_ms = 86400000

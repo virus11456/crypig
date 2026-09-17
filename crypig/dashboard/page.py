@@ -353,6 +353,10 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
     <a href="https://stocktools.cc/" title="Stocktools" rel="noopener noreferrer">美股雙重分析</a>
     <a href="https://toolist.cc/" title="Toolist" rel="noopener noreferrer">分頁工作區</a>
   </nav>
+  <nav class="sites" aria-label="交易所開戶">
+    <a href="https://okx.com/join/75395880" title="OKX" target="_blank" rel="noopener noreferrer">OKX 開戶</a>
+    <a href="https://www.pionex.com/zh-TW/signUp?r=0rcgGsu5GKg" title="派網" target="_blank" rel="noopener noreferrer">派網開戶</a>
+  </nav>
   <span style="flex:1"></span>
   <span class="ts" id="ts">載入中…</span>
 </header>
