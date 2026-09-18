@@ -18,4 +18,11 @@ test('frontend exports locally and API rewrites cannot loop through frontend dom
     assert.equal(target.pathname + target.search, '/' + pathname);
   }
   assert.equal(proxy.headers['Cache-Control'], 'no-store');
+  const robots = fs.readFileSync(path.join(root, '.vercel/output/static/robots.txt'), 'utf8');
+  assert.match(robots, /^User-agent: \*\nAllow: \/\nSitemap: https:\/\/hypeboss\.cc\/sitemap\.xml\n$/);
+  const sitemap = fs.readFileSync(path.join(root, '.vercel/output/static/sitemap.xml'), 'utf8');
+  assert.match(sitemap, /<loc>https:\/\/hypeboss\.cc\/<\/loc>/);
+  assert.equal([...sitemap.matchAll(/<loc>/g)].length, 1);
+  assert.doesNotMatch(sitemap, /<loc>http:/);
+  assert.doesNotMatch(sitemap, /hypeboss\.vercel\.app|www\.hypeboss\.cc|\/guides|\/docs|\/index\.html/);
 });

@@ -97,6 +97,27 @@ def test_oi_provenance_and_zero_values(client):
     assert fake.hl_scan[0]['open_interest_usd'] == 100
 
 
+def test_robots_and_sitemap_are_public_absolute_urls(client):
+    c, _ = client
+    robots = c.get('/robots.txt')
+    assert robots.status_code == 200
+    assert robots.headers['content-type'].startswith('text/plain')
+    assert robots.text == (
+        'User-agent: *\n'
+        'Allow: /\n'
+        'Sitemap: https://hypeboss.cc/sitemap.xml\n'
+    )
+    sitemap = c.get('/sitemap.xml')
+    assert sitemap.status_code == 200
+    assert 'xml' in sitemap.headers['content-type']
+    assert '<loc>https://hypeboss.cc/</loc>' in sitemap.text
+    assert sitemap.text.count('<loc>') == 1
+    assert '<loc>http://' not in sitemap.text
+    assert '/guides' not in sitemap.text
+    assert '/docs' not in sitemap.text
+    assert '/index.html' not in sitemap.text
+
+
 def test_html_is_compressed(client):
     c, _ = client
     r = c.get('/', headers={'Accept-Encoding':'gzip'})

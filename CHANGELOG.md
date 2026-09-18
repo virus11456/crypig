@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 2026-09-18（Google Search Console robots.txt 與 sitemap.xml）
+
+- 正式站新增 `/robots.txt` 與 `/sitemap.xml`（允許全站、Sitemap 指向 https://hypeboss.cc/sitemap.xml）。sitemap 只列已確認 200 的公開頁面（首頁）；不含 JSON 接口、Swagger `/docs`、`/index.html` 或未存在的 guides。Vercel 靜態建置與 FastAPI 同源檔案，讓 hypeboss.cc 在前端發布後即可被 Search Console 讀取。
+
 ### 2026-09-18（Stocktools 美股開戶交叉導覽）
 
 - 頂部與頁尾既有「相關工具」列新增「美股開戶」，連到 https://www.stocktools.cc/tw/us-open-account。既有手續費／ETF／入金深鏈與 OKX／Pionex 開戶 CTA 不變。不加入 Firstrade／金融聯盟連結，不更動交易／訊號邏輯。
