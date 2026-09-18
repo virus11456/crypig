@@ -180,6 +180,22 @@ class AskBody(BaseModel):
     question: str
 
 
+_ROBOTS_TXT = (_Path(__file__).parent / "robots.txt").read_text(encoding="utf-8")
+_SITEMAP_XML = (_Path(__file__).parent / "sitemap.xml").read_text(encoding="utf-8")
+
+
+@app.get("/robots.txt")
+def robots_txt() -> Response:
+    return Response(_ROBOTS_TXT, media_type="text/plain; charset=utf-8",
+                    headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/sitemap.xml")
+def sitemap_xml() -> Response:
+    return Response(_SITEMAP_XML, media_type="application/xml",
+                    headers={"Cache-Control": "public, max-age=3600"})
+
+
 @app.get("/", response_class=HTMLResponse)
 def index() -> HTMLResponse:
     # no-cache：瀏覽器每次重新驗證 HTML，部署即時生效、免手動清快取

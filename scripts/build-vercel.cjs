@@ -13,6 +13,8 @@ const output = path.join(root, '.vercel/output');
 fs.mkdirSync(path.join(output, 'static'), {recursive: true});
 fs.writeFileSync(path.join(output, 'static/index.html'), match[1]);
 fs.cpSync(path.join(root, 'crypig/dashboard/static'), path.join(output, 'static/static'), {recursive: true});
+fs.copyFileSync(path.join(root, 'crypig/dashboard/robots.txt'), path.join(output, 'static/robots.txt'));
+fs.copyFileSync(path.join(root, 'crypig/dashboard/sitemap.xml'), path.join(output, 'static/sitemap.xml'));
 fs.writeFileSync(path.join(output, 'config.json'), JSON.stringify({
   version: 3,
   routes: [
