@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 2026-09-18（Stocktools 美股開戶交叉導覽）
+
+- 頂部與頁尾既有「相關工具」列新增「美股開戶」，連到 https://www.stocktools.cc/tw/us-open-account。既有手續費／ETF／入金深鏈與 OKX／Pionex 開戶 CTA 不變。不加入 Firstrade／金融聯盟連結，不更動交易／訊號邏輯。
+
 ### 2026-09-18（Stocktools 高意圖頁交叉導覽）
 
 - 頂部導覽與頁尾沿用既有 sibling 文字列，另加一列緊湊「相關工具」：美股手續費、美股 ETF、美股入金，連到 Stocktools 繁中高意圖頁。品牌首頁連結仍為 https://stocktools.cc/。不加入 Firstrade／金融聯盟連結，不更動交易／訊號邏輯。
