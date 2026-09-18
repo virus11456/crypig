@@ -118,6 +118,28 @@ def test_html_exposes_sibling_simples_sites(client):
     assert 'affiliate' not in html.lower()
 
 
+def test_html_exposes_stocktools_tw_deep_links(client):
+    html = client[0].get('/').text
+    header = html.split('<header>', 1)[1].split('</header>', 1)[0]
+    footer = html.split('<footer>', 1)[1].split('</footer>', 1)[0]
+    fee = 'https://www.stocktools.cc/tw/us-fee-calculator'
+    etf = 'https://www.stocktools.cc/tw/us-etf'
+    deposit = 'https://www.stocktools.cc/tw/us-deposit'
+    for url, label in ((fee, '美股手續費'), (etf, '美股 ETF'), (deposit, '美股入金')):
+        assert html.count(url) == 2
+        assert url in header and url in footer
+        assert label in header and label in footer
+        attrs = header.split(url, 1)[1].split('>', 1)[0]
+        assert 'target="_blank"' in attrs
+        assert 'rel="noopener noreferrer"' in attrs
+    assert 'aria-label="相關工具"' in header
+    assert 'aria-label="相關工具"' in footer
+    assert 'https://stocktools.cc/' in header
+    assert 'firstrade' not in html.lower()
+    assert 'affiliate' not in html.lower()
+    assert 'utm_' not in html.lower()
+
+
 def test_html_exposes_exchange_signup_links_once_in_header(client):
     html = client[0].get('/').text
     header = html.split('<header>', 1)[1].split('</header>', 1)[0]

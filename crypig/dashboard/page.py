@@ -103,7 +103,9 @@ INDEX_HTML = r"""<!doctype html>
            font-size:13px;font-weight:600;padding:6px 2px;border-bottom:1px solid transparent}
   .sites a:hover,.sites a:active{color:var(--accent);border-bottom-color:var(--accent)}
   .sites a:focus-visible{outline:2px solid #9ad5ff;outline-offset:3px;border-radius:2px}
+  .sites > span{color:#6e7681;font-size:12px;font-weight:600;letter-spacing:.04em;white-space:nowrap}
   header .sites{margin-left:4px;padding-left:14px;border-left:1px solid var(--line)}
+  header .sites.related{width:100%;margin-left:0;padding-left:0;border-left:0}
   footer{border-top:1px solid var(--line);padding:12px 24px;
          padding-bottom:max(12px,env(safe-area-inset-bottom));
          display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;background:var(--bg)}
@@ -359,6 +361,12 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
   </nav>
   <span style="flex:1"></span>
   <span class="ts" id="ts">載入中…</span>
+  <nav class="sites related" aria-label="相關工具">
+    <span>相關工具</span>
+    <a href="https://www.stocktools.cc/tw/us-fee-calculator" title="Stocktools 美股手續費" target="_blank" rel="noopener noreferrer">美股手續費</a>
+    <a href="https://www.stocktools.cc/tw/us-etf" title="Stocktools 美股 ETF" target="_blank" rel="noopener noreferrer">美股 ETF</a>
+    <a href="https://www.stocktools.cc/tw/us-deposit" title="Stocktools 美股入金" target="_blank" rel="noopener noreferrer">美股入金</a>
+  </nav>
 </header>
 <div id="ctip" class="ctip"></div>
 <div id="page-strategy" style="display:none"></div>
@@ -443,6 +451,12 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
     <a href="https://warhubs.com/" title="WARHUBS" rel="noopener noreferrer">戰情觀測站</a>
     <a href="https://stocktools.cc/" title="Stocktools" rel="noopener noreferrer">美股雙重分析</a>
     <a href="https://toolist.cc/" title="Toolist" rel="noopener noreferrer">分頁工作區</a>
+  </nav>
+  <nav class="sites related" aria-label="相關工具">
+    <span>相關工具</span>
+    <a href="https://www.stocktools.cc/tw/us-fee-calculator" title="Stocktools 美股手續費" target="_blank" rel="noopener noreferrer">美股手續費</a>
+    <a href="https://www.stocktools.cc/tw/us-etf" title="Stocktools 美股 ETF" target="_blank" rel="noopener noreferrer">美股 ETF</a>
+    <a href="https://www.stocktools.cc/tw/us-deposit" title="Stocktools 美股入金" target="_blank" rel="noopener noreferrer">美股入金</a>
   </nav>
   <a class="simples" href="https://simples.com.tw/" rel="noopener noreferrer">SIMPLES 工具網</a>
 </footer>
