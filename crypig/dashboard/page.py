@@ -366,6 +366,7 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
     <a href="https://www.stocktools.cc/tw/us-fee-calculator" title="Stocktools 美股手續費" target="_blank" rel="noopener noreferrer">美股手續費</a>
     <a href="https://www.stocktools.cc/tw/us-etf" title="Stocktools 美股 ETF" target="_blank" rel="noopener noreferrer">美股 ETF</a>
     <a href="https://www.stocktools.cc/tw/us-deposit" title="Stocktools 美股入金" target="_blank" rel="noopener noreferrer">美股入金</a>
+    <a href="https://www.stocktools.cc/tw/us-open-account" title="Stocktools 美股開戶" target="_blank" rel="noopener noreferrer">美股開戶</a>
   </nav>
 </header>
 <div id="ctip" class="ctip"></div>
@@ -457,6 +458,7 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
     <a href="https://www.stocktools.cc/tw/us-fee-calculator" title="Stocktools 美股手續費" target="_blank" rel="noopener noreferrer">美股手續費</a>
     <a href="https://www.stocktools.cc/tw/us-etf" title="Stocktools 美股 ETF" target="_blank" rel="noopener noreferrer">美股 ETF</a>
     <a href="https://www.stocktools.cc/tw/us-deposit" title="Stocktools 美股入金" target="_blank" rel="noopener noreferrer">美股入金</a>
+    <a href="https://www.stocktools.cc/tw/us-open-account" title="Stocktools 美股開戶" target="_blank" rel="noopener noreferrer">美股開戶</a>
   </nav>
   <a class="simples" href="https://simples.com.tw/" rel="noopener noreferrer">SIMPLES 工具網</a>
 </footer>
