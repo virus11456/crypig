@@ -374,6 +374,34 @@ test('header and footer expose sibling SIMPLES tool sites',()=>{
  assert.doesNotMatch(footer,/affiliate|utm_/i);
 });
 
+test('header and footer expose compact Stocktools TW deep links',()=>{
+ const html=page.split('<script>')[0];
+ const header=html.split('<header>')[1].split('</header>')[0];
+ const footer=html.split('<footer>')[1].split('</footer>')[0];
+ const fee='https://www.stocktools.cc/tw/us-fee-calculator';
+ const etf='https://www.stocktools.cc/tw/us-etf';
+ const deposit='https://www.stocktools.cc/tw/us-deposit';
+ for (const url of [fee,etf,deposit]){
+  assert.equal(html.split(url).length-1,2);
+  assert.match(header,new RegExp(`href="${url.replaceAll('/','\\/')}"[^>]*target="_blank"[^>]*rel="noopener noreferrer"`));
+  assert.match(footer,new RegExp(`href="${url.replaceAll('/','\\/')}"[^>]*target="_blank"[^>]*rel="noopener noreferrer"`));
+ }
+ assert.match(header,/aria-label="相關工具"/);
+ assert.match(footer,/aria-label="相關工具"/);
+ assert.match(header,/>相關工具</);
+ assert.match(footer,/>相關工具</);
+ assert.match(header,/>美股手續費</);
+ assert.match(header,/>美股 ETF</);
+ assert.match(header,/>美股入金</);
+ assert.match(footer,/>美股手續費</);
+ assert.match(footer,/>美股 ETF</);
+ assert.match(footer,/>美股入金</);
+ assert.match(header,/href="https:\/\/stocktools\.cc\/"/);
+ assert.match(footer,/href="https:\/\/stocktools\.cc\/"/);
+ assert.doesNotMatch(html,/firstrade/i);
+ assert.doesNotMatch(html,/affiliate|utm_/i);
+});
+
 test('header exposes one OKX and one Pionex signup link',()=>{
  const html=page.split('<script>')[0];
  const header=html.split('<header>')[1].split('</header>')[0];
