@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 2026-09-19（Stocktools 美股 ADR 交叉導覽）
+
+- 頂部與頁尾既有「相關工具」列新增「美股 ADR」，連到 https://www.stocktools.cc/tw/us-adr。既有手續費／ETF／入金／開戶／配息／第一次買美股／盤前盤後／市價／限價深鏈與 OKX／Pionex 開戶 CTA 不變。不加入 Firstrade／金融聯盟連結，不更動交易／訊號邏輯。
+
 ### 2026-09-19（Stocktools 市價／限價交叉導覽）
 
 - 頂部與頁尾既有「相關工具」列新增「市價／限價」，連到 https://www.stocktools.cc/tw/us-order-types。既有手續費／ETF／入金／開戶／配息／第一次買美股／盤前盤後深鏈與 OKX／Pionex 開戶 CTA 不變。不加入 Firstrade／金融聯盟連結，不更動交易／訊號邏輯。
