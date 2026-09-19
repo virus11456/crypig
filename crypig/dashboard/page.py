@@ -372,6 +372,7 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
     <a href="https://www.stocktools.cc/tw/us-premarket" title="Stocktools 美股盤前盤後" target="_blank" rel="noopener noreferrer">美股盤前盤後</a>
     <a href="https://www.stocktools.cc/tw/us-order-types" title="Stocktools 市價／限價" target="_blank" rel="noopener noreferrer">市價／限價</a>
     <a href="https://www.stocktools.cc/tw/us-adr" title="Stocktools 美股 ADR" target="_blank" rel="noopener noreferrer">美股 ADR</a>
+    <a href="https://www.stocktools.cc/tw/us-fx" title="Stocktools 美股匯損" target="_blank" rel="noopener noreferrer">美股匯損</a>
   </nav>
 </header>
 <div id="ctip" class="ctip"></div>
@@ -469,6 +470,7 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
     <a href="https://www.stocktools.cc/tw/us-premarket" title="Stocktools 美股盤前盤後" target="_blank" rel="noopener noreferrer">美股盤前盤後</a>
     <a href="https://www.stocktools.cc/tw/us-order-types" title="Stocktools 市價／限價" target="_blank" rel="noopener noreferrer">市價／限價</a>
     <a href="https://www.stocktools.cc/tw/us-adr" title="Stocktools 美股 ADR" target="_blank" rel="noopener noreferrer">美股 ADR</a>
+    <a href="https://www.stocktools.cc/tw/us-fx" title="Stocktools 美股匯損" target="_blank" rel="noopener noreferrer">美股匯損</a>
   </nav>
   <a class="simples" href="https://simples.com.tw/" rel="noopener noreferrer">SIMPLES 工具網</a>
 </footer>
