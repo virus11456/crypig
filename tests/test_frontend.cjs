@@ -384,7 +384,8 @@ test('header and footer expose compact Stocktools TW deep links',()=>{
  const openAccount='https://www.stocktools.cc/tw/us-open-account';
  const dividend='https://www.stocktools.cc/tw/us-dividend';
  const firstBuy='https://www.stocktools.cc/tw/us-first-buy';
- for (const url of [fee,etf,deposit,openAccount,dividend,firstBuy]){
+ const premarket='https://www.stocktools.cc/tw/us-premarket';
+ for (const url of [fee,etf,deposit,openAccount,dividend,firstBuy,premarket]){
   assert.equal(html.split(url).length-1,2);
   assert.match(header,new RegExp(`href="${url.replaceAll('/','\\/')}"[^>]*target="_blank"[^>]*rel="noopener noreferrer"`));
   assert.match(footer,new RegExp(`href="${url.replaceAll('/','\\/')}"[^>]*target="_blank"[^>]*rel="noopener noreferrer"`));
@@ -399,12 +400,14 @@ test('header and footer expose compact Stocktools TW deep links',()=>{
  assert.match(header,/>美股開戶</);
  assert.match(header,/>美股配息</);
  assert.match(header,/>第一次買美股</);
+ assert.match(header,/>美股盤前盤後</);
  assert.match(footer,/>美股手續費</);
  assert.match(footer,/>美股 ETF</);
  assert.match(footer,/>美股入金</);
  assert.match(footer,/>美股開戶</);
  assert.match(footer,/>美股配息</);
  assert.match(footer,/>第一次買美股</);
+ assert.match(footer,/>美股盤前盤後</);
  assert.match(header,/href="https:\/\/stocktools\.cc\/"/);
  assert.match(footer,/href="https:\/\/stocktools\.cc\/"/);
  assert.doesNotMatch(html,/firstrade/i);
