@@ -152,7 +152,8 @@ def test_html_exposes_stocktools_tw_deep_links(client):
     premarket = 'https://www.stocktools.cc/tw/us-premarket'
     order_types = 'https://www.stocktools.cc/tw/us-order-types'
     adr = 'https://www.stocktools.cc/tw/us-adr'
-    for url, label in ((fee, '美股手續費'), (etf, '美股 ETF'), (deposit, '美股入金'), (open_account, '美股開戶'), (dividend, '美股配息'), (first_buy, '第一次買美股'), (premarket, '美股盤前盤後'), (order_types, '市價／限價'), (adr, '美股 ADR')):
+    fx = 'https://www.stocktools.cc/tw/us-fx'
+    for url, label in ((fee, '美股手續費'), (etf, '美股 ETF'), (deposit, '美股入金'), (open_account, '美股開戶'), (dividend, '美股配息'), (first_buy, '第一次買美股'), (premarket, '美股盤前盤後'), (order_types, '市價／限價'), (adr, '美股 ADR'), (fx, '美股匯損')):
         assert html.count(url) == 2
         assert url in header and url in footer
         assert label in header and label in footer
