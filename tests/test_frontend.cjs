@@ -388,7 +388,8 @@ test('header and footer expose compact Stocktools TW deep links',()=>{
  const orderTypes='https://www.stocktools.cc/tw/us-order-types';
  const adr='https://www.stocktools.cc/tw/us-adr';
  const fx='https://www.stocktools.cc/tw/us-fx';
- for (const url of [fee,etf,deposit,openAccount,dividend,firstBuy,premarket,orderTypes,adr,fx]){
+ const fractional='https://www.stocktools.cc/tw/us-fractional';
+ for (const url of [fee,etf,deposit,openAccount,dividend,firstBuy,premarket,orderTypes,adr,fx,fractional]){
   assert.equal(html.split(url).length-1,2);
   assert.match(header,new RegExp(`href="${url.replaceAll('/','\\/')}"[^>]*target="_blank"[^>]*rel="noopener noreferrer"`));
   assert.match(footer,new RegExp(`href="${url.replaceAll('/','\\/')}"[^>]*target="_blank"[^>]*rel="noopener noreferrer"`));
@@ -407,6 +408,7 @@ test('header and footer expose compact Stocktools TW deep links',()=>{
  assert.match(header,/>市價／限價</);
  assert.match(header,/>美股 ADR</);
  assert.match(header,/>美股匯損</);
+ assert.match(header,/>美股碎股</);
  assert.match(footer,/>美股手續費</);
  assert.match(footer,/>美股 ETF</);
  assert.match(footer,/>美股入金</);
@@ -417,6 +419,7 @@ test('header and footer expose compact Stocktools TW deep links',()=>{
  assert.match(footer,/>市價／限價</);
  assert.match(footer,/>美股 ADR</);
  assert.match(footer,/>美股匯損</);
+ assert.match(footer,/>美股碎股</);
  assert.match(header,/href="https:\/\/stocktools\.cc\/"/);
  assert.match(footer,/href="https:\/\/stocktools\.cc\/"/);
  assert.doesNotMatch(html,/firstrade/i);
