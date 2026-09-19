@@ -368,6 +368,7 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
     <a href="https://www.stocktools.cc/tw/us-deposit" title="Stocktools 美股入金" target="_blank" rel="noopener noreferrer">美股入金</a>
     <a href="https://www.stocktools.cc/tw/us-open-account" title="Stocktools 美股開戶" target="_blank" rel="noopener noreferrer">美股開戶</a>
     <a href="https://www.stocktools.cc/tw/us-dividend" title="Stocktools 美股配息" target="_blank" rel="noopener noreferrer">美股配息</a>
+    <a href="https://www.stocktools.cc/tw/us-first-buy" title="Stocktools 第一次買美股" target="_blank" rel="noopener noreferrer">第一次買美股</a>
   </nav>
 </header>
 <div id="ctip" class="ctip"></div>
@@ -461,6 +462,7 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
     <a href="https://www.stocktools.cc/tw/us-deposit" title="Stocktools 美股入金" target="_blank" rel="noopener noreferrer">美股入金</a>
     <a href="https://www.stocktools.cc/tw/us-open-account" title="Stocktools 美股開戶" target="_blank" rel="noopener noreferrer">美股開戶</a>
     <a href="https://www.stocktools.cc/tw/us-dividend" title="Stocktools 美股配息" target="_blank" rel="noopener noreferrer">美股配息</a>
+    <a href="https://www.stocktools.cc/tw/us-first-buy" title="Stocktools 第一次買美股" target="_blank" rel="noopener noreferrer">第一次買美股</a>
   </nav>
   <a class="simples" href="https://simples.com.tw/" rel="noopener noreferrer">SIMPLES 工具網</a>
 </footer>
