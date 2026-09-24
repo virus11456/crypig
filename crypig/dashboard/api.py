@@ -132,8 +132,8 @@ def static_asset(name: str) -> Response:
                     headers={"Cache-Control": "public, max-age=604800"})
 
 _MANIFEST = {
-    "name": "Crypig 量化交易分析中台",
-    "short_name": "Crypig",
+    "name": "HypeBoss 量化交易分析中台",
+    "short_name": "HypeBoss",
     "description": "個人加密量化分析中台：市場看板＋策略/Obsidian",
     "start_url": "/", "scope": "/", "display": "standalone",
     "orientation": "any", "background_color": "#0d1117", "theme_color": "#0d1117",
