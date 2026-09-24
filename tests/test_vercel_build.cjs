@@ -25,4 +25,9 @@ test('frontend exports locally and API rewrites cannot loop through frontend dom
   assert.equal([...sitemap.matchAll(/<loc>/g)].length, 1);
   assert.doesNotMatch(sitemap, /<loc>http:/);
   assert.doesNotMatch(sitemap, /hypeboss\.vercel\.app|www\.hypeboss\.cc|\/guides|\/docs|\/index\.html/);
+  const html = fs.readFileSync(path.join(root, '.vercel/output/static/index.html'), 'utf8');
+  assert.match(html, /<title>HypeBoss 量化交易分析中台<\/title>/);
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, '.vercel/output/static/manifest.webmanifest'), 'utf8'));
+  assert.equal(manifest.name, 'HypeBoss 量化交易分析中台');
+  assert.equal(manifest.short_name, 'HypeBoss');
 });
