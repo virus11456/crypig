@@ -1,0 +1,33 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const {execFileSync} = require('node:child_process');
+const root = path.resolve(__dirname, '..');
+test('frontend exports locally and API rewrites cannot loop through frontend domains', () => {
+  execFileSync(process.execPath, [path.join(root, 'scripts/build-vercel.cjs')]);
+  const config = JSON.parse(fs.readFileSync(path.join(root, '.vercel/output/config.json')));
+  assert.equal(config.routes[0].dest, '/index.html');
+  assert.equal(config.routes[1].handle, 'filesystem');
+  const proxy = config.routes.find(r => r.src === '/(.*)');
+  assert.equal(new URL(proxy.dest).origin, 'https://api.hypeboss.cc');
+  for (const pathname of ['account_replay', 'data_status', 'account_history?address=0x123', 'vault.zip']) {
+    const target = new URL(proxy.dest.replace('$1', pathname));
+    assert.equal(target.protocol, 'https:');
+    assert(!['hypeboss.cc', 'www.hypeboss.cc', 'hypeboss.vercel.app'].includes(target.hostname));
+    assert.equal(target.pathname + target.search, '/' + pathname);
+  }
+  assert.equal(proxy.headers['Cache-Control'], 'no-store');
+  const robots = fs.readFileSync(path.join(root, '.vercel/output/static/robots.txt'), 'utf8');
+  assert.match(robots, /^User-agent: \*\nAllow: \/\nSitemap: https:\/\/hypeboss\.cc\/sitemap\.xml\n$/);
+  const sitemap = fs.readFileSync(path.join(root, '.vercel/output/static/sitemap.xml'), 'utf8');
+  assert.match(sitemap, /<loc>https:\/\/hypeboss\.cc\/<\/loc>/);
+  assert.equal([...sitemap.matchAll(/<loc>/g)].length, 1);
+  assert.doesNotMatch(sitemap, /<loc>http:/);
+  assert.doesNotMatch(sitemap, /hypeboss\.vercel\.app|www\.hypeboss\.cc|\/guides|\/docs|\/index\.html/);
+  const html = fs.readFileSync(path.join(root, '.vercel/output/static/index.html'), 'utf8');
+  assert.match(html, /<title>HypeBoss 量化交易分析中台<\/title>/);
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, '.vercel/output/static/manifest.webmanifest'), 'utf8'));
+  assert.equal(manifest.name, 'HypeBoss 量化交易分析中台');
+  assert.equal(manifest.short_name, 'HypeBoss');
+});

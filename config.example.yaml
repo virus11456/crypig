@@ -1,0 +1,59 @@
+# 複製成 config.yaml 後填入實際值
+# use_mock=true 時不打外部 API，可離線端到端跑通整套
+use_mock: true
+
+symbols:
+  - "BTC"
+  - "ETH"
+  - "SOL"
+
+backtest_horizon_hours: 24            # 回測持有期（小時）
+
+agents:
+  smart_money:
+    enabled: true
+    interval_minutes: 15
+    pnl_threshold_usd: 1000000      # 實現獲利門檻（美金）
+    window: "allTime"               # Hyperliquid 無一年窗；day|week|month|allTime
+    max_traders: 100                # 取前 N 名合格交易者統計持倉
+  whales:                            # 真實鯨魚錢包持倉變化（大額地址）
+    enabled: true
+    interval_minutes: 30
+    onchain_symbol: "BTC"            # 鏈上鯨魚分級僅比特幣
+    whale_bands:                     # 哪些餘額級距算鯨魚（預設≥100 BTC大戶）
+      - "humpbackBtc"                # 100-1K BTC
+      - "megaWhaleBtc"               # ≥1K BTC（也可加 whaleBtc=10-100）
+    chg_threshold: 0.003             # 持倉變化超過此比例才算累積/分配
+  divergence:
+    enabled: true
+    interval_minutes: 5
+    exchange: "okx"                  # binance.com 美國地緣封鎖；okx 可達
+    timeframe: "1h"
+  lth:                               # 長期持有者(超過151天)供給變化
+    enabled: true
+    interval_minutes: 720            # 鏈上指標變化慢，半天一次（免費源每小時限 10 次）
+    threshold_days: 151              # 超過151天即長期；資料源以業界155天為界，相近
+    source: "bitcoin-data"           # 免費 BTC 鏈上源 bitcoin-data.com（已驗證）
+    metric_slug: "long-term-hodler-supply-btc"   # 真正長期持有者供給(BTC)
+    value_key: "longTermHodlerSupplyBtc"
+    onchain_symbol: "BTC"            # 鏈上 LTH 僅比特幣
+
+# 知識圖譜記憶層（自我學習 RAG）
+kg:
+  backend: "networkx"               # networkx(本地) | neo4j | rdflib
+  path: "kg_store.json"
+  max_hops: 3                       # 多跳推理最大跳數
+
+# 可插拔 LLM；mock 不需金鑰。換成 claude 用 Anthropic
+llm:
+  provider: "mock"                  # mock | claude | openai
+  model: "claude-opus-4-8"
+  api_key_env: "ANTHROPIC_API_KEY"  # 從此環境變數讀金鑰
+
+analyzers:
+  interval_minutes: 5
+  weights:                          # 綜合評分各訊號權重（內部自動正規化）
+    smart_money: 0.30
+    whale_flow: 0.25
+    divergence: 0.25
+    lth_supply: 0.20
