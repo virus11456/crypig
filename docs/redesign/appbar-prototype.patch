@@ -1,0 +1,416 @@
+diff --git a/crypig/dashboard/page.py b/crypig/dashboard/page.py
+index 713bd14..951ed74 100644
+--- a/crypig/dashboard/page.py
++++ b/crypig/dashboard/page.py
+@@ -14,7 +14,7 @@ INDEX_HTML = r"""<!doctype html>
+ <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+ <title>HypeBoss 量化交易分析中台</title>
+ <link rel="manifest" href="/manifest.webmanifest"/>
+-<meta name="theme-color" content="#0d1117"/>
++<meta name="theme-color" content="#0a0e15"/>
+ <meta name="apple-mobile-web-app-capable" content="yes"/>
+ <meta name="mobile-web-app-capable" content="yes"/>
+ <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+@@ -341,26 +341,205 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
+ 
+ .replay-panel{background:linear-gradient(140deg,#142634,#101923);border:1px solid #385166;border-radius:16px;padding:24px;overflow:hidden}.replay-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.replay-heading h2{margin:8px 0;font-size:24px}.replay-heading .eyebrow{margin:0;color:#a7cadb}.replay-controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:24px 0 16px}.replay-controls label{font-size:13px;color:#aabaca;display:flex;gap:8px;align-items:center}.replay-controls select{min-height:44px;padding:8px;color:#e6edf3;background:#101923;border:1px solid #476174;border-radius:6px;max-width:100%}.replay-controls button,.replay-heading button{min-height:44px}.replay-time{font-variant-numeric:tabular-nums;line-height:1.8;color:#c8dce9;font-size:14px}#replay-slider{width:100%;min-height:44px;accent-color:#67d6e8;cursor:pointer}#replay-chart{max-width:100%;overflow-x:auto}#replay-chart svg{width:100%;min-width:460px;display:block;max-height:330px}.replay-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.replay-details article{padding:16px;background:#101b26;border:1px solid #304454;border-radius:10px;line-height:1.7}.replay-details h3{font-size:14px;margin:0 0 10px;color:#c9e1ed}.replay-details p{margin:8px 0;font-size:14px}@media(max-width:700px){.replay-panel{padding:18px 14px}.replay-heading h2{font-size:21px}.replay-details{grid-template-columns:1fr}.replay-controls label{flex-wrap:wrap}.replay-controls{gap:10px}#replay-chart:after{content:'左右滑動看完整多空長條';font-size:12px;color:#9eacba;display:block;margin:8px 0}}
+ .replay-axis,.replay-values{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-variant-numeric:tabular-nums}.replay-axis{font-size:13px;color:#aabaca;margin:20px 0}.replay-track-row{margin:22px 0}.replay-track-row h4{margin:0 0 12px;font-size:15px}.replay-tracks{display:grid;grid-template-columns:1fr 1fr;gap:2px}.replay-tracks>div{height:32px;background:#243644;display:flex;align-items:center;min-width:0}.replay-tracks .replay-short{justify-content:flex-end;border-right:1px solid #c2d7e3}.replay-tracks i{height:24px;display:block;border-radius:3px}.replay-tracks span{font-size:12px;color:#aabaca;padding:4px}.replay-values{font-size:15px;margin-top:10px}.replay-details .meta{font-size:12px}#replay-chart:after{content:none}
++/* ===== Design System v2（ui-ux-pro-max：Swiss minimal · dark · data-dense）=====
++   一套 token 統一所有面板；頁首收斂成單列 App bar，外部連結收進「工具」選單。 */
++:root{
++  --bg:#0a0e15;--surface:#10161f;--surface-2:#141c27;--surface-3:#1a2431;
++  --border:#1f2a38;--border-strong:#2c3a4d;--fg:#e8eef6;--fg-2:#c3cfdc;--mut:#8d9bad;--mut-2:#677589;
++  --accent:#5eaefc;--accent-soft:rgba(94,174,252,.12);--bull:#2fbf71;--bear:#f0575a;--warn:#e3a33b;
++  --card:var(--surface);--line:var(--border);
++  --r-sm:8px;--r-md:12px;--r-lg:16px;
++  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;
++  --appbar-h:60px;--ease:cubic-bezier(.2,.7,.2,1);
++}
++html{scroll-padding-top:calc(var(--appbar-h) + 16px)}
++body{background:var(--bg);color:var(--fg);font-size:15px;line-height:1.6;
++  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",Roboto,sans-serif;
++  -webkit-font-smoothing:antialiased}
++.ico{width:18px;height:18px;flex:none;vertical-align:-3px}
++button,summary,a{transition:background-color .18s var(--ease),color .18s var(--ease),border-color .18s var(--ease)}
++a:focus-visible,button:focus-visible,summary:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
++@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
++
++/* ---- App bar ---- */
++header.appbar{position:sticky;top:0;z-index:30;display:block;padding:0;border-bottom:1px solid var(--border);
++  background:rgba(10,14,21,.86);-webkit-backdrop-filter:saturate(140%) blur(12px);backdrop-filter:saturate(140%) blur(12px);
++  padding-top:env(safe-area-inset-top)}
++.appbar-inner{max-width:1280px;margin:0 auto;height:var(--appbar-h);display:flex;align-items:center;gap:var(--s4);
++  padding:0 max(24px,env(safe-area-inset-right)) 0 max(24px,env(safe-area-inset-left))}
++.brand{display:flex;align-items:center;gap:10px;color:var(--fg);text-decoration:none;min-width:0}
++.brand img{border-radius:7px;display:block}
++header.appbar h1{margin:0;font-size:16px;display:flex;align-items:baseline;gap:8px;width:auto;white-space:nowrap}
++.brand-name{font-weight:700;letter-spacing:.01em}
++.brand-sub{font-size:13px;font-weight:500;color:var(--mut)}
++header.appbar .nav{margin:0 0 0 var(--s3);display:flex;gap:2px;padding:3px;background:var(--surface);border:1px solid var(--border);border-radius:10px}
++header.appbar .nav button{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:6px 14px;border-radius:7px;
++  background:transparent;color:var(--mut);font-size:14px;font-weight:600}
++header.appbar .nav button:hover{color:var(--fg);background:var(--surface-2)}
++header.appbar .nav button.on{background:var(--surface-3);color:var(--fg);box-shadow:inset 0 0 0 1px var(--border-strong)}
++header.appbar .nav button.on .ico{color:var(--accent)}
++.spacer{flex:1}
++details.pop{position:relative}
++details.pop>summary{list-style:none;display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:6px 12px;cursor:pointer;
++  color:var(--fg-2);font-size:13px;font-weight:600;border:1px solid var(--border);border-radius:999px;background:var(--surface);user-select:none;white-space:nowrap}
++details.pop>summary::-webkit-details-marker{display:none}
++details.pop>summary:hover,details.pop[open]>summary{border-color:var(--border-strong);background:var(--surface-2);color:var(--fg)}
++.chev-ico{width:14px;height:14px;transition:transform .2s var(--ease)}
++details.pop[open] .chev-ico{transform:rotate(180deg)}
++.dot{width:8px;height:8px;border-radius:50%;background:var(--mut-2);flex:none}
++.dot.ok{background:var(--bull);box-shadow:0 0 0 3px rgba(47,191,113,.18)}
++.dot.busy{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
++.dot.warn{background:var(--warn);box-shadow:0 0 0 3px rgba(227,163,59,.18)}
++.pop-panel{position:absolute;right:0;top:calc(100% + 8px);z-index:40;width:min(420px,calc(100vw - 32px));max-height:min(70vh,560px);overflow:auto;
++  padding:var(--s4);background:var(--surface-2);border:1px solid var(--border-strong);border-radius:var(--r-md);
++  box-shadow:0 18px 48px rgba(0,0,0,.5)}
++.pop-title{margin:0 0 var(--s2);font-size:12px;font-weight:700;color:var(--mut);letter-spacing:.08em}
++header.appbar .ts{display:block;margin:0;color:var(--fg-2);font-size:13px;line-height:1.8;width:auto;order:0}
++.tools-panel{width:min(520px,calc(100vw - 32px));display:grid;gap:var(--s4)}
++header.appbar .sites,footer .sites{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;border:0;width:auto}
++header.appbar .sites>span,footer .sites>span{flex-basis:100%;color:var(--mut);font-size:12px;font-weight:700;letter-spacing:.08em;margin-bottom:2px}
++header.appbar .sites a{min-height:36px;padding:6px 12px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);
++  color:var(--fg-2);font-size:13px;font-weight:500}
++header.appbar .sites a:hover{border-color:var(--accent);color:var(--fg);background:var(--accent-soft)}
++header.appbar .sites[aria-label="交易所開戶"] a{border-color:var(--border-strong);color:var(--fg);font-weight:600}
++
++/* ---- Footer ---- */
++footer{display:block;padding:0;border-top:1px solid var(--border);background:var(--bg)}
++.footer-inner{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:minmax(160px,220px) 1fr;gap:var(--s5) var(--s6);
++  padding:var(--s6) max(24px,env(safe-area-inset-right)) max(var(--s6),env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left))}
++.footer-brand{display:flex;flex-direction:column;gap:4px;grid-row:span 2}
++.footer-brand strong{font-size:15px}.footer-brand span{color:var(--mut);font-size:13px}
++footer .sites a{padding:4px 0;margin-right:var(--s4);color:var(--mut);font-size:13px;font-weight:500;border:0}
++footer .sites a:hover{color:var(--fg)}
++footer .simples{grid-column:2;margin:0;justify-self:start;color:var(--mut-2);font-size:12px}
++
++/* ---- 版面 ---- */
++.wrap{max-width:1280px;gap:var(--s5);padding:var(--s6) max(24px,env(safe-area-inset-right)) var(--s6) max(24px,env(safe-area-inset-left))}
++.eyebrow{margin:0;font-size:12px;font-weight:700;letter-spacing:.12em;color:var(--accent)}
++.reading-guide,.page-intro{padding:var(--s2) 0 var(--s2)}
++.reading-guide h2,.page-intro h2{font-size:clamp(24px,2.6vw,30px);line-height:1.35;margin:var(--s2) 0 var(--s2);letter-spacing:.01em}
++.reading-guide p,.page-intro p{margin:0;color:var(--mut);font-size:15px;max-width:720px}
++.reading-guide nav{gap:var(--s2);margin-top:var(--s4)}
++.reading-guide a,.detail-link{min-height:36px;padding:7px 14px;border-radius:999px;border:1px solid var(--border);background:var(--surface);
++  color:var(--fg-2);font-size:13px;font-weight:600;line-height:20px}
++.reading-guide a:hover,.detail-link:hover{border-color:var(--accent);color:var(--fg);background:var(--accent-soft)}
++
++/* ---- 卡片（群體區塊 / 回放 / 折疊卡）---- */
++.population,.replay-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:var(--s5);margin:0}
++.replay-panel{background:linear-gradient(180deg,var(--surface-2),var(--surface))}
++.replay-heading h2,.population h2{font-size:20px;line-height:1.4;margin:0 0 4px}
++.population-heading{gap:var(--s3);margin-bottom:var(--s4);align-items:center}
++.population-number{display:inline-grid;place-items:center;width:32px;height:32px;padding:0;font-size:13px;font-weight:700;
++  color:var(--accent);background:var(--accent-soft);border:0;border-radius:var(--r-sm);font-variant-numeric:tabular-nums}
++.population-heading p,.population h3{color:var(--mut)}
++.population h3{font-size:12px;font-weight:700;letter-spacing:.06em}
++.brief-main{font-size:17px;font-weight:600;color:var(--fg);line-height:1.65}
++.brief-grid{gap:var(--s4)}
++.brief-grid>div{padding:var(--s4);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md)}
++.brief-grid>div+div{border-top:1px solid var(--border)}
++.reading-hint{border-top:0;margin:var(--s4) 0;padding:var(--s3) var(--s4);background:var(--surface-2);border-left:3px solid var(--accent);
++  border-radius:0 var(--r-sm) var(--r-sm) 0;color:var(--fg-2);font-size:14px}
++details.ccard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md)}
++.population .ccard{background:var(--surface-2);margin:var(--s3) 0}
++details.ccard>summary{padding:var(--s4) var(--s5);gap:var(--s3);align-items:center}
++details.ccard>summary:hover{background:var(--surface-2)}
++details.ccard[open]>summary{background:var(--surface-2);border-bottom:1px solid var(--border)}
++.ctitle{display:inline-flex;align-items:center;gap:10px;font-size:15px;font-weight:650;line-height:1.5}
++.ctitle .ico{color:var(--accent);padding:6px;width:30px;height:30px;background:var(--accent-soft);border-radius:var(--r-sm)}
++.ctitle small{font-size:11px;font-weight:600;opacity:1!important;color:var(--mut);padding:1px 7px;border:1px solid var(--border-strong);border-radius:999px}
++.csum{font-size:13px;color:var(--mut)}
++.chev{width:24px;height:24px;display:inline-grid;place-items:center;border-radius:6px;color:var(--mut)}
++details.ccard .box{padding:var(--s5)}
++.market-support{padding-top:var(--s2)}
++.market-support>h2{font-size:20px;margin:0 0 4px}
++.market-support>.meta{margin:0 0 var(--s4)}
++.support-grid,.strategy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s3);align-items:start}
++.support-grid>details.ccard,.strategy-grid>details.ccard{margin:0}
++.support-grid>details[open],.strategy-grid>details[open],.span-all{grid-column:1/-1}
++#account-inspector{margin:0}
++
++/* ---- 資料元件統一 ---- */
++.kpis>.kpi,.activity-kpis>div,.behavior-card,.balance-chart,.balance-card,.posrow,.sig,.opp,.stat{background:var(--surface-2);border-color:var(--border)}
++.balance-desktop,.activity-table,.scroll,.strategy-table-scroll{border-color:var(--border)}
++.balance-table caption,.balance-table thead th,.activity-table th{background:var(--surface-3)}
++.balance-total{background:#15202d}
++.scroll thead th{background:var(--surface-2)}
++.tbl tbody tr:nth-child(even),table.vt tbody tr:nth-child(even){background:rgba(255,255,255,.015)}
++.tbl tbody tr:hover{background:var(--surface-3)}
++.tbl td{border-bottom-color:var(--border)}
++.activity-controls{background:var(--surface-2)}
++.activity-controls select,.filt,.replay-controls select,.ask input{background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--r-sm);color:var(--fg)}
++.kpi .v,.brief-main,.tbl td,.balance-value,.replay-time{font-variant-numeric:tabular-nums}
++button{border-radius:var(--r-sm)}
++.box>button,.replay-heading button,#replay-play,.ask button{background:var(--accent);color:#06101c;font-weight:700;min-height:40px;padding:8px 16px}
++.box>button:hover,.replay-heading button:hover,#replay-play:hover,.ask button:hover{background:#86c3ff}
++.dl{background:var(--accent);color:#06101c;border-radius:var(--r-sm)}
++
++/* ---- 平板 ---- */
++@media (max-width:1024px){
++  header.appbar{position:sticky;padding:0;padding-top:env(safe-area-inset-top)}
++  .brand-sub{display:none}
++  .support-grid,.strategy-grid{grid-template-columns:1fr}
++  .footer-inner{grid-template-columns:1fr}
++  .footer-brand{grid-row:auto}
++  footer .simples{grid-column:auto}
++  header.appbar .sites a{min-height:44px}
++}
++/* ---- 手機：分頁移到底部 Tab bar（拇指可及）---- */
++@media (max-width:720px){
++  :root{--appbar-h:56px}
++  .appbar-inner{gap:var(--s2);padding:0 max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left))}
++  header.appbar .nav{position:fixed;left:0;right:0;bottom:0;z-index:30;margin:0;padding:6px max(12px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
++    display:grid;grid-template-columns:1fr 1fr;gap:6px;border:0;border-top:1px solid var(--border);border-radius:0;
++    background:rgba(10,14,21,.94);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
++  header.appbar .nav button{flex-direction:column;gap:2px;min-height:52px;padding:6px;font-size:12px;justify-content:center}
++  header.appbar .nav button .ico{width:22px;height:22px}
++  header.appbar .nav button.on{box-shadow:none;background:var(--accent-soft);color:var(--fg)}
++  body{padding-bottom:calc(68px + env(safe-area-inset-bottom))}
++  details.pop>summary{min-height:44px;padding:6px 12px}
++  #ts-short{max-width:34vw;overflow:hidden;text-overflow:ellipsis}
++  .tools-label{display:none}
++  .pop-panel{position:fixed;left:12px;right:12px;top:calc(var(--appbar-h) + env(safe-area-inset-top) + 8px);width:auto;max-height:calc(100vh - 180px)}
++  .wrap{padding:var(--s5) max(16px,env(safe-area-inset-right)) var(--s5) max(16px,env(safe-area-inset-left));gap:var(--s4)}
++  .population,.replay-panel{padding:var(--s4);border-radius:var(--r-md)}
++  details.ccard>summary{padding:var(--s3) var(--s4)}
++  details.ccard .box{padding:var(--s4)}
++  .ctitle{font-size:14px}
++  .ctitle .ico{width:28px;height:28px}
++  .reading-guide a{flex:0 1 auto;text-align:center}
++  .brief-grid>div{padding:var(--s3)}
++  .footer-inner{padding:var(--s5) 16px}
++}
+ </style>
+ </head>
+ <body>
+-<header>
+-  <h1>🐷 大戶行為觀察台</h1>
+-  <span class="nav">
+-    <button id="nav-market" class="on" onclick="stopReplay();showPage('market')">📊 行為觀察</button>
+-    <button id="nav-strategy" onclick="stopReplay();showPage('strategy')">🧠 策略 / Obsidian</button>
+-  </span>
+-  <nav class="sites" aria-label="其他工具">
+-    <a href="https://warhubs.com/" title="WARHUBS" rel="noopener noreferrer">戰情觀測站</a>
+-    <a href="https://stocktools.cc/" title="Stocktools" rel="noopener noreferrer">美股雙重分析</a>
+-    <a href="https://toolist.cc/" title="Toolist" rel="noopener noreferrer">分頁工作區</a>
++<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true"><symbol id="i-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></symbol><symbol id="i-brain-circuit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M9 13a4.5 4.5 0 0 0 3-4"/><path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/><path d="M3.477 10.896a4 4 0 0 1 .585-.396"/><path d="M6 18a4 4 0 0 1-1.967-.516"/><path d="M12 13h4"/><path d="M12 18h6a2 2 0 0 1 2 2v1"/><path d="M12 8h8"/><path d="M16 8V5a2 2 0 0 1 2-2"/><circle cx="16" cy="13" r=".5"/><circle cx="18" cy="3" r=".5"/><circle cx="20" cy="21" r=".5"/><circle cx="20" cy="8" r=".5"/></symbol><symbol id="i-layout-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></symbol><symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol><symbol id="i-fish" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.47-3.44 6-7 6s-7.56-2.53-8.5-6Z"/><path d="M18 12v.5"/><path d="M16 17.93a9.77 9.77 0 0 1 0-11.86"/><path d="M7 10.67C7 8 5.58 5.97 2.73 5.5c-1 1.5-1 5 .23 6.5-1.24 1.5-1.24 5-.23 6.5C5.58 18.03 7 16 7 13.33"/><path d="M10.46 7.26C10.2 5.88 9.17 4.24 8 3h5.8a2 2 0 0 1 1.98 1.67l.23 1.4"/><path d="m16.01 17.93-.23 1.4A2 2 0 0 1 13.8 21H9.5a5.96 5.96 0 0 0 1.49-3.98"/></symbol><symbol id="i-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/><path d="M17.599 6.5a3 3 0 0 0 .399-1.375"/><path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/><path d="M3.477 10.896a4 4 0 0 1 .585-.396"/><path d="M19.938 10.5a4 4 0 0 1 .585.396"/><path d="M6 18a4 4 0 0 1-1.967-.516"/><path d="M19.967 17.484A4 4 0 0 1 18 18"/></symbol><symbol id="i-coins" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/></symbol><symbol id="i-hourglass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></symbol><symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol><symbol id="i-landmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></symbol><symbol id="i-circle-dollar-sign" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></symbol><symbol id="i-radar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/></symbol><symbol id="i-scale" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></symbol><symbol id="i-table" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></symbol><symbol id="i-git-compare" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/></symbol><symbol id="i-flask" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></symbol><symbol id="i-newspaper" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></symbol><symbol id="i-message" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol><symbol id="i-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></symbol><symbol id="i-chart-line" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/></symbol><symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></symbol><symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol><symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol></svg>
++<header class="appbar">
++<div class="appbar-inner">
++  <a class="brand" href="/" aria-label="HypeBoss 首頁"><img src="/static/icon-192.png" alt="" width="28" height="28"/><h1><span class="brand-name">HypeBoss</span><span class="brand-sub">大戶行為觀察台</span></h1></a>
++  <nav class="nav tabs" aria-label="主要頁面">
++    <button id="nav-market" class="on" aria-current="page" onclick="stopReplay();showPage('market')"><svg class="ico" aria-hidden="true"><use href="#i-activity"/></svg><span>行為觀察</span></button>
++    <button id="nav-strategy" onclick="stopReplay();showPage('strategy')"><svg class="ico" aria-hidden="true"><use href="#i-brain-circuit"/></svg><span>策略研究</span></button>
+   </nav>
++  <span class="spacer"></span>
++  <details class="pop status-pop">
++    <summary aria-label="資料更新狀態"><i class="dot" id="ts-dot" aria-hidden="true"></i><span id="ts-short">載入中…</span></summary>
++    <div class="pop-panel"><p class="pop-title">資料更新狀態</p><p class="ts" id="ts">載入中…</p></div>
++  </details>
++  <details class="pop tools-menu">
++    <summary aria-label="更多工具"><svg class="ico" aria-hidden="true"><use href="#i-layout-grid"/></svg><span class="tools-label">工具</span><svg class="ico chev-ico" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
++    <div class="pop-panel tools-panel">
+   <nav class="sites" aria-label="交易所開戶">
++    <span>交易所開戶</span>
+     <a href="https://okx.com/join/75395880" title="OKX" target="_blank" rel="noopener noreferrer">OKX 開戶</a>
+     <a href="https://www.pionex.com/zh-TW/signUp?r=0rcgGsu5GKg" title="派網" target="_blank" rel="noopener noreferrer">派網開戶</a>
+   </nav>
+-  <span style="flex:1"></span>
+-  <span class="ts" id="ts">載入中…</span>
++  <nav class="sites" aria-label="其他工具">
++    <span>姊妹站</span>
++    <a href="https://warhubs.com/" title="WARHUBS" rel="noopener noreferrer">戰情觀測站</a>
++    <a href="https://stocktools.cc/" title="Stocktools" rel="noopener noreferrer">美股雙重分析</a>
++    <a href="https://toolist.cc/" title="Toolist" rel="noopener noreferrer">分頁工作區</a>
++  </nav>
+   <nav class="sites related" aria-label="相關工具">
+     <span>相關工具</span>
+     <a href="https://tradingbeats.xyz/" title="TradingBeats 鏈上地址分析" target="_blank" rel="noopener noreferrer">鏈上地址追蹤</a>
+@@ -377,6 +556,9 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
+     <a href="https://www.stocktools.cc/tw/us-fractional" title="Stocktools 美股碎股" target="_blank" rel="noopener noreferrer">美股碎股</a>
+     <a href="https://www.stocktools.cc/tw/us-earnings" title="Stocktools 美股財報日" target="_blank" rel="noopener noreferrer">美股財報日</a>
+   </nav>
++    </div>
++  </details>
++</div>
+ </header>
+ <div id="ctip" class="ctip"></div>
+ <div id="page-strategy" style="display:none"></div>
+@@ -396,11 +578,11 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
+     <div class="population-heading"><span class="population-number">01</span><div><h2 id="heading-whales">巨鯨</h2><p>先分清現貨地址，再看合約大額帳號。</p></div></div>
+     <div id="brief-whales" class="population-brief">資料載入中…</div>
+   <details class="ccard">
+-    <summary><span class="ctitle">🪙 BTC 現貨地址餘額分組 <small style="opacity:.7">鏈上現貨</small></span><span class="csum" id="sum-onchain">載入中…</span><span class="chev">▾</span></summary>
++    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-coins"/></svg>BTC 現貨地址餘額分組 <small style="opacity:.7">鏈上現貨</small></span><span class="csum" id="sum-onchain">載入中…</span><span class="chev">▾</span></summary>
+     <div id="onchainwhale"><div class="box empty">鏈上巨鯨持幣量載入中…</div></div>
+   </details>
+   <details class="ccard">
+-    <summary><span class="ctitle">🐋 合約大額帳號 BTC 淨持倉變化 <small style="opacity:.7">合約</small></span><span class="csum" id="sum-whale">載入中…</span><span class="chev">▾</span></summary>
++    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-fish"/></svg>合約大額帳號 BTC 淨持倉變化 <small style="opacity:.7">合約</small></span><span class="csum" id="sum-whale">載入中…</span><span class="chev">▾</span></summary>
+     <div id="whalechart"><div class="box empty">大額帳號 BTC 合約部位載入中…</div></div>
+   </details>
+     <button class="detail-link" onclick="openAccountGroup('whale')">查閱大額帳號異動 →</button>
+@@ -409,7 +591,7 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
+     <div class="population-heading"><span class="population-number">02</span><div><h2 id="heading-smart">聰明錢</h2><p>先看同一批帳號的 BTC 合約數量，再看群體趨勢。</p></div></div>
+     <div id="brief-smart" class="population-brief">資料載入中…</div>
+   <details class="ccard">
+-    <summary><span class="ctitle">🧠 聰明錢 BTC 淨持倉變化 <small style="opacity:.7">合約</small></span><span class="csum" id="sum-smartbtc">載入中…</span><span class="chev">▾</span></summary>
++    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-brain"/></svg>聰明錢 BTC 淨持倉變化 <small style="opacity:.7">合約</small></span><span class="csum" id="sum-smartbtc">載入中…</span><span class="chev">▾</span></summary>
+     <div id="smartbtc"><div class="box empty">聰明錢 BTC 合約分析載入中…</div></div>
+   </details>
+     <button class="detail-link" onclick="openAccountGroup('smart_verified')">查閱已驗證帳號異動 →</button>
+@@ -419,45 +601,50 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
+     <div class="population-heading"><span class="population-number">03</span><div><h2 id="heading-lth">長期持有者</h2><p>看舊幣供給如何變化，先比較近 7 天與近 30 天。</p></div></div>
+     <div id="brief-lth" class="population-brief">資料載入中…</div>
+   <details class="ccard">
+-    <summary><span class="ctitle">⏳ 長期持有者 BTC 供給變化</span><span class="csum" id="sum-lth">載入中…</span><span class="chev">▾</span></summary>
++    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-hourglass"/></svg>長期持有者 BTC 供給變化</span><span class="csum" id="sum-lth">載入中…</span><span class="chev">▾</span></summary>
+     <div id="lth"><div class="box empty">長期持有者日資料載入中…</div></div>
+   </details>
+   </section>
+-  <details class="ccard" id="account-inspector"><summary><span class="ctitle">同帳號異動明細</span><span class="chev">▾</span></summary>
++  <details class="ccard" id="account-inspector"><summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-users"/></svg>同帳號異動明細</span><span class="chev">▾</span></summary>
+     <section id="account-activity" class="box"><h2>同帳號 BTC 合約異動</h2><p class="meta">載入中…</p></section>
+   </details>
+   <section id="market-support" class="market-support" aria-labelledby="heading-support">
+     <h2 id="heading-support">市場背景與其他資料</h2>
+     <p class="meta">看完三類群體，再用行情、資金與情緒補充背景；這些指標不能代替群體的實際動作。</p>
++  <div class="support-grid">
+   <details class="ccard">
+-    <summary><span class="ctitle">🌐 全市場宏觀</span><span class="csum" id="sum-macro">載入中…</span><span class="chev">▾</span></summary>
++    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-globe"/></svg>全市場宏觀</span><span class="csum" id="sum-macro">載入中…</span><span class="chev">▾</span></summary>
+     <div id="macro"><div class="box empty">宏觀載入中…</div></div>
+   </details>
+   <details class="ccard">
+-    <summary><span class="ctitle">💰 資金動向</span><span class="csum" id="sum-defi">載入中…</span><span class="chev">▾</span></summary>
++    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-landmark"/></svg>資金動向</span><span class="csum" id="sum-defi">載入中…</span><span class="chev">▾</span></summary>
+     <div id="defi"><div class="box empty">資金動向載入中…</div></div>
+   </details>
+   <details class="ccard">
+-    <summary><span class="ctitle">💵 穩定幣總供應</span><span class="csum" id="sum-stable">載入中…</span><span class="chev">▾</span></summary>
++    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-circle-dollar-sign"/></svg>穩定幣總供應</span><span class="csum" id="sum-stable">載入中…</span><span class="chev">▾</span></summary>
+     <div id="stablecoins"><div class="box empty">穩定幣總供應載入中…</div></div>
+   </details>
+-<details class="ccard"><summary><span class="ctitle">情緒與合約部位分歧</span><span class="chev">▾</span></summary>  <section id="opp" class="hero"><h2>🎯 情緒與合約部位分歧</h2><div class="meta">載入中…</div></section></details>
++<details class="ccard"><summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-git-compare"/></svg>情緒與合約部位分歧</span><span class="chev">▾</span></summary>  <section id="opp" class="hero"><h2>🎯 情緒與合約部位分歧</h2><div class="meta">載入中…</div></section></details>
+   <details class="ccard">
+-    <summary><span class="ctitle">🎯 分歧雷達</span><span class="csum" id="sum-radar">載入中…</span><span class="chev">▾</span></summary>
++    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-radar"/></svg>分歧雷達</span><span class="csum" id="sum-radar">載入中…</span><span class="chev">▾</span></summary>
+     <div id="radar"><div class="box empty">分歧雷達載入中…</div></div>
+   </details>
+   <details class="ccard">
+-    <summary><span class="ctitle">🧭 合約帳號部位比較</span><span class="csum" id="sum-pos">載入中…</span><span class="chev">▾</span></summary>
++    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-scale"/></svg>合約帳號部位比較</span><span class="csum" id="sum-pos">載入中…</span><span class="chev">▾</span></summary>
+     <div id="pos"><div class="box empty">大玩家決心載入中…</div></div>
+   </details>
+-  <details class="ccard">
+-    <summary><span class="ctitle">📋 幣別總表</span><span class="csum" id="sum-table">載入中…</span><span class="chev">▾</span></summary>
++  <details class="ccard span-all">
++    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-table"/></svg>幣別總表</span><span class="csum" id="sum-table">載入中…</span><span class="chev">▾</span></summary>
+     <div id="table"><div class="box empty">幣別總表載入中…</div></div>
+   </details>
++  </div>
+   </section>
+ </div></div>
+ <footer>
++<div class="footer-inner">
++  <div class="footer-brand"><strong>HypeBoss</strong><span>大戶行為觀察台</span></div>
+   <nav class="sites" aria-label="其他工具">
++    <span>姊妹站</span>
+     <a href="https://warhubs.com/" title="WARHUBS" rel="noopener noreferrer">戰情觀測站</a>
+     <a href="https://stocktools.cc/" title="Stocktools" rel="noopener noreferrer">美股雙重分析</a>
+     <a href="https://toolist.cc/" title="Toolist" rel="noopener noreferrer">分頁工作區</a>
+@@ -479,6 +666,7 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
+     <a href="https://www.stocktools.cc/tw/us-earnings" title="Stocktools 美股財報日" target="_blank" rel="noopener noreferrer">美股財報日</a>
+   </nav>
+   <a class="simples" href="https://simples.com.tw/" rel="noopener noreferrer">SIMPLES 工具網</a>
++</div>
+ </footer>
+ <script>
+ 
+@@ -1405,14 +1593,26 @@ function renderLastUp(){
+     });
+     el.textContent+='｜'+parts.join('／');
+   }
++  const short=document.getElementById('ts-short'), dot=document.getElementById('ts-dot');
++  if(short){
++    const full=el.textContent, warn=/⚠|失敗|延遲/.test(full), busy=/更新中|準備中|檢查中/.test(full);
++    short.textContent=(warn?'部分資料延遲':'資料即時')+(quoteTs?'・'+age(quoteTs):'');
++    if(dot) dot.className='dot '+(warn?'warn':busy?'busy':'ok');
++  }
+ }
++// 頁首彈出面板：點外面或按 Esc 收起
++document.addEventListener('click',e=>{document.querySelectorAll('details.pop[open]').forEach(d=>{if(!d.contains(e.target)) d.removeAttribute('open');});});
++document.addEventListener('keydown',e=>{if(e.key==='Escape') document.querySelectorAll('details.pop[open]').forEach(d=>{d.removeAttribute('open');d.querySelector('summary')?.focus();});});
+ // ---- 頁2：策略 / Obsidian ----
+ let STRATLOADED=false;
+ function showPage(name){
+   document.getElementById('page-market').style.display = name==='market'?'block':'none';
+   document.getElementById('page-strategy').style.display = name==='strategy'?'block':'none';
+-  document.getElementById('nav-market').className = name==='market'?'on':'';
+-  document.getElementById('nav-strategy').className = name==='strategy'?'on':'';
++  for(const [id,key] of [['nav-market','market'],['nav-strategy','strategy']]){
++    const b=document.getElementById(id); b.classList.toggle('on',name===key);
++    if(name===key) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
++  }
++  window.scrollTo({top:0});
+   if(name==='strategy'){ if(!STRATLOADED){ STRATLOADED=true; loadStrategy(); } else { refreshStrategy(); } }
+ }
+ // 策略頁自動刷新：只在該頁可見時重抓各面板資料(不重建結構，保留問答框)
+@@ -1475,28 +1675,30 @@ async function loadSocial(){
+ }
+ function loadStrategy(){
+   document.getElementById('page-strategy').innerHTML=`<div class="wrap">
+-  <details class="ccard" open>
+-    <summary><span class="ctitle">🔬 訊號驗證</span><span class="csum">訊號出現後 BTC 實際怎麼走（前瞻報酬·勝率·vs基準）——能不能預判價格的證明</span><span class="chev">▾</span></summary>
++  <section class="page-intro"><p class="eyebrow">策略研究</p><h2>先驗證訊號，再參考情緒與回測。</h2><p>訊號驗證、新聞與社群情緒、策略回測與 Obsidian 知識庫集中在這一頁。</p></section>
++  <div class="strategy-grid">
++  <details class="ccard span-all" open>
++    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-flask"/></svg>訊號驗證</span><span class="csum">訊號出現後 BTC 實際怎麼走（前瞻報酬·勝率·vs基準）——能不能預判價格的證明</span><span class="chev">▾</span></summary>
+     <div id="validate"><div class="box empty">訊號驗證載入中…</div></div>
+   </details>
+   <details class="ccard">
+-    <summary><span class="ctitle">📰 新聞分析</span><span class="csum">6 家媒體利多/利空＋影響幣·整體情緒</span><span class="chev">▾</span></summary>
++    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-newspaper"/></svg>新聞分析</span><span class="csum">6 家媒體利多/利空＋影響幣·整體情緒</span><span class="chev">▾</span></summary>
+     <div id="news"><div class="box empty">新聞分析載入中…</div></div>
+   </details>
+   <details class="ccard">
+-    <summary><span class="ctitle">👽 Reddit 散戶情緒</span><span class="csum">各幣討論熱度＋詞庫情緒（各版輪流更新）</span><span class="chev">▾</span></summary>
++    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-message"/></svg>Reddit 散戶情緒</span><span class="csum">各幣討論熱度＋詞庫情緒（各版輪流更新）</span><span class="chev">▾</span></summary>
+     <div id="reddit"><div class="box empty">Reddit 討論熱度載入中…</div></div>
+   </details>
+   <details class="ccard">
+-    <summary><span class="ctitle">😱 恐懼貪婪 / 社群</span><span class="csum">全區間恐懼貪婪指數·各幣社群情緒</span><span class="chev">▾</span></summary>
++    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-gauge"/></svg>恐懼貪婪 / 社群</span><span class="csum">全區間恐懼貪婪指數·各幣社群情緒</span><span class="chev">▾</span></summary>
+     <div id="social"><div class="box empty">社群情緒載入中…</div></div>
+   </details>
+   <details class="ccard">
+-    <summary><span class="ctitle">📈 策略回測</span><span class="csum">方向命中率＋損益曲線（真實 K 線對齊）</span><span class="chev">▾</span></summary>
++    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-chart-line"/></svg>策略回測</span><span class="csum">方向命中率＋損益曲線（真實 K 線對齊）</span><span class="chev">▾</span></summary>
+     <div id="bt"><div class="box empty">回測載入中…</div></div>
+   </details>
+   <details class="ccard">
+-    <summary><span class="ctitle">🧠 Obsidian 知識庫</span><span class="csum">下載 vault·把訊號變成個人交易知識圖</span><span class="chev">▾</span></summary>
++    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-book"/></svg>Obsidian 知識庫</span><span class="csum">下載 vault·把訊號變成個人交易知識圖</span><span class="chev">▾</span></summary>
+     <div class="box">
+       <p><a class="dl" href="/vault.zip">⬇ 下載 Obsidian Vault (.zip)</a></p>
+       <div class="step">1. 解壓 → Obsidian「開啟資料夾作為 Vault」</div>
+@@ -1506,13 +1708,14 @@ function loadStrategy(){
+     </div>
+   </details>
+   <details class="ccard">
+-    <summary><span class="ctitle">🔎 知識庫問答（RAG）</span><span class="csum">對累積的決策/關係用自然語言問答</span><span class="chev">▾</span></summary>
++    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg>知識庫問答（RAG）</span><span class="csum">對累積的決策/關係用自然語言問答</span><span class="chev">▾</span></summary>
+     <div class="box">
+       <div class="ask"><input id="kbq" placeholder="例：聰明錢和鯨魚現在對 ETH 的態度一致嗎？" onkeydown="if(event.key==='Enter')askKB()">
+         <button onclick="askKB()">問</button></div>
+       <div id="kbout" class="meta"></div>
+     </div>
+   </details>
++  </div>
+ </div>`;
+   loadValidate(); loadNews(); loadSocial(); loadReddit(); loadBacktest();
+ }
