@@ -133,15 +133,15 @@ def test_html_exposes_sibling_simples_sites(client):
     assert 'https://toolist.cc/' in html
     assert 'https://simples.com.tw/' in html
     assert 'moneytools' not in html.lower()
-    assert html.split('<header>', 1)[1].split('</header>', 1)[0].count('戰情觀測站') == 1
-    assert html.split('<header>', 1)[1].split('</header>', 1)[0].count('分頁工作區') == 1
+    assert html.split('<header', 1)[1].split('</header>', 1)[0].count('戰情觀測站') == 1
+    assert html.split('<header', 1)[1].split('</header>', 1)[0].count('分頁工作區') == 1
     assert html.split('<footer>', 1)[1].split('</footer>', 1)[0].count('SIMPLES 工具網') == 1
     assert 'affiliate' not in html.lower()
 
 
 def test_html_exposes_stocktools_tw_deep_links(client):
     html = client[0].get('/').text
-    header = html.split('<header>', 1)[1].split('</header>', 1)[0]
+    header = html.split('<header', 1)[1].split('</header>', 1)[0]
     footer = html.split('<footer>', 1)[1].split('</footer>', 1)[0]
     fee = 'https://www.stocktools.cc/tw/us-fee-calculator'
     etf = 'https://www.stocktools.cc/tw/us-etf'
@@ -172,7 +172,7 @@ def test_html_exposes_stocktools_tw_deep_links(client):
 
 def test_html_exposes_tradingbeats_related_link(client):
     html = client[0].get('/').text
-    header = html.split('<header>', 1)[1].split('</header>', 1)[0]
+    header = html.split('<header', 1)[1].split('</header>', 1)[0]
     footer = html.split('<footer>', 1)[1].split('</footer>', 1)[0]
     url = 'https://tradingbeats.xyz/'
     assert html.count(url) == 2
@@ -187,7 +187,7 @@ def test_html_exposes_tradingbeats_related_link(client):
 
 def test_html_exposes_exchange_signup_links_once_in_header(client):
     html = client[0].get('/').text
-    header = html.split('<header>', 1)[1].split('</header>', 1)[0]
+    header = html.split('<header', 1)[1].split('</header>', 1)[0]
     footer = html.split('<footer>', 1)[1].split('</footer>', 1)[0]
     okx = 'https://okx.com/join/75395880'
     pionex = 'https://www.pionex.com/zh-TW/signUp?r=0rcgGsu5GKg'

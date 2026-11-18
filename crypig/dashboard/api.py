@@ -16,6 +16,7 @@ from ..radar_presentation import describe_radar, convergence_note
 import logging
 import math
 import secrets
+import sqlite3
 import time
 import os
 from contextlib import asynccontextmanager
@@ -30,6 +31,7 @@ from pydantic import BaseModel
 from ..orchestrator import Orchestrator
 from ..backtest import backtest, OHLCVPriceHistory
 from ..clients.market_data import MarketDataClient
+from ..storage.tracked_positions import MAP_COINS, STALE_SECONDS, mock_tracked_positions
 from .page import INDEX_HTML
 
 logger = logging.getLogger(__name__)
@@ -415,6 +417,40 @@ def positioning() -> dict:
 @app.get("/account_activity")
 def account_activity() -> dict:
     return dashboard_state().trader_summary.get("account_activity", {"groups":{}, "status":"waiting"})
+
+
+def _tracked_data(coin=None, limit=0):
+    orc = orchestrator()
+    mock = orc.config.use_mock
+    if mock:
+        snapshot, events = mock_tracked_positions()
+        snapshot["coins"] = sorted({event["coin"] for event in events})
+        events = [event for event in events if not coin or event["coin"] == coin][:limit]
+    else:
+        try:
+            snapshot, events = orc.tracked_positions.read(coin=coin, limit=limit)
+        except (sqlite3.Error, OSError, ValueError):
+            logger.exception("Could not read tracked positions")
+            raise HTTPException(status_code=503, detail="Tracked position data unavailable")
+    metadata = {key: snapshot.get(key) for key in
+                ("as_of", "quote_at", "selected_accounts", "received_accounts", "matched_accounts")}
+    metadata.update(mock=mock, stale=bool(snapshot) and time.time() - snapshot["as_of"] > STALE_SECONDS)
+    return snapshot, events, metadata
+
+
+@app.get("/notable-feed")
+def notable_feed(limit: int = Query(50, ge=1, le=100),
+                 coin: str | None = Query(None, pattern=r"^[A-Za-z0-9:_./-]{1,48}$")) -> dict:
+    snapshot, events, meta = _tracked_data(coin, limit)
+    return {"status": snapshot.get("status", "waiting"), "events": events,
+            "coins": snapshot.get("coins", []), **meta}
+
+
+@app.get("/liquidation-map")
+def liquidation_map(coin: str = Query("BTC", pattern="^(BTC|ETH|HYPE)$")) -> dict:
+    snapshot, _, meta = _tracked_data()
+    result = snapshot.get("maps", {}).get(coin, {"status": "waiting", "coin": coin, "buckets": []})
+    return {**result, **meta, "supported_coins": MAP_COINS, "scope": "tracked_accounts"}
 
 
 @app.get("/account_history")

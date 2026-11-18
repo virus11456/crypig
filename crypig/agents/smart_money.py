@@ -31,6 +31,7 @@ class SmartMoneyAgent(Agent):
         self._client: HyperliquidClient | None = None
         # 每輪只統計一次，多個標的共用（避免重複打 API）
         self._agg: dict[str, dict] | None = None
+        self.cycle_accounts: dict | None = None
         self._cycle_pinned = False
         self._agg_ts: float = 0.0
         self._trader_count: int = 0
@@ -88,10 +89,12 @@ class SmartMoneyAgent(Agent):
 
     def begin_cycle(self):
         self._agg = None
+        self.cycle_accounts = None
         self._cycle_pinned = True
 
     def end_cycle(self):
         self._cycle_pinned = False
+        self.cycle_accounts = None
 
     def qualification_status(self):
         with self._qualification_lock:
@@ -249,7 +252,13 @@ class SmartMoneyAgent(Agent):
         whale_addrs_mkt = [a for a, _ in whale_pairs]
 
         # 聯集一次抓持倉——精簡串流，不保留原始 state JSON（大戶 state 很大會 OOM）
-        slim = self._client.slim_accounts_bulk(list(dict.fromkeys(smart_addrs + whale_addrs_mkt)))
+        selected = smart_addrs + whale_addrs_mkt + [row.address for row in self.config.notable_addresses]
+        canonical = {addr: addr.lower() for addr in selected}
+        slim = self._client.slim_accounts_bulk(list(dict.fromkeys(canonical.values())))
+        if self._cycle_pinned:
+            self.cycle_accounts = {"selected": len(set(canonical.values())), "accounts": slim}
+        # Existing cohort membership keeps its original keys.
+        slim = {addr: slim[key] for addr, key in canonical.items() if key in slim}
 
         def mk(addr: str) -> dict | None:
             a = slim.get(addr)

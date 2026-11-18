@@ -14,7 +14,7 @@ INDEX_HTML = r"""<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 <title>HypeBoss 量化交易分析中台</title>
 <link rel="manifest" href="/manifest.webmanifest"/>
-<meta name="theme-color" content="#0d1117"/>
+<meta name="theme-color" content="#0a0e15"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -22,16 +22,7 @@ INDEX_HTML = r"""<!doctype html>
 <link rel="apple-touch-icon" href="/static/icon-192.png"/>
 <link rel="icon" type="image/png" href="/static/icon-192.png"/>
 <style>
-  :root{color-scheme:dark;--bg:#0d1117;--card:#161b22;--line:#30363d;--fg:#e6edf3;--mut:#8b949e;
-        --bull:#3fb950;--bear:#f85149;--neu:#8b949e;--accent:#58a6ff}
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--fg);
-       font-family:-apple-system,Segoe UI,Roboto,"Noto Sans TC",sans-serif}
-  header{display:flex;align-items:center;flex-wrap:wrap;gap:12px 16px;padding:16px 24px;
-         border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5;
-         background:var(--bg);padding-top:max(16px,env(safe-area-inset-top))}
-  header h1{font-size:18px;margin:0}
-  header .ts{color:var(--mut);font-size:13px}
   button{background:var(--accent);color:#0d1117;border:0;border-radius:6px;
          padding:8px 14px;font-weight:600;cursor:pointer}
   button:disabled{opacity:.5;cursor:wait}
@@ -95,23 +86,6 @@ INDEX_HTML = r"""<!doctype html>
   .scroll thead th{position:sticky;top:0;background:#161b22;z-index:1}
   .filt{background:#0d1117;border:1px solid var(--line);color:var(--fg);border-radius:6px;
         padding:6px 10px;font-size:13px;margin-left:auto}
-  .nav{display:flex;gap:8px;margin-left:8px}
-  .nav button{background:#21262d;color:var(--mut);font-weight:600}
-  .nav button.on{background:var(--accent);color:#0d1117}
-  .sites{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px}
-  .sites a{display:inline-flex;align-items:center;color:#9eacba;text-decoration:none;
-           font-size:13px;font-weight:600;padding:6px 2px;border-bottom:1px solid transparent}
-  .sites a:hover,.sites a:active{color:var(--accent);border-bottom-color:var(--accent)}
-  .sites a:focus-visible{outline:2px solid #9ad5ff;outline-offset:3px;border-radius:2px}
-  .sites > span{color:#6e7681;font-size:12px;font-weight:600;letter-spacing:.04em;white-space:nowrap}
-  header .sites{margin-left:4px;padding-left:14px;border-left:1px solid var(--line)}
-  header .sites.related{width:100%;margin-left:0;padding-left:0;border-left:0}
-  footer{border-top:1px solid var(--line);padding:12px 24px;
-         padding-bottom:max(12px,env(safe-area-inset-bottom));
-         display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;background:var(--bg)}
-  footer .simples{margin-left:auto;color:#6e7681;font-size:12px;text-decoration:none;letter-spacing:.04em}
-  footer .simples:hover,footer .simples:active{color:var(--mut)}
-  footer .simples:focus-visible{outline:2px solid #9ad5ff;outline-offset:3px;border-radius:2px}
   .ask{display:flex;gap:8px;margin:10px 0}
   .ask input{flex:1;background:#0d1117;border:1px solid var(--line);color:var(--fg);
              border-radius:6px;padding:9px 12px;font-size:14px}
@@ -143,14 +117,6 @@ INDEX_HTML = r"""<!doctype html>
     .bt{padding:0 14px;margin-top:14px}
   }
   @media (max-width:560px){
-    header{padding:12px 14px;gap:8px 10px}
-    header h1{font-size:16px;width:100%}
-    header .nav{margin-left:0}
-    header .sites{margin-left:0;padding-left:0;border-left:0;width:100%}
-    header .ts{font-size:11px;order:3;width:100%}
-    footer{padding:12px 14px}
-    footer .simples{margin-left:0}
-    .nav button{padding:7px 10px;font-size:13px}
     main{padding:10px;gap:10px}
     .bt{padding:0 10px;margin-top:10px}
     .bt .box{padding:13px}
@@ -172,7 +138,6 @@ INDEX_HTML = r"""<!doctype html>
   }
   @media (max-width:380px){ .kpi .v{font-size:18px} .tbl{font-size:11px} }
   /* ===== 重新設計：進場機會 hero + 可折疊摘要卡 ===== */
-  .wrap{max-width:1400px;margin:0 auto;padding:18px 24px;display:flex;flex-direction:column;gap:14px}
   .hero{background:linear-gradient(160deg,#161b22,#11161d);border:1px solid var(--line);
         border-radius:14px;padding:18px 20px}
   .hero h2{margin:0 0 2px;font-size:14px;color:var(--mut);font-weight:600;letter-spacing:.3px}
@@ -234,33 +199,22 @@ INDEX_HTML = r"""<!doctype html>
   .moredt>summary{cursor:pointer;color:var(--accent);font-size:12px;user-select:none}
   @media (max-width:560px){ .eblab{width:104px;font-size:11px} .vsub{display:block;margin-top:2px} }
   /* 折疊卡：<details> 摘要＋點開細節 */
-  details.ccard{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
-  details.ccard>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;
-        padding:14px 18px;user-select:none}
   details.ccard>summary::-webkit-details-marker{display:none}
-  details.ccard>summary:hover{background:#1a212b}
-  .ctitle{font-weight:700;font-size:15px;white-space:nowrap}
   .csum{color:var(--mut);font-size:13px;flex:1;min-width:0;overflow:hidden;
         text-overflow:ellipsis;white-space:nowrap}
-  .chev{color:var(--mut);transition:transform .2s;font-size:12px}
-  details.ccard[open]>summary{border-bottom:1px solid var(--line)}
   details.ccard[open]>summary .chev{transform:rotate(180deg)}
   /* 卡內沿用既有渲染，但去掉內層 box 的框/底色避免雙重邊框 */
-  details.ccard .box{background:transparent;border:0;border-radius:0;padding:14px 18px 18px}
+  details.ccard .box{background:transparent;border:0;border-radius:0}
   details.ccard .box>h2:first-child,
   details.ccard .box .row>h2{display:none}   /* 標題已在卡頭，內層 h2 隱藏免重複(含幣別總表包在 .row 裡的) */
   details.ccard .box.empty{padding:28px;display:block}
   @media (max-width:560px){
-    .wrap{padding:12px 12px}
     .hero{padding:14px 14px;border-radius:12px}
     .hero .verdict{font-size:18px}
-    details.ccard>summary{padding:12px 14px;gap:8px}
-    details.ccard .box{padding:12px 14px 14px}
     .opps{grid-template-columns:1fr 1fr;gap:8px}
   }
 .behavior-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.behavior-card{padding:16px;background:#101820;border:1px solid #303943;border-radius:10px;line-height:1.8}.behavior-card strong{font-size:23px}.activity-controls{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.activity-controls select{background:#161f28;color:#e6edf3;border:1px solid #465363;padding:8px;border-radius:6px}.activity-table{overflow:auto}.activity-table table{width:100%;white-space:nowrap}.activity-table button{color:#79b8ff;background:none;border:0;cursor:pointer}.activity-kpis{display:flex;gap:24px;flex-wrap:wrap;margin:16px 0}.activity-kpis strong{font-size:22px;display:block}@media(max-width:800px){.behavior-grid{grid-template-columns:1fr}}
 
-.reading-guide{padding:24px 0 30px}.reading-guide h2{font-size:clamp(23px,3vw,32px);margin:8px 0 14px;line-height:1.5}.reading-guide p{max-width:780px;color:#aab8c6;line-height:1.8}.eyebrow{font-size:12px;letter-spacing:.14em}.reading-guide nav{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}.reading-guide a,.detail-link{display:inline-block;color:#a7d5ff;background:#182430;border:1px solid #35475a;border-radius:8px;padding:10px 14px;text-decoration:none;font-size:14px;cursor:pointer}.population{padding:24px;margin-bottom:24px;border:1px solid #344453;border-radius:16px;background:#101820;scroll-margin-top:90px}.population-heading{display:flex;gap:16px;align-items:flex-start;margin-bottom:20px}.population-number{font-size:14px;color:#91b5d2;padding:8px;border:1px solid #35475a;border-radius:8px}.population h2{font-size:26px;margin:0 0 8px}.population-heading p{margin:0;color:#aab8c6;line-height:1.6}.population h3{font-size:14px;color:#aab8c6;margin:0 0 12px}.brief-main{font-size:19px;line-height:1.8;margin:0 0 12px;color:#edf5fc}.brief-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}.reading-hint{border-top:1px solid #2b3b49;padding-top:16px;margin:18px 0;color:#b2c3d1;line-height:1.8;font-size:14px}.population .ccard{margin:12px 0;background:#0d141c}.population .detail-link{margin:8px 8px 0 0}.market-support{padding-top:20px;scroll-margin-top:90px}.market-support>h2{font-size:23px}.market-support>.meta{margin-bottom:24px}#account-inspector{scroll-margin-top:90px}a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid #9ad5ff;outline-offset:4px}@media(max-width:700px){.population{padding:18px 14px}.brief-grid{grid-template-columns:1fr;gap:20px}.brief-grid>div+div{border-top:1px solid #2b3b49;padding-top:20px}.population .csum{display:none}.brief-main{font-size:17px}.reading-guide h2{font-size:24px}}
 
 /* Responsive layout: preserve content, contain wide tables, wrap card controls. */
 html{-webkit-text-size-adjust:100%;scroll-padding-top:100px}
@@ -277,24 +231,10 @@ html{-webkit-text-size-adjust:100%;scroll-padding-top:100px}
 .kpis .chart-kpi{flex:1 1 260px;min-width:0;max-width:100%}
 .ctip{max-width:calc(100vw - 20px);white-space:normal;overflow-wrap:anywhere}
 @media(max-width:1024px){
- header{position:relative;padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));padding-top:max(12px,env(safe-area-inset-top))}
- footer{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));padding-bottom:max(12px,env(safe-area-inset-bottom))}
- .wrap{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));padding-bottom:max(18px,env(safe-area-inset-bottom))}
- .ctitle{flex:1}.csum{flex-basis:100%;order:3;white-space:normal}
- details.ccard>summary{flex-wrap:wrap;gap:8px;align-items:flex-start}
- .population .csum{display:none}
- button,.rtoggle button,.activity-controls select,.filt,.dl,.detail-link,.reading-guide a,.sites a{min-height:44px}
+ button,.rtoggle button,.activity-controls select,.filt,.dl,.detail-link,.reading-guide a{min-height:44px}
  input,select{font-size:16px!important}
- .reading-guide{padding:12px 0 18px}
- .population{padding:20px;margin-bottom:10px}
- .brief-grid{grid-template-columns:1fr}
- .brief-grid>div+div{border-top:1px solid #2b3b49;padding-top:20px}
- .population,#account-inspector,.market-support{scroll-margin-top:16px}
- html{scroll-padding-top:0}
 }
 @media(max-width:560px){
- .population{padding:16px 12px}.population-heading{gap:10px}.population h2{font-size:23px}
- .nav{flex-wrap:wrap;margin-left:0;max-width:100%}.nav button{padding:8px 10px}
  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpis .chart-kpi{grid-column:1/-1}
  .activity-controls label{display:flex;flex-wrap:wrap;gap:6px;align-items:center;max-width:100%}
  .activity-controls select{width:100%}
@@ -325,9 +265,7 @@ details.ccard .box.balance-panel{padding:24px}
 @media(max-width:560px){details.ccard .box.balance-panel{padding:16px 12px}.balance-overview>p{font-size:18px}.balance-card{padding:16px}.balance-trend-heading{flex-wrap:wrap}.balance-chart{padding:12px}.balance-chart h4{line-height:1.6}}
 
 /* Shared reading rhythm across market and strategy panels. */
-.wrap{max-width:1280px;gap:20px}.box{line-height:1.65}.meta{line-height:1.75;color:#9eacba}.box>.meta{margin:10px 0 16px}
-.market-support>details.ccard{margin:16px 0}.ctitle{font-size:16px;line-height:1.6}.csum{font-size:13px;line-height:1.65}
-details.ccard>summary{padding:18px 22px}details.ccard .box{padding:22px}details.ccard[open]>summary{background:#14202b}
+.box{line-height:1.65}.meta{line-height:1.75}.box>.meta{margin:10px 0 16px}
 .kpis{gap:14px;align-items:stretch;margin:18px 0}.kpis>.kpi{flex:1 1 140px;padding:16px;background:#101a24;border:1px solid #263340;border-radius:9px}.kpi .v{font-variant-numeric:tabular-nums;font-size:24px;line-height:1.3}.kpi .k{margin-top:8px;line-height:1.6;font-size:12px}
 .activity-kpis{gap:14px}.activity-kpis>div{padding:16px;background:#111c26;border:1px solid #2b3947;border-radius:9px;flex:1 1 160px}.activity-controls{padding:14px;background:#101a24;border-radius:8px;gap:16px}.activity-controls label{line-height:2}
 .tbl th,.tbl td{padding:13px 16px;font-variant-numeric:tabular-nums}.tbl th{font-size:12px}.scroll{border:1px solid #263340}.tbl tbody tr:nth-child(even){background:#111b25}
@@ -335,32 +273,275 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
 .posrow{padding:18px;margin:16px 0}.posname{margin-bottom:14px}.posstats{gap:10px}.pchip{padding:8px 12px}.newsrow{padding:16px 4px;line-height:1.7}.newsrow a{font-size:15px}.newslist{padding-right:10px}.sig,.nowbox,.vline,.vverdict{padding:14px 16px;line-height:1.8}.vsig{padding-top:24px;margin-top:24px}.vhead{font-size:16px;line-height:1.7}
 .chart-scroll{overflow-x:auto;max-width:100%;margin:18px 0;overscroll-behavior-x:contain}.chart-scroll>svg{display:block;min-width:680px}.chart-scroll:focus-visible{outline:2px solid #91c8f7;outline-offset:3px}
 @media(max-width:900px){.chart-scroll:after{content:'左右滑動查看日期與數值 · 點圖查看明細';display:block;color:#9eacba;font-size:12px;margin-top:10px;line-height:1.6}.balance-chart-scroll:after{content:none}}
-@media(max-width:560px){.wrap{gap:16px}details.ccard>summary{padding:16px 14px}details.ccard .box{padding:18px 14px}.ctitle{font-size:14px}.kpis>.kpi{padding:12px}.kpi .v{font-size:21px}.pchip{padding:6px 9px}.activity-kpis>div{flex-basis:100%}.tbl th,.tbl td{padding:12px}.posrow{padding:14px}.activity-table th,.activity-table td{padding:12px 14px}}
+@media(max-width:560px){.kpis>.kpi{padding:12px}.kpi .v{font-size:21px}.pchip{padding:6px 9px}.activity-kpis>div{flex-basis:100%}.tbl th,.tbl td{padding:12px}.posrow{padding:14px}.activity-table th,.activity-table td{padding:12px 14px}}
 .strategy-table-scroll{overflow-x:auto;margin:16px 0;border:1px solid #263340;border-radius:8px}.strategy-table-scroll table.vt{min-width:580px;table-layout:auto;margin:0}.strategy-table-scroll table.vt td,.strategy-table-scroll table.vt th{white-space:nowrap;padding:14px 18px;overflow-wrap:normal}.strategy-table-scroll table.vt td:not(:first-child){text-align:right}@media(max-width:680px){.strategy-table-scroll:after{content:'左右滑動查看完整欄位';display:block;font-size:12px;color:#9eacba;padding:10px}}
 *{scrollbar-color:#465b6e #111b25;scrollbar-width:thin}
 
 .replay-panel{background:linear-gradient(140deg,#142634,#101923);border:1px solid #385166;border-radius:16px;padding:24px;overflow:hidden}.replay-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.replay-heading h2{margin:8px 0;font-size:24px}.replay-heading .eyebrow{margin:0;color:#a7cadb}.replay-controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:24px 0 16px}.replay-controls label{font-size:13px;color:#aabaca;display:flex;gap:8px;align-items:center}.replay-controls select{min-height:44px;padding:8px;color:#e6edf3;background:#101923;border:1px solid #476174;border-radius:6px;max-width:100%}.replay-controls button,.replay-heading button{min-height:44px}.replay-time{font-variant-numeric:tabular-nums;line-height:1.8;color:#c8dce9;font-size:14px}#replay-slider{width:100%;min-height:44px;accent-color:#67d6e8;cursor:pointer}#replay-chart{max-width:100%;overflow-x:auto}#replay-chart svg{width:100%;min-width:460px;display:block;max-height:330px}.replay-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.replay-details article{padding:16px;background:#101b26;border:1px solid #304454;border-radius:10px;line-height:1.7}.replay-details h3{font-size:14px;margin:0 0 10px;color:#c9e1ed}.replay-details p{margin:8px 0;font-size:14px}@media(max-width:700px){.replay-panel{padding:18px 14px}.replay-heading h2{font-size:21px}.replay-details{grid-template-columns:1fr}.replay-controls label{flex-wrap:wrap}.replay-controls{gap:10px}#replay-chart:after{content:'左右滑動看完整多空長條';font-size:12px;color:#9eacba;display:block;margin:8px 0}}
 .replay-axis,.replay-values{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-variant-numeric:tabular-nums}.replay-axis{font-size:13px;color:#aabaca;margin:20px 0}.replay-track-row{margin:22px 0}.replay-track-row h4{margin:0 0 12px;font-size:15px}.replay-tracks{display:grid;grid-template-columns:1fr 1fr;gap:2px}.replay-tracks>div{height:32px;background:#243644;display:flex;align-items:center;min-width:0}.replay-tracks .replay-short{justify-content:flex-end;border-right:1px solid #c2d7e3}.replay-tracks i{height:24px;display:block;border-radius:3px}.replay-tracks span{font-size:12px;color:#aabaca;padding:4px}.replay-values{font-size:15px;margin-top:10px}.replay-details .meta{font-size:12px}#replay-chart:after{content:none}
+/* ===== Design System v2（ui-ux-pro-max：Swiss minimal · dark · data-dense）=====
+   一套 token 統一所有面板；頁首收斂成單列 App bar，外部連結收進「工具」選單。 */
+:root{
+  color-scheme:dark;
+  --bg:#0a0e15;--surface:#10161f;--surface-2:#141c27;--surface-3:#1a2431;
+  --border:#1f2a38;--border-strong:#2c3a4d;--fg:#e8eef6;--fg-2:#c3cfdc;--mut:#8d9bad;--mut-2:#8291a4;--neu:var(--mut);
+  --accent:#5eaefc;--accent-soft:rgba(94,174,252,.12);--bull:#2fbf71;--bear:#f0575a;--warn:#e3a33b;
+  --card:var(--surface);--line:var(--border);
+  --r-sm:8px;--r-md:12px;--r-lg:16px;
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;
+  --appbar-h:60px;--ease:cubic-bezier(.2,.7,.2,1);
+}
+html{scroll-padding-top:calc(var(--appbar-h) + env(safe-area-inset-top) + 12px)}
+body{margin:0;background:var(--bg);color:var(--fg);font-size:15px;line-height:1.6;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.ico{width:18px;height:18px;flex:none;vertical-align:-3px}
+button,summary,a{transition:background-color .18s var(--ease),color .18s var(--ease),border-color .18s var(--ease)}
+a:focus-visible,button:focus-visible,summary:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+
+/* ---- App bar ---- */
+header.appbar{position:sticky;top:0;z-index:30;display:block;padding:0;border-bottom:1px solid var(--border);
+  background:var(--bg);
+  padding-top:env(safe-area-inset-top)}
+.appbar-inner{max-width:1280px;margin:0 auto;height:var(--appbar-h);display:flex;align-items:center;gap:var(--s4);
+  padding:0 max(24px,env(safe-area-inset-right)) 0 max(24px,env(safe-area-inset-left))}
+.brand{display:flex;align-items:center;gap:10px;color:var(--fg);text-decoration:none;min-width:0}
+.brand img{border-radius:7px;display:block}
+header.appbar h1{margin:0;font-size:16px;display:flex;align-items:baseline;gap:8px;width:auto;white-space:nowrap}
+.brand-name{font-weight:700;letter-spacing:.01em}
+.brand-sub{font-size:13px;font-weight:500;color:var(--mut)}
+header.appbar .nav{margin:0 0 0 var(--s3);display:flex;gap:2px;padding:3px;background:var(--surface);border:1px solid var(--border);border-radius:10px}
+header.appbar .nav button{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:6px 14px;border-radius:7px;
+  background:transparent;color:var(--mut);font-size:14px;font-weight:600}
+header.appbar .nav button:hover{color:var(--fg);background:var(--surface-2)}
+header.appbar .nav button.on{background:var(--surface-3);color:var(--fg);box-shadow:inset 0 0 0 1px var(--border-strong)}
+header.appbar .nav button.on .ico{color:var(--accent)}
+.spacer{flex:1}
+details.pop{position:relative}
+details.pop>summary{list-style:none;display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:6px 12px;cursor:pointer;
+  color:var(--fg-2);font-size:13px;font-weight:600;border:1px solid var(--border);border-radius:999px;background:var(--surface);user-select:none;white-space:nowrap}
+details.pop>summary::-webkit-details-marker{display:none}
+details.pop>summary:hover,details.pop[open]>summary{border-color:var(--border-strong);background:var(--surface-2);color:var(--fg)}
+.chev-ico{width:14px;height:14px;transition:transform .2s var(--ease)}
+details.pop[open] .chev-ico{transform:rotate(180deg)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--mut-2);flex:none}
+.dot.ok{background:var(--bull);box-shadow:0 0 0 3px rgba(47,191,113,.18)}
+.dot.busy{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.dot.warn{background:var(--warn);box-shadow:0 0 0 3px rgba(227,163,59,.18)}
+.pop-panel{position:absolute;right:0;top:calc(100% + 8px);z-index:40;width:min(420px,calc(100vw - 32px));max-height:min(70vh,560px);overflow:auto;
+  padding:var(--s4);background:var(--surface-2);border:1px solid var(--border-strong);border-radius:var(--r-md);
+  box-shadow:0 18px 48px rgba(0,0,0,.5)}
+.pop-title{margin:0 0 var(--s2);font-size:12px;font-weight:700;color:var(--mut);letter-spacing:.08em}
+header.appbar .ts{display:block;margin:0;color:var(--fg-2);font-size:13px;line-height:1.8;width:auto;order:0}
+.tools-panel{width:min(520px,calc(100vw - 32px));display:grid;gap:var(--s4)}
+header.appbar .sites,footer .sites{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;border:0;width:auto}
+header.appbar .sites>span,footer .sites>span{flex-basis:100%;color:var(--mut);font-size:12px;font-weight:700;letter-spacing:.08em;margin-bottom:2px}
+.sites a{display:inline-flex;align-items:center;text-decoration:none}
+header.appbar .sites a{min-height:44px;padding:6px 12px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);
+  color:var(--fg-2);font-size:13px;font-weight:500}
+header.appbar .sites a:hover{border-color:var(--accent);color:var(--fg);background:var(--accent-soft)}
+header.appbar .sites[aria-label="交易所開戶"] a{border-color:var(--border-strong);color:var(--fg);font-weight:600}
+
+/* ---- Footer ---- */
+footer{display:block;padding:0;border-top:1px solid var(--border);background:var(--bg)}
+.footer-inner{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:minmax(160px,220px) 1fr;gap:var(--s5) var(--s6);
+  padding:var(--s6) max(24px,env(safe-area-inset-right)) max(var(--s6),env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left))}
+.footer-brand{display:flex;flex-direction:column;gap:4px;grid-row:span 2}
+.footer-brand strong{font-size:15px}.footer-brand span{color:var(--mut);font-size:13px}
+footer .sites a{padding:4px 0;margin-right:var(--s4);color:var(--mut);font-size:13px;font-weight:500;border:0}
+footer .sites a:hover,footer .simples:hover{color:var(--fg)}
+footer .simples{text-decoration:none;grid-column:2;margin:0;justify-self:start;color:var(--mut-2);font-size:12px}
+
+/* ---- 版面 ---- */
+.wrap{display:flex;flex-direction:column;max-width:1280px;margin:0 auto;gap:var(--s5);padding:var(--s6) max(24px,env(safe-area-inset-right)) var(--s6) max(24px,env(safe-area-inset-left))}
+.eyebrow{margin:0;font-size:12px;font-weight:700;letter-spacing:.12em;color:var(--accent)}
+.reading-guide,.page-intro{padding:var(--s2) 0 var(--s2)}
+.reading-guide h2,.page-intro h2{font-size:clamp(24px,2.6vw,30px);line-height:1.35;margin:var(--s2) 0 var(--s2);letter-spacing:.01em}
+.reading-guide p,.page-intro p{margin:0;color:var(--mut);font-size:15px;max-width:720px}
+.reading-guide nav{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s4)}
+.reading-guide a,.detail-link{display:inline-block;text-decoration:none;min-height:44px;padding:7px 14px;border-radius:999px;border:1px solid var(--border);background:var(--surface);
+  color:var(--fg-2);font-size:13px;font-weight:600;line-height:20px}
+.reading-guide a:hover,.detail-link:hover{border-color:var(--accent);color:var(--fg);background:var(--accent-soft)}
+
+/* ---- 卡片（群體區塊 / 回放 / 折疊卡）---- */
+.population,.replay-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:var(--s5);margin:0}
+.replay-panel{background:linear-gradient(180deg,var(--surface-2),var(--surface))}
+.replay-heading h2,.population h2{font-size:20px;line-height:1.4;margin:0 0 4px}
+.population-heading{display:flex;gap:var(--s3);margin-bottom:var(--s4);align-items:center}
+.population-number{display:inline-grid;place-items:center;width:32px;height:32px;padding:0;font-size:13px;font-weight:700;
+  color:var(--accent);background:var(--accent-soft);border:0;border-radius:var(--r-sm);font-variant-numeric:tabular-nums}
+.population-heading p,.population h3{margin:0;color:var(--mut)}
+.population h3{margin-bottom:var(--s3);font-size:12px;font-weight:700;letter-spacing:.06em}
+.brief-main{margin:0 0 var(--s3);font-size:17px;font-weight:600;color:var(--fg);line-height:1.65}
+.brief-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s4)}
+.brief-grid>div{padding:var(--s4);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md)}
+.population .detail-link{margin:var(--s2) var(--s2) 0 0}
+.reading-hint{border-top:0;margin:var(--s4) 0;padding:var(--s3) var(--s4);background:var(--surface-2);border-left:3px solid var(--accent);
+  border-radius:0 var(--r-sm) var(--r-sm) 0;color:var(--fg-2);font-size:14px}
+details.ccard{overflow:hidden;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md)}
+.population .ccard{background:var(--surface-2);margin:var(--s3) 0}
+details.ccard>summary{list-style:none;cursor:pointer;display:flex;min-height:44px;user-select:none;padding:var(--s4) var(--s5);gap:var(--s3);align-items:center}
+details.ccard>summary:focus-visible{outline-offset:-3px}
+details.ccard>summary:hover{background:var(--surface-2)}
+details.ccard[open]>summary{background:var(--surface-2);border-bottom:1px solid var(--border)}
+.ctitle{display:inline-flex;align-items:center;gap:10px;font-size:15px;font-weight:650;line-height:1.5}
+.ctitle .ico{color:var(--accent);padding:6px;width:30px;height:30px;background:var(--accent-soft);border-radius:var(--r-sm)}
+.ctitle small{font-size:11px;font-weight:600;opacity:1!important;color:var(--mut);padding:1px 7px;border:1px solid var(--border-strong);border-radius:999px}
+.csum{font-size:13px;color:var(--mut)}
+.chev{margin-left:auto;flex:none;font-size:12px;transition:transform .2s var(--ease);width:24px;height:24px;display:inline-grid;place-items:center;border-radius:6px;color:var(--mut)}
+details.ccard .box{padding:var(--s5)}
+.market-support{padding-top:var(--s2)}
+.market-support>h2{font-size:20px;margin:0 0 4px}
+.market-support>.meta{margin:0 0 var(--s4)}
+.support-grid,.strategy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s3);align-items:start}
+.support-grid>details.ccard,.strategy-grid>details.ccard{margin:0}
+.support-grid>details[open],.strategy-grid>details[open],.span-all{grid-column:1/-1}
+#account-inspector{margin:0}
+
+/* ---- 資料元件統一 ---- */
+.kpis>.kpi,.activity-kpis>div,.behavior-card,.balance-chart,.balance-card,.posrow,.sig,.opp,.stat{background:var(--surface-2);border-color:var(--border)}
+.balance-desktop,.activity-table,.scroll,.strategy-table-scroll{border-color:var(--border)}
+.balance-table caption,.balance-table thead th,.activity-table th{background:var(--surface-3)}
+.balance-total{background:var(--surface-3)}
+.scroll thead th{background:var(--surface-2)}
+.tbl tbody tr:nth-child(even),table.vt tbody tr:nth-child(even){background:rgba(255,255,255,.015)}
+.tbl tbody tr:hover{background:var(--surface-3)}
+.tbl td{border-bottom-color:var(--border)}
+.activity-controls{background:var(--surface-2)}
+.activity-controls select,.filt,.replay-controls select,.ask input{background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--r-sm);color:var(--fg)}
+.kpi .v,.brief-main,.tbl td,.balance-value,.replay-time{font-variant-numeric:tabular-nums}
+button{border-radius:var(--r-sm)}
+.box>button,.replay-heading button,#replay-play,.ask button{background:var(--accent);color:#06101c;font-weight:700;min-height:40px;padding:8px 16px}
+.box>button:hover,.replay-heading button:hover,#replay-play:hover,.ask button:hover{background:#86c3ff}
+.dl{background:var(--accent);color:#06101c;border-radius:var(--r-sm)}
+
+/* ---- 平板 ---- */
+@media (max-width:1024px){
+  header.appbar{position:sticky;padding:0;padding-top:env(safe-area-inset-top)}
+  .brand-sub{display:none}
+  .footer-inner{grid-template-columns:1fr}
+  .footer-brand{grid-row:auto}
+  footer .simples{grid-column:auto}
+}
+@media (max-width:900px){
+  .support-grid,.strategy-grid{grid-template-columns:1fr}
+  .brief-grid{grid-template-columns:1fr}
+  details.ccard>summary{flex-wrap:wrap}
+  .ctitle{flex:1}.csum{flex-basis:100%;order:3;white-space:normal}
+  .population .csum{display:none}
+}
+/* ---- 手機：分頁移到底部 Tab bar（拇指可及）---- */
+@media (max-width:720px){
+  :root{--appbar-h:56px}
+  .appbar-inner{gap:var(--s2);padding:0 max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left))}
+  header.appbar .nav{position:fixed;left:0;right:0;bottom:0;z-index:30;margin:0;padding:6px max(12px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
+    display:grid;grid-template-columns:1fr 1fr;gap:6px;border:0;border-top:1px solid var(--border);border-radius:0;
+    background:rgba(10,14,21,.94);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+  header.appbar .nav button{flex-direction:column;gap:2px;min-height:52px;padding:6px;font-size:12px;justify-content:center}
+  header.appbar .nav button .ico{width:22px;height:22px}
+  header.appbar .nav button.on{box-shadow:none;background:var(--accent-soft);color:var(--fg)}
+  html{scroll-padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+  body{padding-bottom:calc(68px + env(safe-area-inset-bottom))}
+  #ts-short{max-width:34vw;overflow:hidden;text-overflow:ellipsis}
+  .tools-label{display:none}
+  .pop-panel{position:fixed;left:12px;right:12px;top:calc(var(--appbar-h) + env(safe-area-inset-top) + 8px);width:auto;max-height:calc(100vh - 180px)}
+  .wrap{padding:var(--s5) max(16px,env(safe-area-inset-right)) var(--s5) max(16px,env(safe-area-inset-left));gap:var(--s4)}
+  .population,.replay-panel{padding:var(--s4);border-radius:var(--r-md)}
+  details.ccard>summary{padding:var(--s3) var(--s4)}
+  details.ccard .box{padding:var(--s4)}
+  .ctitle{font-size:14px}
+  .ctitle .ico{width:28px;height:28px}
+  .reading-guide a{flex:0 1 auto;text-align:center}
+  .brief-grid>div{padding:var(--s3)}
+  .footer-inner{padding:var(--s5) 16px}
+}
+.tracked-controls{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s2);margin-bottom:var(--s3)}
+.tracked-controls select{min-height:44px;padding:var(--s2);border:1px solid var(--border-strong);border-radius:var(--r-sm);background:var(--bg);color:var(--fg);font:inherit}
+.tracked-empty{padding:var(--s4);border-radius:var(--r-sm);background:var(--surface-2);color:var(--fg-2)}
+.tracked-feed{list-style:none;padding:0;margin:var(--s3) 0 0;display:grid;gap:var(--s2)}
+.tracked-event{display:grid;grid-template-columns:36px minmax(0,1fr);gap:var(--s3);padding:var(--s3);border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2)}
+.tracked-avatar{display:grid;place-items:center;width:36px;height:36px;border-radius:var(--r-sm);background:var(--accent-soft);color:var(--accent);font-weight:700}
+.tracked-event-head,.tracked-event-meta,.tracked-quantities{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s2) var(--s3);overflow-wrap:anywhere}
+.tracked-event-head a{color:var(--accent);display:inline-flex;align-items:center;min-height:44px}
+.tracked-event-head time{font-size:13px;color:var(--mut)}
+.tracked-label{padding:2px var(--s2);font-size:13px;font-weight:600;border-radius:var(--r-sm);background:var(--surface-3);color:var(--fg-2)}
+.tracked-event p,.tracked-quantities{margin:var(--s2) 0}
+.tracked-quantities>div{display:flex;gap:var(--s2);align-items:baseline}
+.tracked-quantities dt{font-size:13px;color:var(--mut)}
+.tracked-quantities dd{margin:0;font-variant-numeric:tabular-nums}
+.liquidation-figure{margin:var(--s4) 0}
+.liquidation-figure figcaption{font-size:13px;color:var(--fg-2);margin-bottom:var(--s2)}
+.liquidation-chart{padding:var(--s3);background:var(--surface-2);border-radius:var(--r-sm);font-variant-numeric:tabular-nums}
+.liq-scale,.liq-axis{display:flex;justify-content:space-between;gap:var(--s1);font-size:12px;color:var(--fg-2)}
+.liq-axis{margin-top:var(--s2)}
+.liq-plot{position:relative;margin:var(--s1) 0}
+.liq-plot::after{content:'';position:absolute;inset:0 auto 0 50%;border-left:1px dashed var(--accent);pointer-events:none}
+.liq-bars{display:grid;grid-template-columns:repeat(20,minmax(0,1fr));gap:1px;height:70px}
+.liq-bars i{height:var(--bar);border-radius:2px;display:block}
+.liq-bars.short{align-items:end;border-bottom:1px solid var(--mut)}
+.liq-bars.short i{background:var(--bear)}
+.liq-bars.long i{background:var(--bull)}
+.liq-values summary{cursor:pointer;padding:var(--s3) var(--s2);color:var(--accent)}
+.liq-values table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.liq-values :is(th,td){padding:var(--s2);border-bottom:1px solid var(--border);text-align:right}
+.liq-values th:first-child{text-align:left}
+@media(max-width:400px){.liq-values :is(th,td){padding:var(--s2) var(--s1)}}
 </style>
 </head>
 <body>
-<header>
-  <h1>🐷 大戶行為觀察台</h1>
-  <span class="nav">
-    <button id="nav-market" class="on" onclick="stopReplay();showPage('market')">📊 行為觀察</button>
-    <button id="nav-strategy" onclick="stopReplay();showPage('strategy')">🧠 策略 / Obsidian</button>
-  </span>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="i-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></symbol>
+  <symbol id="i-brain-circuit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M9 13a4.5 4.5 0 0 0 3-4"/><path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/><path d="M3.477 10.896a4 4 0 0 1 .585-.396"/><path d="M6 18a4 4 0 0 1-1.967-.516"/><path d="M12 13h4"/><path d="M12 18h6a2 2 0 0 1 2 2v1"/><path d="M12 8h8"/><path d="M16 8V5a2 2 0 0 1 2-2"/><circle cx="16" cy="13" r=".5"/><circle cx="18" cy="3" r=".5"/><circle cx="20" cy="21" r=".5"/><circle cx="20" cy="8" r=".5"/></symbol>
+  <symbol id="i-layout-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-fish" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.47-3.44 6-7 6s-7.56-2.53-8.5-6Z"/><path d="M18 12v.5"/><path d="M16 17.93a9.77 9.77 0 0 1 0-11.86"/><path d="M7 10.67C7 8 5.58 5.97 2.73 5.5c-1 1.5-1 5 .23 6.5-1.24 1.5-1.24 5-.23 6.5C5.58 18.03 7 16 7 13.33"/><path d="M10.46 7.26C10.2 5.88 9.17 4.24 8 3h5.8a2 2 0 0 1 1.98 1.67l.23 1.4"/><path d="m16.01 17.93-.23 1.4A2 2 0 0 1 13.8 21H9.5a5.96 5.96 0 0 0 1.49-3.98"/></symbol>
+  <symbol id="i-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/><path d="M17.599 6.5a3 3 0 0 0 .399-1.375"/><path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/><path d="M3.477 10.896a4 4 0 0 1 .585-.396"/><path d="M19.938 10.5a4 4 0 0 1 .585.396"/><path d="M6 18a4 4 0 0 1-1.967-.516"/><path d="M19.967 17.484A4 4 0 0 1 18 18"/></symbol>
+  <symbol id="i-coins" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/></symbol>
+  <symbol id="i-hourglass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+  <symbol id="i-landmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></symbol>
+  <symbol id="i-circle-dollar-sign" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></symbol>
+  <symbol id="i-radar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/></symbol>
+  <symbol id="i-scale" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></symbol>
+  <symbol id="i-table" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></symbol>
+  <symbol id="i-git-compare" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/></symbol>
+  <symbol id="i-flask" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></symbol>
+  <symbol id="i-newspaper" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></symbol>
+  <symbol id="i-message" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+  <symbol id="i-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></symbol>
+  <symbol id="i-chart-line" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+</svg>
+<header class="appbar">
+<div class="appbar-inner">
+  <a class="brand" href="/" aria-label="HypeBoss 首頁"><img src="/static/icon-192.png" alt="" width="28" height="28"/><h1><span class="brand-name">HypeBoss</span><span class="brand-sub">大戶行為觀察台</span></h1></a>
+  <nav class="nav tabs" aria-label="主要頁面">
+    <button id="nav-market" class="on" aria-current="page" onclick="stopReplay();showPage('market')"><svg class="ico" aria-hidden="true"><use href="#i-activity"/></svg><span>行為觀察</span></button>
+    <button id="nav-strategy" onclick="stopReplay();showPage('strategy')"><svg class="ico" aria-hidden="true"><use href="#i-brain-circuit"/></svg><span>策略研究</span></button>
+  </nav>
+  <span class="spacer"></span>
+  <details class="pop status-pop">
+    <summary><span class="sr-only">資料更新狀態：</span><i class="dot" id="ts-dot" aria-hidden="true"></i><span id="ts-short">載入中…</span></summary>
+    <div class="pop-panel"><p class="pop-title">資料更新狀態</p><p class="ts" id="ts">載入中…</p></div>
+  </details>
+  <details class="pop tools-menu">
+    <summary aria-label="更多工具"><svg class="ico" aria-hidden="true"><use href="#i-layout-grid"/></svg><span class="tools-label">工具</span><svg class="ico chev-ico" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+    <div class="pop-panel tools-panel">
+  <nav class="sites" aria-label="交易所開戶">
+    <span>交易所開戶</span>
+    <a href="https://okx.com/join/75395880" title="OKX" target="_blank" rel="noopener noreferrer">OKX 開戶</a>
+    <a href="https://www.pionex.com/zh-TW/signUp?r=0rcgGsu5GKg" title="派網" target="_blank" rel="noopener noreferrer">派網開戶</a>
+  </nav>
   <nav class="sites" aria-label="其他工具">
+    <span>姊妹站</span>
     <a href="https://warhubs.com/" title="WARHUBS" rel="noopener noreferrer">戰情觀測站</a>
     <a href="https://stocktools.cc/" title="Stocktools" rel="noopener noreferrer">美股雙重分析</a>
     <a href="https://toolist.cc/" title="Toolist" rel="noopener noreferrer">分頁工作區</a>
   </nav>
-  <nav class="sites" aria-label="交易所開戶">
-    <a href="https://okx.com/join/75395880" title="OKX" target="_blank" rel="noopener noreferrer">OKX 開戶</a>
-    <a href="https://www.pionex.com/zh-TW/signUp?r=0rcgGsu5GKg" title="派網" target="_blank" rel="noopener noreferrer">派網開戶</a>
-  </nav>
-  <span style="flex:1"></span>
-  <span class="ts" id="ts">載入中…</span>
   <nav class="sites related" aria-label="相關工具">
     <span>相關工具</span>
     <a href="https://tradingbeats.xyz/" title="TradingBeats 鏈上地址分析" target="_blank" rel="noopener noreferrer">鏈上地址追蹤</a>
@@ -377,6 +558,9 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
     <a href="https://www.stocktools.cc/tw/us-fractional" title="Stocktools 美股碎股" target="_blank" rel="noopener noreferrer">美股碎股</a>
     <a href="https://www.stocktools.cc/tw/us-earnings" title="Stocktools 美股財報日" target="_blank" rel="noopener noreferrer">美股財報日</a>
   </nav>
+    </div>
+  </details>
+</div>
 </header>
 <div id="ctip" class="ctip"></div>
 <div id="page-strategy" style="display:none"></div>
@@ -396,11 +580,11 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
     <div class="population-heading"><span class="population-number">01</span><div><h2 id="heading-whales">巨鯨</h2><p>先分清現貨地址，再看合約大額帳號。</p></div></div>
     <div id="brief-whales" class="population-brief">資料載入中…</div>
   <details class="ccard">
-    <summary><span class="ctitle">🪙 BTC 現貨地址餘額分組 <small style="opacity:.7">鏈上現貨</small></span><span class="csum" id="sum-onchain">載入中…</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-coins"/></svg>BTC 現貨地址餘額分組 <small style="opacity:.7">鏈上現貨</small></span><span class="csum" id="sum-onchain">載入中…</span><span class="chev">▾</span></summary>
     <div id="onchainwhale"><div class="box empty">鏈上巨鯨持幣量載入中…</div></div>
   </details>
   <details class="ccard">
-    <summary><span class="ctitle">🐋 合約大額帳號 BTC 淨持倉變化 <small style="opacity:.7">合約</small></span><span class="csum" id="sum-whale">載入中…</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-fish"/></svg>合約大額帳號 BTC 淨持倉變化 <small style="opacity:.7">合約</small></span><span class="csum" id="sum-whale">載入中…</span><span class="chev">▾</span></summary>
     <div id="whalechart"><div class="box empty">大額帳號 BTC 合約部位載入中…</div></div>
   </details>
     <button class="detail-link" onclick="openAccountGroup('whale')">查閱大額帳號異動 →</button>
@@ -409,7 +593,7 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
     <div class="population-heading"><span class="population-number">02</span><div><h2 id="heading-smart">聰明錢</h2><p>先看同一批帳號的 BTC 合約數量，再看群體趨勢。</p></div></div>
     <div id="brief-smart" class="population-brief">資料載入中…</div>
   <details class="ccard">
-    <summary><span class="ctitle">🧠 聰明錢 BTC 淨持倉變化 <small style="opacity:.7">合約</small></span><span class="csum" id="sum-smartbtc">載入中…</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-brain"/></svg>聰明錢 BTC 淨持倉變化 <small style="opacity:.7">合約</small></span><span class="csum" id="sum-smartbtc">載入中…</span><span class="chev">▾</span></summary>
     <div id="smartbtc"><div class="box empty">聰明錢 BTC 合約分析載入中…</div></div>
   </details>
     <button class="detail-link" onclick="openAccountGroup('smart_verified')">查閱已驗證帳號異動 →</button>
@@ -419,45 +603,66 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
     <div class="population-heading"><span class="population-number">03</span><div><h2 id="heading-lth">長期持有者</h2><p>看舊幣供給如何變化，先比較近 7 天與近 30 天。</p></div></div>
     <div id="brief-lth" class="population-brief">資料載入中…</div>
   <details class="ccard">
-    <summary><span class="ctitle">⏳ 長期持有者 BTC 供給變化</span><span class="csum" id="sum-lth">載入中…</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-hourglass"/></svg>長期持有者 BTC 供給變化</span><span class="csum" id="sum-lth">載入中…</span><span class="chev">▾</span></summary>
     <div id="lth"><div class="box empty">長期持有者日資料載入中…</div></div>
   </details>
   </section>
-  <details class="ccard" id="account-inspector"><summary><span class="ctitle">同帳號異動明細</span><span class="chev">▾</span></summary>
+  <details class="ccard" id="account-inspector"><summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-users"/></svg>同帳號異動明細</span><span class="chev">▾</span></summary>
     <section id="account-activity" class="box"><h2>同帳號 BTC 合約異動</h2><p class="meta">載入中…</p></section>
+  </details>
+  <details class="ccard" id="notable-panel" ontoggle="loadTrackedPanel('notable')">
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-activity"/></svg>知名地址動態</span><span class="chev">▾</span></summary>
+    <div class="box">
+      <p class="meta">比較同一帳號連續兩輪的合約部位。公開身分依標示來源，其他大額持倉帳號以地址縮寫顯示。疑似清算為快照推估。</p>
+      <div class="tracked-controls"><label for="notable-coin">篩選幣種</label><select id="notable-coin" onchange="loadTrackedPanel('notable')"><option value="">全部幣種</option></select></div>
+      <div id="notable-results" aria-live="polite"><p class="meta">載入中…</p></div>
+    </div>
   </details>
   <section id="market-support" class="market-support" aria-labelledby="heading-support">
     <h2 id="heading-support">市場背景與其他資料</h2>
     <p class="meta">看完三類群體，再用行情、資金與情緒補充背景；這些指標不能代替群體的實際動作。</p>
+  <div class="support-grid">
   <details class="ccard">
-    <summary><span class="ctitle">🌐 全市場宏觀</span><span class="csum" id="sum-macro">載入中…</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-globe"/></svg>全市場宏觀</span><span class="csum" id="sum-macro">載入中…</span><span class="chev">▾</span></summary>
     <div id="macro"><div class="box empty">宏觀載入中…</div></div>
   </details>
   <details class="ccard">
-    <summary><span class="ctitle">💰 資金動向</span><span class="csum" id="sum-defi">載入中…</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-landmark"/></svg>資金動向</span><span class="csum" id="sum-defi">載入中…</span><span class="chev">▾</span></summary>
     <div id="defi"><div class="box empty">資金動向載入中…</div></div>
   </details>
   <details class="ccard">
-    <summary><span class="ctitle">💵 穩定幣總供應</span><span class="csum" id="sum-stable">載入中…</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-circle-dollar-sign"/></svg>穩定幣總供應</span><span class="csum" id="sum-stable">載入中…</span><span class="chev">▾</span></summary>
     <div id="stablecoins"><div class="box empty">穩定幣總供應載入中…</div></div>
   </details>
-<details class="ccard"><summary><span class="ctitle">情緒與合約部位分歧</span><span class="chev">▾</span></summary>  <section id="opp" class="hero"><h2>🎯 情緒與合約部位分歧</h2><div class="meta">載入中…</div></section></details>
+<details class="ccard"><summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-git-compare"/></svg>情緒與合約部位分歧</span><span class="chev">▾</span></summary>  <section id="opp" class="hero"><h2>🎯 情緒與合約部位分歧</h2><div class="meta">載入中…</div></section></details>
   <details class="ccard">
-    <summary><span class="ctitle">🎯 分歧雷達</span><span class="csum" id="sum-radar">載入中…</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-radar"/></svg>分歧雷達</span><span class="csum" id="sum-radar">載入中…</span><span class="chev">▾</span></summary>
     <div id="radar"><div class="box empty">分歧雷達載入中…</div></div>
   </details>
   <details class="ccard">
-    <summary><span class="ctitle">🧭 合約帳號部位比較</span><span class="csum" id="sum-pos">載入中…</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-scale"/></svg>合約帳號部位比較</span><span class="csum" id="sum-pos">載入中…</span><span class="chev">▾</span></summary>
     <div id="pos"><div class="box empty">大玩家決心載入中…</div></div>
   </details>
-  <details class="ccard">
-    <summary><span class="ctitle">📋 幣別總表</span><span class="csum" id="sum-table">載入中…</span><span class="chev">▾</span></summary>
+  <details class="ccard" id="liquidation-panel" ontoggle="loadTrackedPanel('liquidation')">
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-chart-line"/></svg>清算價分布</span><span class="chev">▾</span></summary>
+    <div class="box">
+      <p class="meta">僅涵蓋 Hyperliquid 追蹤樣本。數值為持倉名目，清算價會隨帳戶與市場狀態變動。</p>
+      <div class="tracked-controls"><label for="liquidation-coin">幣種</label><select id="liquidation-coin" onchange="loadTrackedPanel('liquidation')"><option>BTC</option><option>ETH</option><option>HYPE</option></select></div>
+      <div id="liquidation-results" aria-live="polite"><p class="meta">載入中…</p></div>
+    </div>
+  </details>
+  <details class="ccard span-all">
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-table"/></svg>幣別總表</span><span class="csum" id="sum-table">載入中…</span><span class="chev">▾</span></summary>
     <div id="table"><div class="box empty">幣別總表載入中…</div></div>
   </details>
+  </div>
   </section>
 </div></div>
 <footer>
+<div class="footer-inner">
+  <div class="footer-brand"><strong>HypeBoss</strong><span>大戶行為觀察台</span></div>
   <nav class="sites" aria-label="其他工具">
+    <span>姊妹站</span>
     <a href="https://warhubs.com/" title="WARHUBS" rel="noopener noreferrer">戰情觀測站</a>
     <a href="https://stocktools.cc/" title="Stocktools" rel="noopener noreferrer">美股雙重分析</a>
     <a href="https://toolist.cc/" title="Toolist" rel="noopener noreferrer">分頁工作區</a>
@@ -479,6 +684,7 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
     <a href="https://www.stocktools.cc/tw/us-earnings" title="Stocktools 美股財報日" target="_blank" rel="noopener noreferrer">美股財報日</a>
   </nav>
   <a class="simples" href="https://simples.com.tw/" rel="noopener noreferrer">SIMPLES 工具網</a>
+</div>
 </footer>
 <script>
 
@@ -1353,6 +1559,119 @@ function renderMarketState(){
   }
   renderLastUp();
 }
+function trackedTime(ts){
+  return new Date(ts*1000).toLocaleString('zh-TW',{hour12:false});
+}
+function trackedUSD(value){
+  return new Intl.NumberFormat('zh-TW',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(value);
+}
+function trackedMeta(data){
+  const sample=data.selected_accounts==null?'':`｜已取得 ${data.received_accounts} / ${data.selected_accounts} 個追蹤帳號`;
+  return data.mock?'模擬資料':data.as_of?`${data.stale?'資料已延遲｜':''}快照 ${trackedTime(data.as_of)}${sample}`:'尚無持倉快照';
+}
+function renderNotableFeed(data){
+  const crowdLabels={long:'群眾偏多',short:'群眾偏空',neutral:'群眾中性',unknown:'群眾方向未知'};
+  const classify={waiting:'等待可比較的兩輪持倉快照。',no_overlap:'最近兩輪缺少可比較的帳號。'};
+  const status=classify[data.status];
+  const items=data.events.map(event=>{
+    const alias=htmlText(event.alias);
+    const link=newsLink(event.x_url);
+    const source=event.source?`<span>來源 ${htmlText(event.source)}</span>`:'';
+    const quantity=position=>position?Number(position.size).toLocaleString('zh-TW',{maximumFractionDigits:6}):'0';
+    const details=`<dl class="tracked-quantities">
+      <div><dt>原持倉量</dt><dd>${quantity(event.before)} ${htmlText(event.coin)}</dd></div>
+      <div><dt>新持倉量</dt><dd>${quantity(event.after)} ${htmlText(event.coin)}</dd></div>
+    </dl>`;
+    return `<li class="tracked-event">
+      <span class="tracked-avatar" aria-hidden="true">${htmlText(Array.from(event.alias)[0]||'帳')}</span>
+      <div>
+        <div class="tracked-event-head">
+          ${link?`<a href="${link}" target="_blank" rel="noopener noreferrer">${alias}</a>`:`<strong>${alias}</strong>`}
+          <span class="tracked-label">${htmlText(event.label)}</span>
+          <time datetime="${new Date(event.ts*1000).toISOString()}">${trackedTime(event.ts)}</time>
+        </div>
+        <p>${htmlText(event.message)}</p>
+        ${details}
+        <p class="meta tracked-event-meta">
+          <span>${htmlText(crowdLabels[event.crowd]||crowdLabels.unknown)}${event.opposes_crowd?'｜大戶與群眾反向':''}</span>
+          ${event.before_at?`<span>前次快照 ${trackedTime(event.before_at)}</span>`:''}
+          ${source}
+        </p>
+      </div>
+    </li>`;
+  }).join('');
+  return `<p class="meta">${trackedMeta(data)}</p>
+    ${status?`<p class="meta">${status}${items?' 以下是先前的已記錄事件。':''}</p>`:''}
+    ${items?`<ol class="tracked-feed">${items}</ol>`:`<p class="tracked-empty">${status?'尚無可顯示的事件。':'此篩選條件下沒有達門檻的異動。'}</p>`}`;
+}
+function renderLiquidationMap(data){
+  const statuses={waiting:'等待持倉快照。',price_unavailable:'缺少可用的標記價格，暫無法分組。',
+    insufficient_sample:`樣本不足，至少需要 ${data.minimum_accounts} 個有清算價的帳號。`};
+  const coverage=data.sample_accounts==null?'':`持有 ${htmlText(data.coin)} 的追蹤帳號 ${data.sample_accounts} 個｜有清算價 ${data.covered_accounts} 個｜缺少清算價 ${data.missing_liquidation_price} 個`;
+  const meta=`<p class="meta">${trackedMeta(data)}${data.price?`｜標記價 ${trackedUSD(data.price)}`+(data.mock||!data.quote_at?'':`（${trackedTime(data.quote_at)}）`):''}</p>
+    ${coverage?`<p class="meta">${coverage}</p>`:''}`;
+  if(data.status!=='ok') return meta+`<p class="tracked-empty">${htmlText(statuses[data.status]||'清算價分布暫時無法載入。')}</p>`;
+  const maximum=Math.max(1,...data.buckets.flatMap(row=>[row.long_usd,row.short_usd]));
+  const bars=key=>data.buckets.map(row=>`<i style="--bar:${Math.min(100,Math.max(0,row[key]/maximum*100))}%"></i>`).join('');
+  const pct=value=>(value>0?'+':'')+value+'%';
+  const chart=`<figure class="liquidation-figure">
+    <figcaption>清算價距標記價的幅度與持倉名目。上方為空倉，下方為多倉，兩側共用尺度。</figcaption>
+    <div class="liquidation-chart" aria-hidden="true">
+      <div class="liq-scale"><span>空倉</span><span>${trackedUSD(maximum)}</span></div>
+      <div class="liq-plot"><div class="liq-bars short">${bars('short_usd')}</div><div class="liq-bars long">${bars('long_usd')}</div></div>
+      <div class="liq-scale"><span>多倉</span><span>${trackedUSD(maximum)}</span></div>
+      <div class="liq-axis"><span>−20%</span><span>0% 標記價</span><span>+20%</span></div>
+    </div>
+  </figure>`;
+  const rangeRows=[['低於 −20%',data.outside_range.below],...data.buckets.map(row=>
+    [`${pct(row.from_pct)} 至 ${pct(row.to_pct)}`,row]),['高於 +20%',data.outside_range.above]];
+  const outside=data.outside_range;
+  const outsideTotal=outside.below.long_usd+outside.below.short_usd+outside.above.long_usd+outside.above.short_usd;
+  const table=`<details class="liq-values"><summary>查看各價格區間的名目</summary>
+    <table><caption class="sr-only">清算價相對標記價的分布（美元）</caption>
+    <thead><tr><th scope="col">區間</th><th scope="col">多倉</th><th scope="col">空倉</th></tr></thead>
+    <tbody>${rangeRows.map(([name,row])=>`<tr><th scope="row">${name}</th><td>${trackedUSD(row.long_usd)}</td><td>${trackedUSD(row.short_usd)}</td></tr>`).join('')}</tbody>
+    </table></details>`;
+  return meta+chart+`<p class="meta">±20% 之外的持倉名目 ${trackedUSD(outsideTotal)}，另列於表中。</p>`+table;
+}
+async function loadTrackedPanel(kind){
+  const panel=document.getElementById(kind+'-panel');
+  if(!panel?.open) return;
+  const select=document.getElementById(kind+'-coin'), result=document.getElementById(kind+'-results');
+  const coin=select.value;
+  const isFeed=kind==='notable';
+  const url=(isFeed?'/notable-feed':'/liquidation-map')+(coin?'?coin='+encodeURIComponent(coin):'');
+  const request=apiJSON(url);
+  result.trackedRequest=request;
+  result.setAttribute('aria-busy','true');
+  try{
+    const data=await request;
+    if(result.trackedRequest!==request) return;
+    const html=isFeed?renderNotableFeed(data):renderLiquidationMap(data);
+    if(result.trackedHTML!==html && !result.contains(document.activeElement)){
+      const tableOpen=result.querySelector('.liq-values')?.open;
+      result.innerHTML=html;
+      if(tableOpen && result.querySelector('.liq-values')) result.querySelector('.liq-values').open=true;
+      result.trackedHTML=html;
+    }
+    if(isFeed){
+      const options=[...new Set([...data.coins,...(coin?[coin]:[])])].sort();
+      const labels='<option value="">全部幣種</option>'+options.map(c=>`<option value="${htmlText(c)}">${htmlText(c)}</option>`).join('');
+      if(select.trackedOptions!==labels){
+        select.innerHTML=labels;
+        select.value=coin;
+        select.trackedOptions=labels;
+      }
+    }
+  }catch(e){
+    if(result.trackedRequest!==request) return;
+    result.trackedHTML=null;
+    result.innerHTML='<p class="tracked-empty">暫時無法載入資料。請稍後重開面板。</p>';
+  }finally{
+    if(result.trackedRequest===request) result.removeAttribute('aria-busy');
+  }
+}
+
 function refresh(){
   pruneLineData();
   if(REFRESH_TASK) return REFRESH_TASK;
@@ -1373,7 +1692,7 @@ function refresh(){
       renderMarketState();
     });
     await Promise.allSettled([...market,loadRadar(),loadDefi(),loadPositioning(),
-      loadAccountActivity(),loadSmartBTC(),loadWhaleChart(),loadOnchainWhale(),loadLTH(),loadStablecoins(),loadMacro()]);
+      loadTrackedPanel('notable'),loadTrackedPanel('liquidation'),loadAccountActivity(),loadSmartBTC(),loadWhaleChart(),loadOnchainWhale(),loadLTH(),loadStablecoins(),loadMacro()]);
   })().finally(()=>{REFRESH_TASK=null;});
   return REFRESH_TASK;
 }
@@ -1405,14 +1724,28 @@ function renderLastUp(){
     });
     el.textContent+='｜'+parts.join('／');
   }
+  const short=document.getElementById('ts-short'), dot=document.getElementById('ts-dot');
+  if(short){
+    const warn=/⚠|失敗|延遲/.test(el.textContent);
+    const busy=!quoteTs || /更新中|準備中|檢查中/.test(el.textContent);
+    const label=warn?'部分資料異常':!quoteTs?'行情時間未知':busy?'資料更新中':'資料即時';
+    short.textContent=label+(quoteTs?'・'+age(quoteTs):'');
+    if(dot) dot.className='dot '+(warn?'warn':busy?'busy':'ok');
+  }
 }
+// 頁首彈出面板：點外面或按 Esc 收起
+document.addEventListener('click',e=>{document.querySelectorAll('details.pop[open]').forEach(d=>{if(!d.contains(e.target)) d.removeAttribute('open');});});
+document.addEventListener('keydown',e=>{if(e.key==='Escape') document.querySelectorAll('details.pop[open]').forEach(d=>{d.removeAttribute('open');d.querySelector('summary')?.focus();});});
 // ---- 頁2：策略 / Obsidian ----
 let STRATLOADED=false;
 function showPage(name){
   document.getElementById('page-market').style.display = name==='market'?'block':'none';
   document.getElementById('page-strategy').style.display = name==='strategy'?'block':'none';
-  document.getElementById('nav-market').className = name==='market'?'on':'';
-  document.getElementById('nav-strategy').className = name==='strategy'?'on':'';
+  for(const [id,key] of [['nav-market','market'],['nav-strategy','strategy']]){
+    const b=document.getElementById(id); b.classList.toggle('on',name===key);
+    if(name===key) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
+  }
+  window.scrollTo({top:0});
   if(name==='strategy'){ if(!STRATLOADED){ STRATLOADED=true; loadStrategy(); } else { refreshStrategy(); } }
 }
 // 策略頁自動刷新：只在該頁可見時重抓各面板資料(不重建結構，保留問答框)
@@ -1475,28 +1808,30 @@ async function loadSocial(){
 }
 function loadStrategy(){
   document.getElementById('page-strategy').innerHTML=`<div class="wrap">
-  <details class="ccard" open>
-    <summary><span class="ctitle">🔬 訊號驗證</span><span class="csum">訊號出現後 BTC 實際怎麼走（前瞻報酬·勝率·vs基準）——能不能預判價格的證明</span><span class="chev">▾</span></summary>
+  <section class="page-intro"><p class="eyebrow">策略研究</p><h2>先驗證訊號，再參考情緒與回測。</h2><p>訊號驗證、新聞與社群情緒、策略回測與 Obsidian 知識庫集中在這一頁。</p></section>
+  <div class="strategy-grid">
+  <details class="ccard span-all" open>
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-flask"/></svg>訊號驗證</span><span class="csum">訊號出現後 BTC 實際怎麼走（前瞻報酬·勝率·vs基準）——能不能預判價格的證明</span><span class="chev">▾</span></summary>
     <div id="validate"><div class="box empty">訊號驗證載入中…</div></div>
   </details>
   <details class="ccard">
-    <summary><span class="ctitle">📰 新聞分析</span><span class="csum">6 家媒體利多/利空＋影響幣·整體情緒</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-newspaper"/></svg>新聞分析</span><span class="csum">6 家媒體利多/利空＋影響幣·整體情緒</span><span class="chev">▾</span></summary>
     <div id="news"><div class="box empty">新聞分析載入中…</div></div>
   </details>
   <details class="ccard">
-    <summary><span class="ctitle">👽 Reddit 散戶情緒</span><span class="csum">各幣討論熱度＋詞庫情緒（各版輪流更新）</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-message"/></svg>Reddit 散戶情緒</span><span class="csum">各幣討論熱度＋詞庫情緒（各版輪流更新）</span><span class="chev">▾</span></summary>
     <div id="reddit"><div class="box empty">Reddit 討論熱度載入中…</div></div>
   </details>
   <details class="ccard">
-    <summary><span class="ctitle">😱 恐懼貪婪 / 社群</span><span class="csum">全區間恐懼貪婪指數·各幣社群情緒</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-gauge"/></svg>恐懼貪婪 / 社群</span><span class="csum">全區間恐懼貪婪指數·各幣社群情緒</span><span class="chev">▾</span></summary>
     <div id="social"><div class="box empty">社群情緒載入中…</div></div>
   </details>
   <details class="ccard">
-    <summary><span class="ctitle">📈 策略回測</span><span class="csum">方向命中率＋損益曲線（真實 K 線對齊）</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-chart-line"/></svg>策略回測</span><span class="csum">方向命中率＋損益曲線（真實 K 線對齊）</span><span class="chev">▾</span></summary>
     <div id="bt"><div class="box empty">回測載入中…</div></div>
   </details>
   <details class="ccard">
-    <summary><span class="ctitle">🧠 Obsidian 知識庫</span><span class="csum">下載 vault·把訊號變成個人交易知識圖</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-book"/></svg>Obsidian 知識庫</span><span class="csum">下載 vault·把訊號變成個人交易知識圖</span><span class="chev">▾</span></summary>
     <div class="box">
       <p><a class="dl" href="/vault.zip">⬇ 下載 Obsidian Vault (.zip)</a></p>
       <div class="step">1. 解壓 → Obsidian「開啟資料夾作為 Vault」</div>
@@ -1506,13 +1841,14 @@ function loadStrategy(){
     </div>
   </details>
   <details class="ccard">
-    <summary><span class="ctitle">🔎 知識庫問答（RAG）</span><span class="csum">對累積的決策/關係用自然語言問答</span><span class="chev">▾</span></summary>
+    <summary><span class="ctitle"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg>知識庫問答（RAG）</span><span class="csum">對累積的決策/關係用自然語言問答</span><span class="chev">▾</span></summary>
     <div class="box">
       <div class="ask"><input id="kbq" placeholder="例：聰明錢和鯨魚現在對 ETH 的態度一致嗎？" onkeydown="if(event.key==='Enter')askKB()">
         <button onclick="askKB()">問</button></div>
       <div id="kbout" class="meta"></div>
     </div>
   </details>
+  </div>
 </div>`;
   loadValidate(); loadNews(); loadSocial(); loadReddit(); loadBacktest();
 }

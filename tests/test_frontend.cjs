@@ -49,6 +49,30 @@ test('malformed market response is not accepted as an empty successful result',a
  const h=setup(async url=>response(url==='/hl_market'?{coins:null}:fixture(url)));
  await h.run('refresh()');assert.match(h.elements.get('sum-table').innerHTML,/部分資料更新失敗/);
 });
+test('dashboard status distinguishes missing, fresh and stale quotes',()=>{
+ const h=setup();
+ const label=()=>h.elements.get('ts-short').textContent;
+ h.run('renderLastUp()');
+ assert.equal(label(),'行情時間未知');
+ h.run('LASTUP=Date.now(); QUOTE_META={fetched_at:Date.now()/1000}; renderLastUp()');
+ assert.match(label(),/^資料即時/);
+ h.run('QUOTE_META.fetched_at-=240; renderLastUp()');
+ assert.match(label(),/^部分資料異常/);
+ assert.match(h.elements.get('ts').textContent,/行情延遲/);
+});
+test('tracked feed renders source text and addresses safely',()=>{
+ const h=setup();
+ h.ctx.feed={mock:true,status:'ok',events:[{
+  alias:'<img src=x>',x_url:'javascript:alert(1)',source:'<b>公開來源</b>',
+  ts:1780000000,label:'加倉',coin:'BTC',message:'BTC <script>',before:null,after:{size:2},
+  crowd:'short',opposes_crowd:true,
+ }]};
+ const markup=h.run('renderNotableFeed(feed)');
+ assert.match(markup,/&lt;img src=x&gt;/);
+ assert.match(markup,/&lt;b&gt;公開來源&lt;\/b&gt;/);
+ assert.match(markup,/大戶與群眾反向/);
+ assert.doesNotMatch(markup,/<img|<script>|javascript:/);
+});
 test('history requests cache within TTL, market prices do not',async()=>{
  const calls=[];const h=setup(async url=>{calls.push(url);return response(fixture(url));});
  await h.run('refresh()');await h.run('refresh()');
@@ -353,7 +377,7 @@ test('replay uses recorded timestamps, fixed scale, missing values and independe
 
 test('header and footer expose sibling SIMPLES tool sites',()=>{
  const html=page.split('<script>')[0];
- const header=html.split('<header>')[1].split('</header>')[0];
+ const header=html.split('<header')[1].split('</header>')[0];
  const footer=html.split('<footer>')[1].split('</footer>')[0];
  assert.match(header,/href="https:\/\/warhubs\.com\/"/);
  assert.match(header,/href="https:\/\/stocktools\.cc\/"/);
@@ -376,7 +400,7 @@ test('header and footer expose sibling SIMPLES tool sites',()=>{
 
 test('header and footer expose compact Stocktools TW deep links',()=>{
  const html=page.split('<script>')[0];
- const header=html.split('<header>')[1].split('</header>')[0];
+ const header=html.split('<header')[1].split('</header>')[0];
  const footer=html.split('<footer>')[1].split('</footer>')[0];
  const fee='https://www.stocktools.cc/tw/us-fee-calculator';
  const etf='https://www.stocktools.cc/tw/us-etf';
@@ -433,7 +457,7 @@ test('header and footer related-tools rows link out to TradingBeats',()=>{
  const html=page.split('<script>')[0];
  const url='https://tradingbeats.xyz/';
  assert.equal(html.split(url).length-1,2);
- for (const part of [html.split('<header>')[1].split('</header>')[0],html.split('<footer>')[1].split('</footer>')[0]]){
+ for (const part of [html.split('<header')[1].split('</header>')[0],html.split('<footer>')[1].split('</footer>')[0]]){
   const related=part.split('aria-label="相關工具"')[1].split('</nav>')[0];
   assert.match(related,/href="https:\/\/tradingbeats\.xyz\/"[^>]*target="_blank"[^>]*rel="noopener noreferrer"[^>]*>鏈上地址追蹤</);
  }
@@ -442,7 +466,7 @@ test('header and footer related-tools rows link out to TradingBeats',()=>{
 
 test('header exposes one OKX and one Pionex signup link',()=>{
  const html=page.split('<script>')[0];
- const header=html.split('<header>')[1].split('</header>')[0];
+ const header=html.split('<header')[1].split('</header>')[0];
  const footer=html.split('<footer>')[1].split('</footer>')[0];
  const okx='https://okx.com/join/75395880';
  const pionex='https://www.pionex.com/zh-TW/signUp?r=0rcgGsu5GKg';

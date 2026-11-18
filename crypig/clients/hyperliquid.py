@@ -168,6 +168,12 @@ class HyperliquidClient:
             if not math.isfinite(n):
                 raise ValueError("Non-finite account number")
             return n
+        def optional_number(value, *, positive=False):
+            try:
+                parsed = number(value)
+            except (ValueError, TypeError, OverflowError):
+                return None
+            return None if positive and parsed <= 0 else parsed
         ms = state["marginSummary"]
         av = number(ms["accountValue"])
         ntl = number(ms["totalNtlPos"])
@@ -176,6 +182,7 @@ class HyperliquidClient:
         net = 0.0
         pos: list[tuple] = []
         sizes = {}
+        positions = {}
         for ap in state["assetPositions"]:
             if not isinstance(ap, dict) or not isinstance(ap.get("position"), dict):
                 raise ValueError("Invalid position")
@@ -193,9 +200,18 @@ class HyperliquidClient:
             if side:
                 net += nv * side
                 pos.append((coin, side, nv))
+                leverage = p.get("leverage")
+                positions[coin] = {
+                    "size": szi, "notional_usd": nv,
+                    "entry_price": optional_number(p.get("entryPx"), positive=True),
+                    "liquidation_price": optional_number(p.get("liquidationPx"), positive=True),
+                    "leverage": optional_number(leverage.get("value"), positive=True) if isinstance(leverage, dict) else None,
+                    "unrealized_pnl_usd": optional_number(p.get("unrealizedPnl")),
+                }
         if not math.isfinite(net):
             raise ValueError("Invalid net position")
-        return {"av": av, "lev": ntl / av if av > 0 else 0.0, "net": net, "pos": pos, "sizes": sizes, "observed_at": time.time()}
+        return {"av": av, "lev": ntl / av if av > 0 else 0.0, "net": net, "pos": pos,
+                "sizes": sizes, "positions": positions, "observed_at": time.time()}
 
     def slim_accounts_bulk(self, addresses: list[str], workers: int = 6) -> dict[str, dict]:
         """並發取精簡帳號（不保留原始 state；同時最多 workers 份原始 JSON 在記憶體）。"""

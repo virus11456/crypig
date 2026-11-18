@@ -19,6 +19,7 @@ from .storage.decisions import DecisionStore
 from .storage.pos_series import PosSeriesStore
 from .storage.quotes import QuoteStore
 from .storage.analysis import AnalysisStore, FIELDS
+from .storage.tracked_positions import TrackedPositions
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ class Orchestrator:
         self.rag = SelfLearningRAG(self.config)
         self.decisions = DecisionStore(self.config.decisions_db)
         self.pos_series = PosSeriesStore(self.config.posseries_db)
+        self.tracked_positions = TrackedPositions(Path(self.config.posseries_db).parent / "tracked_positions.db")
         self.quotes = QuoteStore(Path(self.config.decisions_db).parent / "market_quotes.json")
         self.all_scores: dict[str, dict] = {}   # 全市場各幣輕量決策(聰明錢+資金費率)
         self.radar: dict = {}                   # 分歧雷達：群眾(情緒/費率) vs 大戶(聰明錢/鯨魚)
@@ -109,6 +111,7 @@ class Orchestrator:
             # Publish one pointer only after every computation has completed.
             saved = self._analysis_store.validate({"version": 1, "config": self._analysis_store.signature,
                          "completed_at": self._cycle_finished_at, "state": state})
+            self._record_tracked_positions()
             self._published = saved
             self._analysis_restored = False
             try:
@@ -297,6 +300,8 @@ class Orchestrator:
         Hyperliquid 無持倉歷史，靠我們每輪記一筆往前長。鯨魚=淨值前N(錢很多的人)，
         記其 BTC 等主要幣的合約淨持倉，看大戶部位隨時間翻轉/加減碼=進場時機。
         """
+        if self.config.use_mock:
+            return
         sm = next((a for a in self.agents if isinstance(a, SmartMoneyAgent)), None)
         if sm is None:
             return
@@ -330,6 +335,20 @@ class Orchestrator:
                     self.pos_series.record_crowd(ts, sym, max(-1.0, min(1.0, fa / 0.5)))
             except Exception as e:
                 logger.warning("持倉時間序列：寫入 %s 失敗 %s", sym, e)
+
+    def _record_tracked_positions(self) -> None:
+        capture = next((agent.cycle_accounts for agent in self.agents
+                        if isinstance(agent, SmartMoneyAgent)), None)
+        if capture is None:
+            return
+        identities = {row.address.lower(): row.model_dump() for row in self.config.notable_addresses}
+        try:
+            self.tracked_positions.record(
+                datetime.fromisoformat(self._cycle_finished_at).timestamp(), capture,
+                self._cycle_quotes, identities, self.valuation_times.get("hyperliquid_funding"),
+            )
+        except Exception:
+            logger.exception("Tracked position batch persistence failed")
 
     def _divergence_radar(self) -> dict:
         """分歧雷達：群眾 vs 大戶反向 = alpha。

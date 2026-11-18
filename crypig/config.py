@@ -98,9 +98,17 @@ class AnalyzersConfig(BaseModel):
     )
 
 
+class NotableAddress(BaseModel):
+    address: str = Field(pattern=r"^0x[0-9a-fA-F]{40}$")
+    alias: str = Field(min_length=1, max_length=80)
+    source: str = Field(min_length=1, max_length=300)
+    x_url: str | None = Field(default=None, pattern=r"^https://(?:www\.)?(?:x\.com|twitter\.com)/[A-Za-z0-9_]{1,15}/?$")
+
+
 class Config(BaseModel):
     use_mock: bool = True
     symbols: list[str] = Field(default_factory=lambda: ["BTC", "ETH", "SOL"])
+    notable_addresses: list[NotableAddress] = Field(default_factory=list, max_length=20)
     snapshot_db: str = "snapshots.db"
     decisions_db: str = "decisions.db"   # 決策層每輪輸出持久化
     posseries_db: str = "posseries.db"   # 大戶持倉時間序列(鯨魚/聰明錢逐輪累積)

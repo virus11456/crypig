@@ -18,7 +18,9 @@ FIELDS = {
 class AnalysisStore:
     def __init__(self, path, config):
         self.path = Path(path)
-        self.signature = hashlib.sha256(config.model_dump_json().encode()).hexdigest()
+        # Address aliases affect the separate tracked-position store, not the
+        # analysis snapshot. Keep previously saved snapshots readable.
+        self.signature = hashlib.sha256(config.model_dump_json(exclude={"notable_addresses"}).encode()).hexdigest()
 
     def validate(self, saved):
         if saved['version'] != 1 or saved['config'] != self.signature:

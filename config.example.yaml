@@ -9,6 +9,10 @@ symbols:
 
 backtest_horizon_hours: 24            # 回測持有期（小時）
 
+# 僅填公開揭露的 Hyperliquid 地址。留空時以持倉最大的追蹤帳號顯示縮寫。
+notable_addresses: []
+# 每筆支援 address、alias、source（公開出處）及 x_url（可省略）。
+
 agents:
   smart_money:
     enabled: true
