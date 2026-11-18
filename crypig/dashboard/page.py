@@ -702,7 +702,11 @@ function apiJSON(url, timeoutMs=12000){
   const task=(async()=>{
     try{
       const response=await fetch(url,{signal:controller.signal});
-      if(!response.ok) throw new Error('資料服務回應 '+response.status);
+      if(!response.ok){
+        const error=new Error('資料服務回應 '+response.status);
+        error.status=response.status;
+        throw error;
+      }
       const data=await response.json();
       if(!data || typeof data!=='object' || data.error) throw new Error('資料服務暫時不可用');
       if(API_TTLS[url]) API_CACHE.set(url,{data,expires:Date.now()+API_TTLS[url]});
@@ -1666,7 +1670,8 @@ async function loadTrackedPanel(kind){
   }catch(e){
     if(result.trackedRequest!==request) return;
     result.trackedHTML=null;
-    result.innerHTML='<p class="tracked-empty">暫時無法載入資料。請稍後重開面板。</p>';
+    const message=e.status===404?'此功能將在資料服務更新後啟用。':'暫時無法載入資料。請稍後重開面板。';
+    result.innerHTML=`<p class="tracked-empty">${message}</p>`;
   }finally{
     if(result.trackedRequest===request) result.removeAttribute('aria-busy');
   }
