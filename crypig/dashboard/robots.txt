@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://hypeboss.cc/sitemap.xml
