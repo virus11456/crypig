@@ -429,6 +429,17 @@ test('header and footer expose compact Stocktools TW deep links',()=>{
  assert.doesNotMatch(html,/affiliate|utm_/i);
 });
 
+test('header and footer related-tools rows link out to TradingBeats',()=>{
+ const html=page.split('<script>')[0];
+ const url='https://tradingbeats.xyz/';
+ assert.equal(html.split(url).length-1,2);
+ for (const part of [html.split('<header>')[1].split('</header>')[0],html.split('<footer>')[1].split('</footer>')[0]]){
+  const related=part.split('aria-label="相關工具"')[1].split('</nav>')[0];
+  assert.match(related,/href="https:\/\/tradingbeats\.xyz\/"[^>]*target="_blank"[^>]*rel="noopener noreferrer"[^>]*>鏈上地址追蹤</);
+ }
+ assert.doesNotMatch(html,/<iframe[^>]*tradingbeats/i);
+});
+
 test('header exposes one OKX and one Pionex signup link',()=>{
  const html=page.split('<script>')[0];
  const header=html.split('<header>')[1].split('</header>')[0];

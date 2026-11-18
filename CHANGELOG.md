@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 2026-11-18（TradingBeats 鏈上地址追蹤交叉導覽）
+
+- 頂部與頁尾既有「相關工具」列最前面新增「鏈上地址追蹤」，連到 https://tradingbeats.xyz/（Hyperliquid 知名地址倉位動態／清算熱力圖）。僅外連、新分頁開啟，不嵌入 iframe、不呼叫其 API；既有 Stocktools 深鏈與 OKX／Pionex 開戶 CTA 不變，不更動交易／訊號邏輯。
+
 ### 2026-09-19（Stocktools 美股財報日交叉導覽）
 
 - 頂部與頁尾既有「相關工具」列新增「美股財報日」，連到 https://www.stocktools.cc/tw/us-earnings。既有手續費／ETF／入金／開戶／配息／第一次買美股／盤前盤後／市價／限價／ADR／匯損／碎股深鏈與 OKX／Pionex 開戶 CTA 不變。不加入 Firstrade／金融聯盟連結，不更動交易／訊號邏輯。

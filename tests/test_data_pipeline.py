@@ -170,6 +170,21 @@ def test_html_exposes_stocktools_tw_deep_links(client):
     assert 'utm_' not in html.lower()
 
 
+def test_html_exposes_tradingbeats_related_link(client):
+    html = client[0].get('/').text
+    header = html.split('<header>', 1)[1].split('</header>', 1)[0]
+    footer = html.split('<footer>', 1)[1].split('</footer>', 1)[0]
+    url = 'https://tradingbeats.xyz/'
+    assert html.count(url) == 2
+    for part in (header, footer):
+        related = part.split('aria-label="相關工具"', 1)[1].split('</nav>', 1)[0]
+        assert url in related
+        assert '鏈上地址追蹤' in related
+        attrs = related.split(url, 1)[1].split('>', 1)[0]
+        assert 'target="_blank"' in attrs
+        assert 'rel="noopener noreferrer"' in attrs
+
+
 def test_html_exposes_exchange_signup_links_once_in_header(client):
     html = client[0].get('/').text
     header = html.split('<header>', 1)[1].split('</header>', 1)[0]

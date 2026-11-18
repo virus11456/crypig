@@ -363,6 +363,7 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
   <span class="ts" id="ts">載入中…</span>
   <nav class="sites related" aria-label="相關工具">
     <span>相關工具</span>
+    <a href="https://tradingbeats.xyz/" title="TradingBeats 鏈上地址分析" target="_blank" rel="noopener noreferrer">鏈上地址追蹤</a>
     <a href="https://www.stocktools.cc/tw/us-fee-calculator" title="Stocktools 美股手續費" target="_blank" rel="noopener noreferrer">美股手續費</a>
     <a href="https://www.stocktools.cc/tw/us-etf" title="Stocktools 美股 ETF" target="_blank" rel="noopener noreferrer">美股 ETF</a>
     <a href="https://www.stocktools.cc/tw/us-deposit" title="Stocktools 美股入金" target="_blank" rel="noopener noreferrer">美股入金</a>
@@ -463,6 +464,7 @@ table.vt{font-variant-numeric:tabular-nums;table-layout:fixed}table.vt th,table.
   </nav>
   <nav class="sites related" aria-label="相關工具">
     <span>相關工具</span>
+    <a href="https://tradingbeats.xyz/" title="TradingBeats 鏈上地址分析" target="_blank" rel="noopener noreferrer">鏈上地址追蹤</a>
     <a href="https://www.stocktools.cc/tw/us-fee-calculator" title="Stocktools 美股手續費" target="_blank" rel="noopener noreferrer">美股手續費</a>
     <a href="https://www.stocktools.cc/tw/us-etf" title="Stocktools 美股 ETF" target="_blank" rel="noopener noreferrer">美股 ETF</a>
     <a href="https://www.stocktools.cc/tw/us-deposit" title="Stocktools 美股入金" target="_blank" rel="noopener noreferrer">美股入金</a>
